@@ -4,6 +4,13 @@ import { resolve } from 'node:path'
 import { loadEnv } from 'vite'
 import { cleanSupabaseUrl, isPublicSupabaseKey, studioCsp } from './src/shared/auth-config'
 
+// Monaco vendors DOMPurify 3.2.7 (vulnerable); swap in the patched package, which has the same default export.
+const patchedDompurify = {
+  name: 'patched-dompurify',
+  enforce: 'pre' as const,
+  resolveId: (source: string) => /^\.\/dompurify\/dompurify\.js$/.test(source) ? resolve('node_modules/dompurify/dist/purify.es.mjs') : null
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_SUPABASE_')
   const url = cleanSupabaseUrl(env.VITE_SUPABASE_URL ?? '')
@@ -26,7 +33,9 @@ export default defineConfig(({ mode }) => {
       define,
       envDir: resolve('.'),
       root: resolve('src/renderer'),
-      plugins: [react(), {
+      // The dev prebundler ignores resolve.alias inside dependencies, so the swap is a plugin used by both.
+      optimizeDeps: { rolldownOptions: { plugins: [patchedDompurify] } },
+      plugins: [react(), patchedDompurify, {
         name: 'studio-auth-csp',
         transformIndexHtml: (html) => html.replace('__STUDIO_CSP__', csp)
       }],

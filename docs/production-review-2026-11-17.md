@@ -41,6 +41,8 @@ This pass improves reliability and security but does not certify release readine
 | 9 Packaged install | Pass | Silent NSIS install to a temp folder, launch to sign-in with a fresh profile, silent uninstall removes the app and keeps user data |
 | 10 Product copy | Not reviewed | |
 
-Still open: preview start/stop/install and live worker runs in the desktop app, interactive save conflicts, signout and multi-window isolation, a hosted Git remote, code signing (the installer is unsigned and will trigger SmartScreen), and `npm audit` (8 reported vulnerabilities, 7 moderate and 1 high, not reviewed). The existing README's claim that external CLI agents cannot access anything outside their project requires OS-level enforcement; cwd and application path checks alone do not establish that guarantee.
+Still open: preview start/stop/install and live worker runs in the desktop app, interactive save conflicts, signout and multi-window isolation, a hosted Git remote, and code signing (the installer is unsigned and will trigger SmartScreen).
+
+Dependency audit, 19 November 2026: `npm audit` reports 0 vulnerabilities. Monaco 0.55.1 vendors DOMPurify 3.2.7 inside its own source (and 0.57.0 vendors 3.4.15, still affected), so a package override alone would not change shipped code: `electron.vite.config.ts` resolves Monaco's vendored import to the patched `dompurify` 3.4.18 in both the production build and the dev prebundle, verified by the version string in each bundle. The build-only `minimatch` advisory is fixed by overriding the affected 7.x–11.0.0 range to 11.x; older 3.x/5.x copies are untouched and the installer still builds. Re-check the alias when upgrading Monaco. The existing README's claim that external CLI agents cannot access anything outside their project requires OS-level enforcement; cwd and application path checks alone do not establish that guarantee.
 
 Existing user changes in scripts were left intact.
