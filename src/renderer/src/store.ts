@@ -11,7 +11,7 @@ declare global {
 export type Panel = 'none' | 'settings' | 'memory' | 'skills' | 'automations' | 'project'
 export type RailTab = 'plan' | 'activity' | 'mail'
 /** Plan is the primary entry point; the office is where work happens. */
-export type Workspace = 'plan' | 'office'
+export type Workspace = 'plan' | 'office' | 'code'
 
 interface UiState {
   snapshot: Snapshot | null
@@ -20,6 +20,7 @@ interface UiState {
   railTab: RailTab
   panel: Panel
   workspace: Workspace
+  editorDirty: boolean
   output: Record<string, string>
   /** Live text for the streaming planning reply, keyed by chat message id. */
   chatStream: Record<string, string>
@@ -43,6 +44,12 @@ interface UiState {
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
+export function resetStudio() {
+  if (toastTimer) clearTimeout(toastTimer)
+  useStore.setState({ snapshot: null, ready: false, selectedAgentId: null, panel: 'none',
+    output: {}, chatStream: {}, chatDraft: '', draft: '', toast: null, editorDirty: false })
+}
+
 export const useStore = create<UiState>((set, get) => ({
   snapshot: null,
   ready: false,
@@ -50,6 +57,7 @@ export const useStore = create<UiState>((set, get) => ({
   railTab: 'plan',
   panel: 'none',
   workspace: 'plan',
+  editorDirty: false,
   output: {},
   chatStream: {},
   chatDraft: '',

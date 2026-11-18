@@ -41,11 +41,10 @@ export class Credentials {
       this.db.kvDelete(key)
       return
     }
-    if (safeStorage.isEncryptionAvailable()) {
+    if (safeStorage.isEncryptionAvailable() && !(process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) {
       this.db.kvSet(key, `enc:${safeStorage.encryptString(value).toString('base64')}`)
     } else {
-      // shortcut: plain fallback when the OS keychain is unavailable, move to a keyring-backed store if this ever runs on a shared machine
-      this.db.kvSet(key, `raw:${value}`)
+      throw new Error('Secure credential storage is unavailable. Configure an OS keychain or use an environment variable.')
     }
   }
 
@@ -59,7 +58,14 @@ export class Credentials {
         return null
       }
     }
-    return raw.slice(4)
+    // Migrate credentials from older releases only when secure storage is available.
+    if (raw.startsWith('raw:')) {
+      try {
+        this.setKey(key, raw.slice(4))
+        return raw.slice(4)
+      } catch { return null }
+    }
+    return null
   }
 
   configured(engine: EngineKind): boolean {

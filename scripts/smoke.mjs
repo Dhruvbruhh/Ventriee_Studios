@@ -90,6 +90,8 @@ const evaluate = async (expression) => {
 }
 
 const checks = {}
+// A fresh profile has no session, so the studio is behind the sign-in screen.
+checks.authScreen = await evaluate(`Boolean(document.querySelector('.auth-screen'))`)
 checks.appMounted = await evaluate(`Boolean(document.querySelector('.app'))`)
 checks.brand = await evaluate(`document.querySelector('.brand-name')?.textContent`)
 checks.emptyStageOrFloor = await evaluate(

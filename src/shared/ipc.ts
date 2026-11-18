@@ -22,8 +22,15 @@ import type {
   StartRunInput,
   Task
 } from './types'
+import type { FileEntry, TextFile, GitState, GitAction } from './workspace'
 
 export const IPC = {
+  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesFind: 'files:find',
+  gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action',
+  authStatus: 'auth:status',
+  authSignIn: 'auth:signIn',
+  authClear: 'auth:clear',
+  authLocked: 'auth:locked',
   snapshot: 'state:snapshot',
   patch: 'state:patch',
   output: 'agent:output',
@@ -99,6 +106,18 @@ export interface SkillImportResult {
 }
 
 export interface VentrieeApi {
+  filesList(projectId: string, path?: string): Promise<FileEntry[]>
+  filesFind(projectId: string, query: string): Promise<FileEntry[]>
+  filesRead(projectId: string, path: string): Promise<TextFile>
+  filesSave(projectId: string, file: TextFile): Promise<TextFile>
+  filesCreate(projectId: string, path: string, directory: boolean): Promise<void>
+  gitStatus(projectId: string): Promise<GitState>
+  gitDiff(projectId: string, path: string, staged: boolean): Promise<{ original: string; modified: string; path: string }>
+  gitAction(projectId: string, action: GitAction, path?: string, value?: string): Promise<void>
+  authStatus(): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number } | null>
+  authSignIn(input: { email: string; password: string }, signup?: boolean): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number } | null; message: string }>
+  authClear(): Promise<void>
+  onAuthLocked(cb: () => void): () => void
   snapshot(): Promise<Snapshot>
   onPatch(cb: (patch: Snapshot) => void): () => void
   onOutput(cb: (payload: { sessionId: string; agentId: string; taskId: string | null; chunk: string }) => void): () => void

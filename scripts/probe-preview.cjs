@@ -21,23 +21,12 @@
       if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text)
       return r.result.value
     }
-    const snap = await ev(`window.ventriee.snapshot()`)
-    const projectId = snap.activeProjectId
-    const prompt = snap.prompts.find((p) => p.version === 3) ?? snap.prompts[snap.prompts.length - 1]
-    if (!projectId || !prompt) { console.log('missing project or prompt'); process.exit(1) }
-
-    // Set reasoning Off on deploy/inception workers first so the thinking fix applies.
-    for (const a of snap.agents) {
-      if (a.engine !== 'cli-opencode' && a.engine !== 'cli-claude') {
-        await ev(`window.ventriee.updateAgent(${JSON.stringify(a.id)}, { reasoning: 'none' })`)
-      }
-    }
-    const assigned = await ev(`window.ventriee.assignPrompt({
-      projectId: ${JSON.stringify(projectId)},
-      promptId: ${JSON.stringify(prompt.id)},
-      mode: 'orchestrator'
-    })`)
-    console.log('ASSIGNED', JSON.stringify({ jobId: assigned.jobId, taskCount: assigned.taskCount, promptId: prompt.id, promptVersion: prompt.version }))
+    console.log('STATE', await ev(`window.ventriee.snapshot().then(s => JSON.stringify({
+      running: s.running,
+      tasks: s.tasks.map(t => t.role + ':' + t.status),
+      preview: s.preview,
+      project: s.projects.find(p => p.id === s.activeProjectId)?.path
+    }))`))
     ws.close()
   } catch (e) {
     console.error('ERR', e.message)

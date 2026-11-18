@@ -1,7 +1,13 @@
-import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol } from 'electron'
 import { join } from 'node:path'
 import { existsSync, mkdirSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
+import { StudioAuth } from './auth'
+import { FileService } from './files'
+import { GitService } from './git'
+import type { TextFile, GitAction } from '../shared/workspace'
+import { registerRendererProtocol } from './renderer-protocol'
+import { supabaseUrl, supabaseKey, originOf, RENDERER_ORIGIN, RENDERER_SCHEME } from '../shared/auth-config'
 import { Store, newId } from './store'
 import { Credentials } from './credentials'
 import { MemoryService } from './memory'
@@ -51,6 +57,15 @@ const isDev = !app.isPackaged
 // Isolated profile for automated runs, so tests never touch the owner's data.
 if (process.env.VENTRIEE_USERDATA) app.setPath('userData', process.env.VENTRIEE_USERDATA)
 
+const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL ? process.env.ELECTRON_RENDERER_URL : `${RENDERER_ORIGIN}/`
+const rendererOrigin = originOf(rendererUrl)!
+const auth = new StudioAuth(supabaseUrl, supabaseKey, {
+  get: () => creds.getKey('cred:supabase:session'),
+  set: (value) => { try { creds.setKey('cred:supabase:session', value) } catch { /* Memory-only session without an OS keychain. */ } },
+  clear: () => { store.db.kvDelete('cred:supabase:session') }
+})
+protocol.registerSchemesAsPrivileged([{ scheme: RENDERER_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
+
 function windowProject(win: BrowserWindow): string | null {
   const entry = windows.get(win.webContents.id)
   if (!entry) return null
@@ -74,7 +89,7 @@ function snapshotFor(projectId: string | null) {
 
 function sendSnapshot() {
   for (const { win, projectId } of windows.values()) {
-    if (win.isDestroyed()) continue
+    if (win.isDestroyed() || !auth.session(win.webContents.id)) continue
     win.webContents.send(IPC.patch, snapshotFor(windowProject(win) ?? projectId))
   }
   refreshTray()
@@ -83,7 +98,7 @@ function sendSnapshot() {
 /** Stream output only to windows showing that project. */
 function sendToProject(projectId: string | null, channel: string, payload: unknown) {
   for (const { win } of windows.values()) {
-    if (win.isDestroyed()) continue
+    if (win.isDestroyed() || !auth.session(win.webContents.id)) continue
     if (projectId && windowProject(win) !== projectId) continue
     win.webContents.send(channel, payload)
   }
@@ -121,7 +136,7 @@ const windowIcon = app.isPackaged
 function refreshTray() {
   if (!tray || tray.isDestroyed()) return
   const open = [...windows.values()].filter((w) => !w.win.isDestroyed())
-  const running = store ? store.projects().filter((p) => store.runningJob(p.id)).length : 0
+  const running = store && auth.hasSession() ? store.projects().filter((p) => store.runningJob(p.id)).length : 0
   tray.setToolTip(
     `Ventriee Studios — ${open.length} window${open.length === 1 ? '' : 's'}${running ? `, ${running} running` : ''}`
   )
@@ -129,7 +144,7 @@ function refreshTray() {
     { label: 'Ventriee Studios', enabled: false },
     { type: 'separator' },
     ...open.map(({ win }, index) => ({
-      label: `${store.project(windowProject(win) ?? '')?.name ?? 'No project'}${index === 0 ? '  (1)' : ''}`,
+      label: `${auth.session(win.webContents.id) ? store.project(windowProject(win) ?? '')?.name ?? 'No project' : 'Sign in'}${index === 0 ? '  (1)' : ''}`,
       click: () => {
         if (win.isMinimized()) win.restore()
         win.show()
@@ -139,7 +154,8 @@ function refreshTray() {
     { type: 'separator' },
     {
       label: 'Open project in a new window',
-      submenu: store.projects().map((p) => ({
+      enabled: auth.hasSession(),
+      submenu: (auth.hasSession() ? store.projects() : []).map((p) => ({
         label: p.name,
         click: () => createWindow(p.id)
       }))
@@ -182,29 +198,82 @@ function createWindow(projectId?: string) {
   })
 
   const initial = projectId ?? store.activeProjectId() ?? store.projects()[0]?.id ?? null
-  windows.set(win.webContents.id, { win, projectId: initial })
+  const windowId = win.webContents.id
+  windows.set(windowId, { win, projectId: initial })
   win.on('closed', () => {
-    windows.delete(win.webContents.id)
+    auth.clear(windowId)
+    windows.delete(windowId)
     refreshTray()
   })
 
   win.once('ready-to-show', () => win.show())
 
-  if (isDev && process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(process.env.ELECTRON_RENDERER_URL)
-  } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  void win.loadURL(rendererUrl)
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
+  // Project previews must never navigate the privileged studio document.
+  win.webContents.on('will-navigate', (event, url) => {
+    if (originOf(url) !== rendererOrigin) event.preventDefault()
+  })
+  win.webContents.on('will-redirect', (event, url) => {
+    if (event.isMainFrame && originOf(url) !== rendererOrigin) event.preventDefault()
+  })
+  win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
   return win
 }
 
 function registerIpc() {
-  ipcMain.handle(IPC.snapshot, async (event) => {
+  const files = new FileService()
+  const git = new GitService()
+  const projectRoot = (event: Electron.IpcMainInvokeEvent, id: string) => {
+    if (id !== projectOf(event)) throw new Error('Select this project before editing its files')
+    const project = store.project(id)
+    if (!project) throw new Error('Project not found')
+    return project.path
+  }
+  const handle = (channel: string, listener: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => unknown) => {
+    ipcMain.handle(channel, (event, ...args) => {
+      if (!windows.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame || originOf(event.senderFrame?.url ?? '') !== rendererOrigin) {
+        throw new Error('IPC is only available to the studio window')
+      }
+      if (![IPC.authStatus, IPC.authSignIn, IPC.authClear].includes(channel as any)) auth.requireSession(event.sender.id)
+      return listener(event, ...args)
+    })
+  }
+  handle(IPC.filesList, (event, id: string, path = '') => files.list(projectRoot(event, id), path))
+  handle(IPC.filesFind, (event, id: string, query: string) => files.find(projectRoot(event, id), query))
+  handle(IPC.filesRead, (event, id: string, path: string) => files.read(projectRoot(event, id), path))
+  handle(IPC.filesSave, (event, id: string, file: TextFile) => files.save(projectRoot(event, id), file))
+  handle(IPC.filesCreate, (event, id: string, path: string, directory: boolean) => files.create(projectRoot(event, id), path, directory === true))
+  handle(IPC.gitStatus, (event, id: string) => git.status(projectRoot(event, id)))
+  handle(IPC.gitDiff, (event, id: string, path: string, staged: boolean) => git.diff(projectRoot(event, id), path, staged === true))
+  handle(IPC.gitAction, (event, id: string, action: GitAction, path?: string, value?: string) => git.action(projectRoot(event, id), action, path, value))
+  handle(IPC.authStatus, async (event) => {
+    const session = await auth.restore(event.sender.id)
+    debouncedNotify()
+    return session
+  })
+  handle(IPC.authSignIn, async (event, input: { email: string; password: string }, signup = false) => {
+    const result = await auth.signIn(event.sender.id, input, signup === true)
+    debouncedNotify()
+    return result
+  })
+  handle(IPC.authClear, async () => {
+    const signingOut = auth.signOut()
+    for (const project of store.projects()) {
+      orchestrator.stopRun(project.id)
+      preview.stop(project.id)
+    }
+    for (const { win } of windows.values()) {
+      if (!win.isDestroyed()) win.webContents.send(IPC.authLocked)
+    }
+    refreshTray()
+    await signingOut
+  })
+  handle(IPC.snapshot, async (event) => {
     await refreshProviders()
     const win = BrowserWindow.fromWebContents(event.sender)
     const projectId = win ? windowProject(win) : store.activeProjectId()
@@ -212,14 +281,14 @@ function registerIpc() {
     return store.snapshot(lastProviders, preview.get(project?.id ?? null, project?.path), lastModels, project?.id ?? null)
   })
 
-  ipcMain.handle(IPC.testEngine, async (_e, engine: EngineKind, model: string, endpoint: string) => {
+  handle(IPC.testEngine, async (_e, engine: EngineKind, model: string, endpoint: string) => {
     const result = await testEngine(engine, model, endpoint, creds)
     await refreshProviders()
     debouncedNotify()
     return result
   })
 
-  ipcMain.handle(IPC.createProject, async (event, input: { name: string; path: string; description: string }) => {
+  handle(IPC.createProject, async (event, input: { name: string; path: string; description: string }) => {
     const path = input.path.trim()
     if (!path) throw new Error('A project workspace path is required')
     if (!existsSync(path)) mkdirSync(path, { recursive: true })
@@ -236,13 +305,13 @@ function registerIpc() {
     return project
   })
 
-  ipcMain.handle(IPC.pickFolder, async (event) => {
+  handle(IPC.pickFolder, async (event) => {
     const parent = BrowserWindow.fromWebContents(event.sender)
     const result = await dialog.showOpenDialog(parent ?? undefined!, { properties: ['openDirectory', 'createDirectory'] })
     return result.canceled ? null : result.filePaths[0] ?? null
   })
 
-  ipcMain.handle(IPC.selectProject, async (event, id: string) => {
+  handle(IPC.selectProject, async (event, id: string) => {
     store.setActiveProject(id)
     // The window that asked switches project; other windows keep theirs.
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -257,7 +326,7 @@ function registerIpc() {
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.openProjectWindow, async (_e, projectId: string) => {
+  handle(IPC.openProjectWindow, async (_e, projectId: string) => {
     const project = store.project(projectId)
     if (!project) throw new Error('Project not found')
     memory.bootstrap(project)
@@ -267,18 +336,18 @@ function registerIpc() {
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.updateProject, async (_e, id: string, patch: Partial<Project>) => {
+  handle(IPC.updateProject, async (_e, id: string, patch: Partial<Project>) => {
     store.updateProject(id, patch)
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.deleteProject, async (_e, id: string) => {
+  handle(IPC.deleteProject, async (_e, id: string) => {
     store.deleteProject(id)
     memory.archive(id)
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.createAgent, async (_e, input: CreateAgentInput) => {
+  handle(IPC.createAgent, async (_e, input: CreateAgentInput) => {
     const agents = store.agents(input.projectId)
     const agent = {
       ...input,
@@ -299,20 +368,20 @@ function registerIpc() {
     return agent
   })
 
-  ipcMain.handle(IPC.updateAgent, async (_e, id: string, patch: Partial<Agent>) => {
+  handle(IPC.updateAgent, async (_e, id: string, patch: Partial<Agent>) => {
     store.updateAgent(id, patch)
     debouncedNotify()
     return store.agent(id)
   })
 
-  ipcMain.handle(IPC.deleteAgent, async (_e, id: string) => {
+  handle(IPC.deleteAgent, async (_e, id: string) => {
     orchestrator.stopAgent(id)
     store.deleteAgent(id)
     memory.deleteFilesFor(join('agents', id))
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.duplicateAgent, async (_e, id: string) => {
+  handle(IPC.duplicateAgent, async (_e, id: string) => {
     const source = store.agent(id)
     if (!source) throw new Error('Worker not found')
     const agents = store.agents(source.projectId)
@@ -323,7 +392,7 @@ function registerIpc() {
     return copy
   })
 
-  ipcMain.handle(IPC.startRun, async (_e, input: { projectId: string; instruction: string }) => {
+  handle(IPC.startRun, async (_e, input: { projectId: string; instruction: string }) => {
     await refreshProviders()
     const project = store.project(input.projectId)
     if (project) preview.rescan(project)
@@ -332,7 +401,7 @@ function registerIpc() {
     return { jobId }
   })
 
-  ipcMain.handle(IPC.previewStart, async (_e, projectId: string) => {
+  handle(IPC.previewStart, async (_e, projectId: string) => {
     const project = store.project(projectId)
     if (!project) throw new Error('Project not found')
     // The owner clicked Start: from now on this project's dev script may auto-start
@@ -343,7 +412,7 @@ function registerIpc() {
     return state
   })
 
-  ipcMain.handle(IPC.previewInstall, async (_e, projectId: string) => {
+  handle(IPC.previewInstall, async (_e, projectId: string) => {
     const project = store.project(projectId)
     if (!project) throw new Error('Project not found')
     const state = await preview.install(project)
@@ -351,14 +420,14 @@ function registerIpc() {
     return state
   })
 
-  ipcMain.handle(IPC.previewStop, async (_e, projectId: string) => {
+  handle(IPC.previewStop, async (_e, projectId: string) => {
     preview.stop(projectId)
     debouncedNotify()
     const project = store.project(projectId)
     return project ? preview.stateForProject(project) : preview.get(projectId)
   })
 
-  ipcMain.handle(IPC.previewRefresh, async (_e, projectId: string) => {
+  handle(IPC.previewRefresh, async (_e, projectId: string) => {
     const project = store.project(projectId)
     if (!project) throw new Error('Project not found')
     preview.rescan(project)
@@ -367,13 +436,13 @@ function registerIpc() {
     return state
   })
 
-  ipcMain.handle(IPC.previewArtifact, async (_e, projectId: string, path: string) => {
+  handle(IPC.previewArtifact, async (_e, projectId: string, path: string) => {
     const project = store.project(projectId)
     if (!project) throw new Error('Project not found')
     return preview.readArtifact(project, path)
   })
 
-  ipcMain.handle(IPC.previewApiRequest, async (_e, input: {
+  handle(IPC.previewApiRequest, async (_e, input: {
     baseUrl: string
     method: string
     path: string
@@ -411,27 +480,27 @@ function registerIpc() {
     }
   })
 
-  ipcMain.handle(IPC.stopRun, async (_e, projectId: string) => {
+  handle(IPC.stopRun, async (_e, projectId: string) => {
     orchestrator.stopRun(projectId)
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.approveTask, async (_e, taskId: string) => {
+  handle(IPC.approveTask, async (_e, taskId: string) => {
     orchestrator.approveTask(taskId)
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.rejectTask, async (_e, taskId: string, reason: string) => {
+  handle(IPC.rejectTask, async (_e, taskId: string, reason: string) => {
     orchestrator.rejectTask(taskId, reason)
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.retryTask, async (_e, taskId: string) => {
+  handle(IPC.retryTask, async (_e, taskId: string) => {
     orchestrator.retryTask(taskId)
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.deleteTask, async (_e, taskId: string) => {
+  handle(IPC.deleteTask, async (_e, taskId: string) => {
     const task = store.task(taskId)
     if (!task) return
     // Refuse to delete a task that is actively running.
@@ -440,54 +509,54 @@ function registerIpc() {
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.stopAgent, async (_e, agentId: string) => {
+  handle(IPC.stopAgent, async (_e, agentId: string) => {
     orchestrator.stopAgent(agentId)
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.pauseAgent, async (_e, agentId: string) => {
+  handle(IPC.pauseAgent, async (_e, agentId: string) => {
     orchestrator.pauseAgent(agentId)
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.resumeAgent, async (_e, agentId: string) => {
+  handle(IPC.resumeAgent, async (_e, agentId: string) => {
     orchestrator.resumeAgent(agentId)
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.instructAgent, async (_e, agentId: string, text: string) => {
+  handle(IPC.instructAgent, async (_e, agentId: string, text: string) => {
     await orchestrator.instruct(agentId, text)
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.saveMemory, async (_e, input: Partial<MemoryDoc> & { path: string; title: string; body: string }) => {
+  handle(IPC.saveMemory, async (_e, input: Partial<MemoryDoc> & { path: string; title: string; body: string }) => {
     const doc = memory.save(input)
     debouncedNotify()
     return doc
   })
 
-  ipcMain.handle(IPC.deleteMemory, async (_e, id: string) => {
+  handle(IPC.deleteMemory, async (_e, id: string) => {
     const doc = store.memory(id)
     store.deleteMemory(id)
     if (doc) memory.deleteFilesFor(doc.path)
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.pinMemory, async (_e, id: string) => {
+  handle(IPC.pinMemory, async (_e, id: string) => {
     const doc = store.memory(id)
     if (!doc) return
     memory.save({ ...doc, pinned: !doc.pinned })
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.searchMemory, async (_e, query: string) => {
-    const active = store.activeProjectId()
+  handle(IPC.searchMemory, async (event, query: string) => {
+    const active = projectOf(event)
     const local = store.searchMemory(query, active)
     if (local.length) return local
     return memory.retrieve(active ?? '', query, 8)
   })
 
-  ipcMain.handle(IPC.importSkill, async (event) => {
+  handle(IPC.importSkill, async (event) => {
     const parent = BrowserWindow.fromWebContents(event.sender)
     const result = await dialog.showOpenDialog(parent ?? undefined!, { properties: ['openDirectory'] })
     if (result.canceled || !result.filePaths[0]) return null
@@ -497,26 +566,26 @@ function registerIpc() {
     return { skill: installed.skill, report: installed.report, removed: installed.removed }
   })
 
-  ipcMain.handle(IPC.toggleSkill, async (_e, id: string) => {
+  handle(IPC.toggleSkill, async (_e, id: string) => {
     const skill = skills.scan().find((s) => s.id === id)
     if (!skill) return
     store.setSkillEnabled(id, !skill.enabled)
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.refreshSkills, async () => {
+  handle(IPC.refreshSkills, async () => {
     const list = skills.scan()
     debouncedNotify()
     return list
   })
 
-  ipcMain.handle(IPC.saveSettings, async (_e, patch: Partial<AppSettings>) => {
+  handle(IPC.saveSettings, async (_e, patch: Partial<AppSettings>) => {
     const next = store.saveSettings(patch)
     debouncedNotify()
     return next
   })
 
-  ipcMain.handle(IPC.saveCredential, async (event, engine: EngineKind, value: string) => {
+  handle(IPC.saveCredential, async (event, engine: EngineKind, value: string) => {
     creds.set(engine, value.trim())
     await refreshProviders()
     // A new key can unlock models, so rediscover before the picker is opened again.
@@ -524,16 +593,16 @@ function registerIpc() {
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.clearCredential, async (event, engine: EngineKind) => {
+  handle(IPC.clearCredential, async (event, engine: EngineKind) => {
     creds.clear(engine)
     await refreshProviders()
     await refreshModels(projectOf(event))
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.credentials, async () => creds.list())
+  handle(IPC.credentials, async () => creds.list())
 
-  ipcMain.handle(IPC.addAutomation, async (_e, input: { projectId: string; name: string; instruction: string; intervalMinutes: number }) => {
+  handle(IPC.addAutomation, async (_e, input: { projectId: string; name: string; instruction: string; intervalMinutes: number }) => {
     const interval = Math.max(5, Math.round(input.intervalMinutes))
     const automation = {
       id: newId('aut'),
@@ -550,7 +619,7 @@ function registerIpc() {
     return automation
   })
 
-  ipcMain.handle(IPC.toggleAutomation, async (_e, id: string) => {
+  handle(IPC.toggleAutomation, async (_e, id: string) => {
     const current = store.automations().find((a) => a.id === id)
     if (!current) return
     store.updateAutomation(id, {
@@ -560,28 +629,28 @@ function registerIpc() {
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.deleteAutomation, async (_e, id: string) => {
+  handle(IPC.deleteAutomation, async (_e, id: string) => {
     store.deleteAutomation(id)
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.openPath, async (_e, path: string) => {
+  handle(IPC.openPath, async (_e, path: string) => {
     if (!isSafePath(path)) throw new Error('Path is outside the permitted workspace')
     await shell.openPath(path)
   })
 
-  ipcMain.handle(IPC.openExternal, async (_e, url: string) => {
+  handle(IPC.openExternal, async (_e, url: string) => {
     if (!/^https?:\/\//.test(url)) throw new Error('Only http(s) links can be opened')
     await shell.openExternal(url)
   })
 
-  ipcMain.handle(IPC.revealFile, async (_e, path: string) => {
+  handle(IPC.revealFile, async (_e, path: string) => {
     if (!isSafePath(path)) throw new Error('Path is outside the permitted workspace')
     shell.showItemInFolder(path)
   })
 
   // ---------------------------------------------------------------- planning
-  ipcMain.handle(IPC.chatSend, async (_e, input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string }) => {
+  handle(IPC.chatSend, async (_e, input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string }) => {
     const project = store.project(input.projectId)
     if (!project) throw new Error('Project not found')
     const result = await planning.sendChat(project, input.text, input)
@@ -589,7 +658,7 @@ function registerIpc() {
     return result.assistant
   })
 
-  ipcMain.handle(IPC.promptCreate, async (_e, input: { projectId: string; engine: EngineKind; model: string; endpoint: string }) => {
+  handle(IPC.promptCreate, async (_e, input: { projectId: string; engine: EngineKind; model: string; endpoint: string }) => {
     const project = store.project(input.projectId)
     if (!project) throw new Error('Project not found')
     const doc = await planning.createPrompt(project, input)
@@ -597,7 +666,7 @@ function registerIpc() {
     return doc
   })
 
-  ipcMain.handle(IPC.promptEnhance, async (_e, input: { projectId: string; promptId: string; engine: EngineKind; model: string; endpoint: string }) => {
+  handle(IPC.promptEnhance, async (_e, input: { projectId: string; promptId: string; engine: EngineKind; model: string; endpoint: string }) => {
     const project = store.project(input.projectId)
     if (!project) throw new Error('Project not found')
     const doc = await planning.enhancePrompt(project, input.promptId, input)
@@ -605,7 +674,7 @@ function registerIpc() {
     return doc
   })
 
-  ipcMain.handle(IPC.promptSave, async (_e, input: { projectId: string; promptId: string; body: string; source: 'edited' | 'restored' }) => {
+  handle(IPC.promptSave, async (_e, input: { projectId: string; promptId: string; body: string; source: 'edited' | 'restored' }) => {
     const project = store.project(input.projectId)
     if (!project) throw new Error('Project not found')
     if (!input.body.trim()) throw new Error('A prompt cannot be saved empty')
@@ -614,7 +683,7 @@ function registerIpc() {
     return doc
   })
 
-  ipcMain.handle(IPC.assignPrompt, async (_e, input: AssignPromptInput) => {
+  handle(IPC.assignPrompt, async (_e, input: AssignPromptInput) => {
     const result = await orchestrator.assignPrompt(input)
     debouncedNotify()
     return result
@@ -624,7 +693,7 @@ function registerIpc() {
    * Advisor side-chat: answers on the planner engine, with a summary of the
    * current project so it can give concrete improvement advice.
    */
-  ipcMain.handle(IPC.chatAdvisor, async (_e, input: { projectId: string; text: string }) => {
+  handle(IPC.chatAdvisor, async (_e, input: { projectId: string; text: string }) => {
     const project = store.project(input.projectId)
     if (!project) throw new Error('Project not found')
     const tasks = store.tasks(project.id).slice(-12).map((t) => `- [${t.status}] ${t.title} (${t.role}${t.attempts ? `, attempt ${t.attempts}` : ''})`)
@@ -657,17 +726,17 @@ Answer the owner's question directly.`
     return { reply: result.text, model: settings.plannerModel || 'default' }
   })
 
-  ipcMain.handle(IPC.modelsDiscover, async (_e, projectId: string | null) => {
+  handle(IPC.modelsDiscover, async (_e, projectId: string | null) => {
     return refreshModels(projectId ?? store.activeProjectId())
   })
 
-  ipcMain.handle(IPC.modelPrefs, async (_e, patch: Partial<ModelPrefs>) => {
+  handle(IPC.modelPrefs, async (_e, patch: Partial<ModelPrefs>) => {
     const next = store.saveModelPrefs(patch)
     debouncedNotify()
     return next
   })
 
-  ipcMain.handle(IPC.addProvider, async (_e, input: {
+  handle(IPC.addProvider, async (_e, input: {
     label: string
     kind: 'openai' | 'anthropic' | 'gemini'
     engine: EngineKind
@@ -700,7 +769,7 @@ Answer the owner's question directly.`
     return config
   })
 
-  ipcMain.handle(IPC.updateProvider, async (_e, id: string, patch: Partial<ProviderConfig> & { apiKey?: string }) => {
+  handle(IPC.updateProvider, async (_e, id: string, patch: Partial<ProviderConfig> & { apiKey?: string }) => {
     const existing = store.providers().find((p) => p.id === id)
     if (!existing) throw new Error('Provider not found')
     store.updateProvider(id, patch)
@@ -712,13 +781,13 @@ Answer the owner's question directly.`
     return store.providers().find((p) => p.id === id)!
   })
 
-  ipcMain.handle(IPC.deleteProvider, async (_e, id: string) => {
+  handle(IPC.deleteProvider, async (_e, id: string) => {
     store.deleteProvider(id)
     await refreshModels(store.activeProjectId())
     debouncedNotify()
   })
 
-  ipcMain.handle(IPC.testProvider, async (_e, input: {
+  handle(IPC.testProvider, async (_e, input: {
     id?: string
     engine: EngineKind
     baseUrl: string
@@ -745,6 +814,7 @@ function isSafePath(target: string) {
 function startScheduler() {
   if (scheduler) clearInterval(scheduler)
   scheduler = setInterval(() => {
+    if (!auth.hasSession()) return
     const now = Date.now()
     for (const automation of store.automations()) {
       if (!automation.enabled || !automation.nextRunAt || automation.nextRunAt > now) continue
@@ -846,6 +916,7 @@ function bootstrapData() {
 app.whenReady().then(async () => {
   // Ties the window to the installed shortcut so the taskbar shows our icon, not Electron's.
   if (process.platform === 'win32') app.setAppUserModelId('com.ventriee.studios')
+  if (!(isDev && process.env.ELECTRON_RENDERER_URL)) registerRendererProtocol(join(__dirname, '../renderer'), supabaseUrl)
   bootstrapData()
   registerIpc()
   bus.on('output', (payload: { sessionId: string; agentId: string; taskId: string | null; chunk: string }) => {

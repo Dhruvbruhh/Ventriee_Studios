@@ -23,4 +23,5 @@ Thumbs.db
 *.env
 .env
 .env.local
+.env.*
 !*.env.example
