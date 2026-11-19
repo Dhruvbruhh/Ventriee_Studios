@@ -8,6 +8,8 @@ import { AgentChanges } from './AgentChanges'
 import { startLsp, type LspSession, type OutlineSymbol } from './lsp'
 import { SYMBOL_KINDS, findSymbols, outlineFor, symbolPath } from './symbols'
 import { ExtensionsPanel } from './ExtensionsPanel'
+import { KeybindingsModal } from './KeybindingsModal'
+import { applyKeybindings, chordOf } from './keybindings'
 import { TestsPanel, testAt, useTests } from './TestsPanel'
 import { loadExtensions } from './extensions'
 import type { LspStatus } from '../../../shared/catalog'
@@ -413,6 +415,11 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   useEffect(() => {
     if (!visible) return
     const keys = (event: KeyboardEvent) => {
+      // Owner shortcuts for studio commands ("studio:<palette label>").
+      const chord = chordOf(event)
+      const own = chord ? keybindings.find((b) => b.key === chord && b.command.startsWith('studio:')) : undefined
+      const target = own ? commands.find((c) => c.label === own.command.slice(7) && !c.disabled) : undefined
+      if (target) { event.preventDefault(); target.run(); return }
       // F5: continue when paused, otherwise start debugging the open file.
       if (event.key === 'F5' && !event.ctrlKey && !event.metaKey) { event.preventDefault(); if (debug.status === 'paused') debugCommand('continue'); else if (!debugLive) void startDebug(); return }
       if (!(event.ctrlKey || event.metaKey)) return
@@ -453,6 +460,19 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   }, [project.id, visible, changed])
   const completionModel = useStore((s) => s.snapshot?.settings.completionModel ?? '')
   const editorTheme = useStore((s) => s.snapshot?.settings.editorTheme ?? 'ventriee')
+  const keybindings = useStore((s) => s.snapshot?.settings.keybindings) ?? []
+  const keybindingKey = JSON.stringify(keybindings)
+  useEffect(() => { const rules = applyKeybindings(keybindings); return () => rules.dispose() }, [keybindingKey])
+  const [keysOpen, setKeysOpen] = useState(false)
+  const vimMode = useStore((s) => s.snapshot?.settings.vimMode ?? false)
+  const vimStatus = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!vimMode || !editor.current || !vimStatus.current) return
+    let vim: { dispose(): void } | null = null
+    let alive = true
+    void import('monaco-vim').then(({ initVimMode }) => { if (alive && editor.current && vimStatus.current) vim = initVimMode(editor.current, vimStatus.current) })
+    return () => { alive = false; vim?.dispose(); if (vimStatus.current) vimStatus.current.textContent = '' }
+  }, [vimMode])
   useEffect(() => { void loadExtensions(editorTheme) }, [editorTheme])
   useEffect(() => {
     if (!completionModel) return
@@ -712,6 +732,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     { label: 'Go to symbol in file', keys: 'Ctrl+Shift+O', run: () => { editor.current?.focus(); void editor.current?.getAction('editor.action.quickOutline')?.run() }, disabled: !tab },
     { label: splitPath ? 'View: Close split editor' : 'View: Split editor right', keys: 'Ctrl+\\', run: () => setSplitPath(splitPath ? null : active), disabled: !splitPath && !active },
     { label: 'Tasks: Run task…', run: openTasks },
+    { label: 'Preferences: Keyboard shortcuts', run: () => setKeysOpen(true) },
+    { label: `Preferences: ${vimMode ? 'Turn off' : 'Turn on'} Vim mode`, run: () => void guard(() => window.ventriee.saveSettings({ vimMode: !vimMode })) },
     { label: 'Test: Run all tests', run: () => { setSidebar('tests'); tests.run() }, disabled: !tests.runner },
     { label: 'Test: Run tests in this file', run: () => { setSidebar('tests'); tests.run({ file: active! }) }, disabled: !tests.runner || !active },
     { label: 'Test: Run the test at the cursor', run: () => { const name = tab ? testAt(tab.model.getValue(), cursor.lineNumber) : null; if (name) { setSidebar('tests'); tests.run({ name }) } else useStore.getState().notify('No test found above the cursor', 'info') }, disabled: !tests.runner || !tab },
@@ -815,7 +837,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         <button className="status-btn" onClick={() => setPanel((open) => open === 'problems' ? null : 'problems')} aria-label={`${problems.length} problems`}>{errors} errors · {problems.length - errors} warnings</button>
         <button className="status-btn" onClick={() => setPanel((open) => open === 'terminal' ? null : 'terminal')}>Terminal</button>
         <button className="status-btn" onClick={openTasks} title="Run a task from tasks.json, package.json, Makefile, Go or Cargo">Tasks</button>
-        <button className="status-btn" onClick={() => { setCommand(''); setPalette(true) }} title="Command palette (Ctrl+Shift+P)">Commands</button><span className="grow" />{blame ? <span className="status-blame" title={blame}>{blame}</span> : null}{typesInfo ? <span title="Files and installed packages the TypeScript service knows about">{typesInfo}</span> : null}{languageStatus}<span>Ln {cursor.lineNumber}, Col {cursor.column}</span><span>UTF-8{tab?.file.bom ? ' BOM' : ''}</span>
+        <button className="status-btn" onClick={() => { setCommand(''); setPalette(true) }} title="Command palette (Ctrl+Shift+P)">Commands</button><span className="grow" />{blame ? <span className="status-blame" title={blame}>{blame}</span> : null}{typesInfo ? <span title="Files and installed packages the TypeScript service knows about">{typesInfo}</span> : null}{languageStatus}<span ref={vimStatus} className="vim-status" aria-live="polite" /><span>Ln {cursor.lineNumber}, Col {cursor.column}</span><span>UTF-8{tab?.file.bom ? ' BOM' : ''}</span>
         <select aria-label="Editor language" value={tab?.model.getLanguageId() ?? 'plaintext'} disabled={!tab || Boolean(diff)} onChange={(e) => { if (tab) { monaco.editor.setModelLanguage(tab.model, e.target.value); changed() } }}>
           {editorLanguages().sort((a, b) => a.id.localeCompare(b.id)).map((lang) => <option value={lang.id} key={lang.id}>{lang.aliases?.[0] ?? lang.id}</option>)}
         </select></footer>
@@ -867,6 +889,9 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <input id="move-path" className="input" autoFocus value={newPath} onChange={(e) => setNewPath(e.target.value)} onFocus={(e) => { const name = e.target.value.lastIndexOf('/') + 1; e.target.setSelectionRange(name, e.target.value.length) }} required />
       <p className="hint">Change the name to rename it. Change the folders in the path to move it; the destination folder must exist.</p>
       <button className="btn primary" disabled={busy || !newPath.trim() || newPath.trim() === moving.path}>Rename</button></form></Modal> : null}
+    {keysOpen ? <KeybindingsModal bindings={keybindings} onClose={() => setKeysOpen(false)} onSave={(next) => void guard(() => window.ventriee.saveSettings({ keybindings: next }))}
+      commands={[...commands.filter((c) => !c.label.startsWith('Preferences: Turn')).map((c) => ({ id: `studio:${c.label}`, label: c.label, keys: c.keys })),
+        ...(editor.current?.getSupportedActions() ?? []).map((a) => ({ id: a.id, label: `Editor: ${a.label}` }))]} /> : null}
     {symbolPick ? <Modal title="Go to symbol" onClose={() => setSymbolPick(false)} narrow><input className="input" autoFocus aria-label="Find a symbol" placeholder="Class, function, method…" value={symbolQuery} onChange={(e) => setSymbolQuery(e.target.value)}
       onKeyDown={(e) => { if (e.key === 'Enter' && symbolHits[0]) { e.preventDefault(); void openAt(symbolHits[0].path, symbolHits[0].line, symbolHits[0].column); setSymbolPick(false) } }} />
       <div className="quick-files">{symbolHits.map((h, i) => <button key={i} onClick={() => { void openAt(h.path, h.line, h.column); setSymbolPick(false) }}><span>{h.name} <small className="dim">{SYMBOL_KINDS[h.kind]}</small></span> <small className="dim">{h.path}:{h.line}</small></button>)}
