@@ -98,6 +98,12 @@ export class GitService {
           const hasHead = await this.command(root, ['rev-parse', '--verify', 'HEAD']).then(() => true).catch(() => false)
           await this.command(root, hasHead ? ['reset', 'HEAD', '--', ...paths] : ['rm', '--cached', '--', ...paths])
         }
+      } else if (action === 'discard') {
+        workspacePath(root, path)
+        // Only files the last commit has can be put back; a new file is never deleted from here.
+        const inHead = await this.command(root, ['cat-file', '-e', `HEAD:${path}`]).then(() => true).catch(() => false)
+        if (!inHead) throw new Error('This file is not in the last commit, so there is no earlier version to restore')
+        await this.command(root, ['restore', '--source=HEAD', '--staged', '--worktree', '--', path!])
       } else if (action === 'commit') {
         if (!value?.trim() || value.length > 10_000) throw new Error('Enter a commit message')
         await this.command(root, ['commit', '-m', value.trim()])

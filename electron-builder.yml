@@ -20,6 +20,9 @@ extraResources:
 
 asar: true
 compression: normal
+# node-pty is N-API and ships prebuilt binaries per platform, so nothing needs
+# compiling against Electron's headers (which would require C++ build tools).
+npmRebuild: false
 
 win:
   icon: build/icon.ico

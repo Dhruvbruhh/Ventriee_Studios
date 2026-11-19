@@ -8,6 +8,7 @@ import { CommandBar } from './components/CommandBar'
 import { Inspector } from './components/Inspector'
 import { Workspace } from './components/Workspace'
 import { SideChat } from './components/SideChat'
+import { TerminalView } from './components/Terminal'
 import { SettingsPanel } from './panels/SettingsPanel'
 import { MemoryPanel } from './panels/MemoryPanel'
 import { AutomationsPanel, SkillsPanel } from './panels/SkillsPanel'
@@ -158,7 +159,11 @@ export function App() {
         <Workspace />
       ) : workspace === 'office' ? (
         <>
-          <div className="main">
+          <div className="main with-terminals">
+            {project ? <aside className="office-terminals" aria-label="Terminals">
+              <TerminalView projectId={project.id} slot="office-1" label="Terminal 1" />
+              <TerminalView projectId={project.id} slot="office-2" label="Terminal 2" />
+            </aside> : null}
             <div className="floor-wrap">
               <Floor onNewProject={() => setNewProject(true)} />
               {selectedAgentId ? <Inspector agentId={selectedAgentId} /> : null}
@@ -172,7 +177,7 @@ export function App() {
         </>
       ) : null}
       {codeOpened && project ? <Suspense fallback={workspace === 'code' ? <div className="code-empty">Loading code workspace…</div> : null}>
-        <CodeWorkspace key={project.id} project={project} visible={workspace === 'code'} />
+        <CodeWorkspace key={project.id} project={project} visible={workspace === 'code'} onNavigate={setWorkspace} />
       </Suspense> : workspace === 'code' && !project ? <div className="code-empty"><p>Create a project to open its files.</p><button className="btn primary" onClick={() => setNewProject(true)}>Create project</button></div> : null}
 
       {newProject ? <NewProjectDialog onClose={() => setNewProject(false)} /> : null}

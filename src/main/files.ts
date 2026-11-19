@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { TextDecoder } from 'node:util'
 import { isInside } from './paths'
-import type { FileEntry, TextFile } from '../shared/workspace'
+import type { FileEntry, SearchResult, TextFile } from '../shared/workspace'
 export const MAX_TEXT_BYTES = 2 * 1024 * 1024
 const HIDDEN = new Set(['.git', 'node_modules', '.next', 'dist', 'out', '__pycache__', '.venv'])
 export function workspacePath(root: string, path: unknown, allowRoot = false): string {
@@ -25,18 +26,42 @@ const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex
 export class FileService {
   find(root: string, query: string): FileEntry[] {
     if (typeof query !== 'string' || query.length > 200) throw new Error('Invalid file search')
+    return this.walk(root, 100, (entry) => entry.path.toLowerCase().includes(query.toLowerCase()))
+  }
+  /** Text search across project files, bounded by file count and hit count so large repositories stay responsive. */
+  async search(root: string, query: string, caseSensitive = false): Promise<SearchResult> {
+    if (typeof query !== 'string' || !query || query.length > 200) throw new Error('Enter up to 200 characters to search')
+    const needle = caseSensitive ? query : query.toLowerCase()
+    const files = this.walk(root, 5000, () => true)
+    const hits: SearchResult['hits'] = []
+    let filesSearched = 0
+    for (const file of files) {
+      if (hits.length >= 500) break
+      let bytes: Buffer
+      try { bytes = await readFile(workspacePath(root, file.path)) } catch { continue }
+      if (bytes.length > MAX_TEXT_BYTES || bytes.includes(0)) continue
+      filesSearched++
+      const lines = bytes.toString('utf8').split(/\r?\n/)
+      for (let i = 0; i < lines.length && hits.length < 500; i++) {
+        const column = (caseSensitive ? lines[i] : lines[i].toLowerCase()).indexOf(needle)
+        if (column >= 0) hits.push({ path: file.path, line: i + 1, column: column + 1, preview: lines[i].slice(Math.max(0, column - 60), column + 140) })
+      }
+    }
+    return { hits, filesSearched, truncated: hits.length >= 500 || files.length >= 5000 }
+  }
+  private walk(root: string, limit: number, match: (entry: FileEntry) => boolean): FileEntry[] {
     const found: FileEntry[] = []
     const queue = ['']
     let visited = 0
-    while (queue.length && visited < 5000 && found.length < 100) {
+    while (queue.length && visited < 5000 && found.length < limit) {
       const path = queue.shift()!
       let entries: FileEntry[]
       try { entries = this.list(root, path) } catch { continue }
       for (const entry of entries) {
         visited++
         if (entry.directory) queue.push(entry.path)
-        else if (entry.path.toLowerCase().includes(query.toLowerCase())) found.push(entry)
-        if (visited >= 5000 || found.length >= 100) break
+        else if (match(entry)) found.push(entry)
+        if (visited >= 5000 || found.length >= limit) break
       }
     }
     return found

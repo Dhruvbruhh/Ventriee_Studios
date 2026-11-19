@@ -22,11 +22,12 @@ import type {
   StartRunInput,
   Task
 } from './types'
-import type { FileEntry, TextFile, GitState, GitAction } from './workspace'
+import type { FileEntry, TextFile, GitState, GitAction, SearchResult, CodeAskInput, CodeAskResult } from './workspace'
 
 export const IPC = {
-  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesFind: 'files:find',
+  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesFind: 'files:find', filesSearch: 'files:search', codeAsk: 'code:ask',
   gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action',
+  termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
   authStatus: 'auth:status',
   authSignIn: 'auth:signIn',
   authClear: 'auth:clear',
@@ -108,12 +109,20 @@ export interface SkillImportResult {
 export interface VentrieeApi {
   filesList(projectId: string, path?: string): Promise<FileEntry[]>
   filesFind(projectId: string, query: string): Promise<FileEntry[]>
+  filesSearch(projectId: string, query: string, caseSensitive: boolean): Promise<SearchResult>
+  codeAsk(projectId: string, input: CodeAskInput): Promise<CodeAskResult>
   filesRead(projectId: string, path: string): Promise<TextFile>
   filesSave(projectId: string, file: TextFile): Promise<TextFile>
   filesCreate(projectId: string, path: string, directory: boolean): Promise<void>
   gitStatus(projectId: string): Promise<GitState>
   gitDiff(projectId: string, path: string, staged: boolean): Promise<{ original: string; modified: string; path: string }>
   gitAction(projectId: string, action: GitAction, path?: string, value?: string): Promise<void>
+  termOpen(projectId: string, cols: number, rows: number): Promise<string>
+  termWrite(id: string, data: string): Promise<void>
+  termResize(id: string, cols: number, rows: number): Promise<void>
+  termClose(id: string): Promise<void>
+  onTermData(cb: (payload: { id: string; data: string }) => void): () => void
+  onTermExit(cb: (payload: { id: string; code: number }) => void): () => void
   authStatus(): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number } | null>
   authSignIn(input: { email: string; password: string }, signup?: boolean): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number } | null; message: string }>
   authClear(): Promise<void>
