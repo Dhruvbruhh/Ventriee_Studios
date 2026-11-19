@@ -94,32 +94,32 @@ function write(root: string, rel: string, body: string, written: string[]) {
     mkdirSync(dirname(target), { recursive: true })
     // The parent directory itself could be a symlink to elsewhere.
     if (!isInside(base, realpathSync(dirname(target)))) return
-    writeFileSync(target, `${unwrapFence(rel, body).trimEnd()}\n`, 'utf8')
+    writeFileSync(target, body, 'utf8')
     written.push(rel.replace(/\\/g, '/'))
   } catch {
     /* an unwritable path is not delivered; the evidence check will say so */
   }
 }
 
-export function deliverFiles(root: string, text: string): string[] {
-  const written: string[] = []
-
+/** The files a reply delivers, as written: FILE blocks, else fenced blocks that name a path. */
+export function parseFileBlocks(text: string): Array<{ path: string; text: string }> {
+  const blocks: Array<{ rel: string; body: string }> = []
   for (const part of text.split(MARKER).slice(1)) {
     const newline = part.indexOf('\n')
     if (newline < 0) continue
     const rel = part.slice(0, newline).replace(/=+\s*$/, '').trim()
-    if (!safePath(rel)) continue
     let body = part.slice(newline + 1)
     const end = body.search(END)
     if (end >= 0) body = body.slice(0, end)
-    write(root, rel, body, written)
+    blocks.push({ rel, body })
   }
+  const chosen = blocks.some((b) => safePath(b.rel)) ? blocks : fencedBlocks(text)
+  return chosen.filter((b) => safePath(b.rel) && b.body.trim())
+    .map((b) => ({ path: b.rel.replace(/\\/g, '/'), text: `${unwrapFence(b.rel, b.body).trimEnd()}\n` }))
+}
 
-  if (!written.length) {
-    for (const block of fencedBlocks(text)) {
-      if (safePath(block.rel)) write(root, block.rel, block.body, written)
-    }
-  }
-
+export function deliverFiles(root: string, text: string): string[] {
+  const written: string[] = []
+  for (const file of parseFileBlocks(text)) write(root, file.path, file.text, written)
   return written
 }

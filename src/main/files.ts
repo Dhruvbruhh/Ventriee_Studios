@@ -24,9 +24,9 @@ export function workspacePath(root: string, path: unknown, allowRoot = false): s
 }
 const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex')
 export class FileService {
-  find(root: string, query: string): FileEntry[] {
+  find(root: string, query: string, limit = 100): FileEntry[] {
     if (typeof query !== 'string' || query.length > 200) throw new Error('Invalid file search')
-    return this.walk(root, 100, (entry) => entry.path.toLowerCase().includes(query.toLowerCase()))
+    return this.walk(root, Math.min(Math.max(1, limit), 1000), (entry) => entry.path.toLowerCase().includes(query.toLowerCase()))
   }
   /** Text search across project files, bounded by file count and hit count so large repositories stay responsive. */
   async search(root: string, query: string, caseSensitive = false): Promise<SearchResult> {

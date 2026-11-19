@@ -24,10 +24,10 @@ import type {
   UpdateState,
   Task
 } from './types'
-import type { FileEntry, TextFile, GitState, GitAction, SearchResult, CodeAskInput, CodeAskResult } from './workspace'
+import type { FileEntry, TextFile, GitState, GitAction, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult } from './workspace'
 
 export const IPC = {
-  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', codeAsk: 'code:ask', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
+  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', codeAsk: 'code:ask', codeChange: 'code:change', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
   gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action',
   termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
   authStatus: 'auth:status',
@@ -113,6 +113,7 @@ export interface VentrieeApi {
   filesFind(projectId: string, query: string): Promise<FileEntry[]>
   filesSearch(projectId: string, query: string, caseSensitive: boolean): Promise<SearchResult>
   codeAsk(projectId: string, input: CodeAskInput): Promise<CodeAskResult>
+  codeChange(projectId: string, input: CodeChangeInput): Promise<CodeChangeResult>
   runsList(projectId: string): Promise<RunSummary[]>
   runChanges(projectId: string, jobId: string): Promise<Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>>
   runUndo(projectId: string, jobId: string): Promise<number>

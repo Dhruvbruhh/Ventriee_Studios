@@ -7,11 +7,12 @@ import { Preview } from '../components/Preview'
 import { TerminalView } from '../components/Terminal'
 import { Modal } from '../shell'
 import { guard, useStore } from '../store'
-import type { FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
+import type { CodeChangeResult, FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
 import type { Project } from '../../../shared/types'
 
 interface Tab { file: TextFile; model: monaco.editor.ITextModel; saved: string; subscription: monaco.IDisposable; view?: monaco.editor.ICodeEditorViewState | null }
-interface Diff { path: string; original: string; modified: string; staged: boolean; label?: string; proposal?: boolean }
+type Change = CodeChangeResult['changes'][number]
+interface Diff { path: string; original: string; modified: string; staged: boolean; label?: string; proposal?: boolean; change?: Change }
 interface Proposal { path: string; range: monaco.IRange; versionId: number; replacement: string }
 interface Problem { path: string; line: number; column: number; message: string; severity: number }
 interface Command { label: string; keys?: string; run: () => void; disabled?: boolean }
@@ -77,7 +78,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const searchRun = useRef(0)
   const [ask, setAsk] = useState(false)
   const [question, setQuestion] = useState('')
-  const [asking, setAsking] = useState<'ask' | 'edit' | null>(null)
+  const [asking, setAsking] = useState<'ask' | 'edit' | 'change' | null>(null)
+  const [changes, setChanges] = useState<Change[]>([])
   const [reply, setReply] = useState<{ answer: string; model: string; path: string } | null>(null)
   const [askError, setAskError] = useState('')
   const [proposal, setProposal] = useState<Proposal | null>(null)
@@ -230,6 +232,40 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     tab.model.pushStackElement()
     setProposal(null); setDiff(null); activate(proposal.path); changed()
   }
+  const askChange = async () => {
+    if (!question.trim() || asking) return
+    // Open tabs are the agent's context, the file being looked at first.
+    const paths = [...new Set([...(active ? [active] : []), ...tabs.current.keys()])]
+    setAsking('change'); setAskError(''); setReply(null); setProposal(null); setChanges([])
+    try {
+      const result = await window.ventriee.codeChange(project.id, { request: question, paths })
+      if (!mounted.current) return
+      setReply({ answer: result.answer, model: result.model, path: `${result.changes.length} file${result.changes.length === 1 ? '' : 's'}` })
+      setChanges(result.changes)
+      if (result.changes[0]) showChange(result.changes[0])
+    } catch (error) {
+      if (mounted.current) setAskError(String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, ''))
+    } finally { if (mounted.current) setAsking(null) }
+  }
+  const showChange = (c: Change) => setDiff({ path: c.path, original: c.original, modified: c.text, staged: false,
+    label: c.created ? 'New file proposed by the agent' : 'Agent change: current (left) / proposed (right)', change: c })
+  const dropChange = (c: Change) => { setChanges((list) => list.filter((x) => x !== c)); setDiff((d) => (d?.change === c ? null : d)) }
+  /** Puts one proposed file into an editor tab as an undoable, unsaved edit. */
+  const acceptChange = async (c: Change) => {
+    if (c.created && (await guard(() => window.ventriee.filesCreate(project.id, c.path, false))) === null) return false
+    await open(c.path)
+    const tab = tabs.current.get(c.path)
+    if (!tab || tab.model.isDisposed()) { setAskError(`Could not open ${c.path} to apply the change.`); return false }
+    if (tab.model.getValue() !== c.original && tab.model.getValue() !== '') {
+      setAskError(`${c.path} changed after you asked, so this change may not fit any more. Ask again.`); return false
+    }
+    tab.model.pushStackElement()
+    tab.model.pushEditOperations([], [{ range: tab.model.getFullModelRange(), text: c.text }], () => null)
+    tab.model.pushStackElement()
+    dropChange(c); changed()
+    return true
+  }
+  const acceptAll = async () => { for (const c of [...changes]) if (!(await acceptChange(c))) break }
   const save = async (all = false) => {
     if (saving.current) return
     saving.current = true; setBusy(true)
@@ -386,7 +422,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <div className="code-tabs" role="tablist" aria-label="Open files">{[...tabs.current].map(([path, value]) => <div className={`code-tab${path === active && !diff ? ' on' : ''}`} key={path}>
         <button role="tab" aria-selected={path === active && !diff} title={path} onClick={() => activate(path)}>{path.split('/').at(-1)}{value.saved !== value.model.getValue() ? <span aria-label="Unsaved"> ●</span> : null}</button><button className="tab-close" onClick={() => close(path)} aria-label={`Close ${path}`}><IconClose width={12} height={12} aria-hidden /></button></div>)}</div>
       <div className="code-toolbar"><span className="code-breadcrumb" title={diff?.path ?? active ?? project.path}>{diff ? `${diff.label ?? (diff.staged ? 'Staged' : 'Working tree')} / ${diff.path}` : active ?? 'Open a file to begin'}</span>
-        {diff?.proposal && proposal ? <><button className="btn tiny" onClick={() => { setProposal(null); setDiff(null) }}>Reject</button><button className="btn tiny primary" onClick={acceptProposal}>Accept into editor</button></>
+        {diff?.change ? <><button className="btn tiny" onClick={() => dropChange(diff.change!)}>Reject</button><button className="btn tiny primary" onClick={() => void acceptChange(diff.change!)}>Accept into editor</button></>
+          : diff?.proposal && proposal ? <><button className="btn tiny" onClick={() => { setProposal(null); setDiff(null) }}>Reject</button><button className="btn tiny primary" onClick={acceptProposal}>Accept into editor</button></>
           : diff ? <button className="btn tiny" onClick={() => setDiff(null)}>Back to editor</button> : <><button className="btn tiny" disabled={!tab || busy} onClick={() => void reload()}>Reload</button><button className="btn tiny" disabled={!tab || busy} onClick={() => { setNewPath(''); setCreate('copy') }}>Save copy</button><button className="btn tiny primary" disabled={!tab || busy || tab.saved === tab.model.getValue()} onClick={() => void save()}>Save</button></>}
         <button className="btn tiny" aria-pressed={ask} onClick={() => { setAsk(!ask); setPreview(false) }}>Ask agent</button>
         <button className="btn tiny" aria-pressed={preview} onClick={() => { setPreview(!preview); setAsk(false) }}>{preview ? 'Hide preview' : 'Show preview'}</button></div>
@@ -418,11 +455,16 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <textarea className="textarea" aria-label="Question for the agent" rows={4} maxLength={4000} placeholder="Explain this, find the bug, add error handling…" value={question} onChange={(e) => setQuestion(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void askAgent('ask') } }} />
       <div className="code-ask-actions"><button className="btn" disabled={!tab || !question.trim() || Boolean(asking)} onClick={() => void askAgent('ask')}>{asking === 'ask' ? 'Asking…' : 'Ask'}</button>
-        <button className="btn primary" disabled={!tab || !question.trim() || Boolean(asking)} onClick={() => void askAgent('edit')}>{asking === 'edit' ? 'Writing edit…' : 'Propose edit'}</button></div>
+        <button className="btn" disabled={!tab || !question.trim() || Boolean(asking)} onClick={() => void askAgent('edit')}>{asking === 'edit' ? 'Writing edit…' : 'Propose edit'}</button>
+        <button className="btn primary" disabled={!question.trim() || Boolean(asking)} onClick={() => void askChange()} title="Change or create several files; your open tabs are the context">{asking === 'change' ? 'Changing files…' : 'Change files'}</button></div>
       {askError ? <p className="editor-error" role="alert">{askError}</p> : null}
       {asking ? <p className="tree-note" role="status">Waiting for the model. This can take a minute.</p> : null}
       {reply ? <div className="code-ask-reply"><small className="dim">{reply.model} · {reply.path}</small><div className="code-ask-text">{reply.answer || 'The agent sent only the edit.'}</div>
         {proposal ? <button className="btn tiny" onClick={() => showProposal(proposal)}>Review proposed edit</button> : null}</div> : null}
+      {changes.length ? <div className="code-ask-reply" aria-label="Proposed file changes"><b>{changes.length} file{changes.length === 1 ? '' : 's'} to review</b>
+        {changes.map((c) => <div className="change-row" key={c.path}><button className="change-path" onClick={() => showChange(c)} title={`Review ${c.path}`}>{c.created ? <span className="badge">new</span> : null} {c.path}</button>
+          <button className="btn tiny" onClick={() => dropChange(c)}>Reject</button><button className="btn tiny primary" onClick={() => void acceptChange(c)}>Accept</button></div>)}
+        <button className="btn tiny" onClick={() => void acceptAll()}>Accept all into the editor</button></div> : null}
     </aside> : preview ? <aside className="code-preview"><Preview /></aside> : null}
     {create ? <Modal title={create === 'copy' ? 'Save a copy' : `New ${create}`} onClose={() => setCreate(null)} narrow><form onSubmit={(event) => {
       event.preventDefault(); if (busy) return; setBusy(true)

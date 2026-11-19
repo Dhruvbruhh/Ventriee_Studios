@@ -19,13 +19,13 @@ import { isInside } from './paths'
 import { detectProviders, testEngine, defaultEndpoint, runEngine } from './engines'
 import { IPC } from '../shared/ipc'
 import { TerminalService } from './terminal'
-import { askCode } from './code-agent'
+import { askCode, changeFiles } from './code-agent'
 import { CheckpointService } from './checkpoint'
 import { summarizeRuns } from './runs'
 import { validMcpServers, writeMcpConfig } from './mcp'
 import { applyTemplate, type TemplateId } from './templates'
 import { Updater } from './updater'
-import type { CodeAskInput } from '../shared/workspace'
+import type { CodeAskInput, CodeChangeInput } from '../shared/workspace'
 import type {
   Agent,
   AppSettings,
@@ -285,6 +285,7 @@ function registerIpc() {
     debouncedNotify()
     return changes.length
   })
+  handle(IPC.codeChange, (event, id: string, input: CodeChangeInput) => { projectRoot(event, id); return changeFiles(store.project(id)!, input, store.settings(), creds, files) })
   handle(IPC.codeAsk,(event, id: string, input: CodeAskInput) => { projectRoot(event, id); return askCode(store.project(id)!, input, store.settings(), creds) })
   handle(IPC.filesRead, (event, id: string, path: string) => files.read(projectRoot(event, id), path))
   handle(IPC.filesSave, (event, id: string, file: TextFile) => files.save(projectRoot(event, id), file))

@@ -1392,3 +1392,9 @@
   .file-tree-actions { position: absolute; right: 6px; display: none; gap: 2px; }
   .file-tree-item:hover .file-tree-actions, .file-tree-item:focus-within .file-tree-actions { display: flex; }
 }
+
+@layer components {
+  .change-row { display: flex; align-items: center; gap: 6px; }
+  .change-path { flex: 1; min-width: 0; text-align: left; font: 11.5px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .change-path:hover { text-decoration: underline; }
+}
