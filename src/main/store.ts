@@ -50,6 +50,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   optimizerEndpoint: '',
   completionEngine: 'api-ollama',
   completionModel: '',
+  editorTheme: 'ventriee',
+  vimMode: false,
+  keybindings: [],
+  errorReports: false,
   completionEndpoint: '',
   onboardingSeen: false
 }

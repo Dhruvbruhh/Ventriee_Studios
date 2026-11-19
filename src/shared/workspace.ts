@@ -20,3 +20,12 @@ export interface BlameLine { hash: string; author: string; time: number; summary
 export interface GitChange { path: string; originalPath?: string; index: string; working: string }
 export interface GitState { repository: boolean; branch: string; branches: string[]; changes: GitChange[]; log: Array<{ hash: string; message: string }>; ahead: number; behind: number; remote?: string; /** Set when more changes exist than are listed. */ totalChanges?: number }
 export type GitAction = 'init' | 'stage' | 'unstage' | 'commit' | 'checkout' | 'branch' | 'remote' | 'fetch' | 'pull' | 'push' | 'discard'
+
+export interface ExtensionSearchHit { id: string; name: string; publisher: string; version: string; description: string; downloads: number; icon: string | null }
+export interface ExtensionInfo { id: string; name: string; publisher: string; version: string; description: string; enabled: boolean; supported: string[]; needsRuntime: boolean }
+export interface ExtensionContributions {
+  themes: Array<{ id: string; label: string; dark: boolean; colors: Record<string, string>; tokenColors: unknown[] }>
+  snippets: Array<{ language: string; snippets: Record<string, { prefix: string | string[]; body: string | string[]; description?: string }> }>
+  languages: Array<{ id: string; extensions?: string[]; filenames?: string[]; aliases?: string[]; configuration?: Record<string, unknown> }>
+  grammars: Array<{ language?: string; scopeName: string; path: string; content: string }>
+}

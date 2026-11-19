@@ -6,6 +6,8 @@ import { findConflicts, resolveConflict } from './conflicts'
 import { applyProjectTypes, clearProjectTypes, fileUri } from './intellisense'
 import { AgentChanges } from './AgentChanges'
 import { startLsp, type LspSession } from './lsp'
+import { ExtensionsPanel } from './ExtensionsPanel'
+import { loadExtensions } from './extensions'
 import type { LspStatus } from '../../../shared/catalog'
 import { Preview } from '../components/Preview'
 import { TerminalView } from '../components/Terminal'
@@ -55,7 +57,7 @@ function DiffView({ diff }: { diff: Diff }) {
   useEffect(() => {
     const original = monaco.editor.createModel(diff.original, languageFor(diff.path))
     const modified = monaco.editor.createModel(diff.modified, languageFor(diff.path))
-    const editor = monaco.editor.createDiffEditor(host.current!, { theme: 'ventriee', automaticLayout: true, readOnly: true, originalEditable: false, renderSideBySide: true, minimap: { enabled: false } })
+    const editor = monaco.editor.createDiffEditor(host.current!, { automaticLayout: true, readOnly: true, originalEditable: false, renderSideBySide: true, minimap: { enabled: false } })
     editor.setModel({ original, modified })
     return () => { editor.dispose(); original.dispose(); modified.dispose() }
   }, [diff])
@@ -81,7 +83,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [active, setActive] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
   const [, setRender] = useState(0)
-  const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'agents'>('files')
+  const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'agents' | 'extensions'>('files')
   const [panel, setPanel] = useState<'terminal' | 'problems' | 'debug' | 'run' | null>(null)
   /** A command shown running in the Run panel (installs, tasks, tests); a new key starts a fresh shell. */
   const [run, setRun] = useState<{ label: string; command: string; key: number } | null>(null)
@@ -144,7 +146,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   }, [])
   useEffect(() => {
     mounted.current = true
-    const instance = monaco.editor.create(host.current!, { theme: 'ventriee', automaticLayout: true, fontFamily: 'Cascadia Code, Consolas, monospace', fontSize: 13,
+    const instance = monaco.editor.create(host.current!, { automaticLayout: true, fontFamily: 'Cascadia Code, Consolas, monospace', fontSize: 13,
       minimap: { enabled: true }, padding: { top: 12 }, scrollBeyondLastLine: false, tabSize: 2, model: null, glyphMargin: true })
     editor.current = instance
     const position = instance.onDidChangeCursorPosition((event: { position: { lineNumber: number; column: number } }) => setCursor(event.position))
@@ -433,6 +435,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     return () => clearInterval(timer)
   }, [project.id, visible, changed])
   const completionModel = useStore((s) => s.snapshot?.settings.completionModel ?? '')
+  const editorTheme = useStore((s) => s.snapshot?.settings.editorTheme ?? 'ventriee')
+  useEffect(() => { void loadExtensions(editorTheme) }, [editorTheme])
   useEffect(() => {
     if (!completionModel) return
     // Ghost-text completions (Tab accepts). Waits for a pause in typing; a newer keystroke cancels the request.
@@ -612,6 +616,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     { label: 'View: Explorer', run: () => setSidebar('files') },
     { label: 'View: Source Control', run: () => setSidebar('git') },
     { label: 'View: Agent changes', run: () => setSidebar('agents') },
+    { label: 'View: Extensions', run: () => setSidebar('extensions') },
     { label: 'View: Toggle terminal', keys: 'Ctrl+`', run: () => setPanel((open) => open === 'terminal' ? null : 'terminal') },
     { label: 'View: Problems', run: () => setPanel('problems') },
     { label: `View: ${preview ? 'Hide' : 'Show'} preview`, run: () => { setPreview(!preview); setAsk(false) } },
@@ -626,7 +631,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const runCommand = (c: Command) => { setPalette(false); c.run() }
   const grouped = found ? [...found.hits.reduce((map, hit) => map.set(hit.path, [...(map.get(hit.path) ?? []), hit]), new Map<string, SearchResult['hits']>())] : []
   return <div className={`code-workspace${preview || ask ? ' with-preview' : ''}`} style={{ display: visible ? undefined : 'none' }}>
-    <aside className="code-sidebar"><div className="code-sidebar-tabs"><button className={sidebar === 'files' ? 'on' : ''} onClick={() => setSidebar('files')}>Explorer</button><button className={sidebar === 'search' ? 'on' : ''} onClick={() => setSidebar('search')}>Search</button><button className={sidebar === 'git' ? 'on' : ''} onClick={() => setSidebar('git')} aria-label="Source Control" title="Source Control">Git</button><button className={sidebar === 'agents' ? 'on' : ''} onClick={() => setSidebar('agents')} aria-label="Agent changes" title="Files changed by agent tasks">Agents</button></div>
+    <aside className="code-sidebar"><div className="code-sidebar-tabs"><button className={sidebar === 'files' ? 'on' : ''} onClick={() => setSidebar('files')}>Explorer</button><button className={sidebar === 'search' ? 'on' : ''} onClick={() => setSidebar('search')}>Search</button><button className={sidebar === 'git' ? 'on' : ''} onClick={() => setSidebar('git')} aria-label="Source Control" title="Source Control">Git</button><button className={sidebar === 'agents' ? 'on' : ''} onClick={() => setSidebar('agents')} aria-label="Agent changes" title="Files changed by agent tasks">Agents</button><button className={sidebar === 'extensions' ? 'on' : ''} onClick={() => setSidebar('extensions')} aria-label="Extensions" title="Extensions from Open VSX">Ext</button></div>
       {sidebar === 'files' ? <><div className="code-section-head"><strong title={project.path}>{project.name}</strong><button className="btn tiny" onClick={() => setRevision((v) => v + 1)}>Refresh</button></div>
         <div className="code-file-actions"><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('file') }}>New file</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('folder') }}>New folder</button><button className="btn tiny" onClick={() => setQuick(true)}>Find file</button></div>
         <div className="file-tree" aria-label="Project files"><Directory projectId={project.id} path="" depth={0} revision={revision} onOpen={(path) => void open(path)} onRename={(entry) => { setNewPath(entry.path); setMoving(entry) }} onDelete={(entry) => void trash(entry)} /></div></>
@@ -640,6 +645,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
           <div className="code-search-results">{grouped.map(([path, hits]) => <section key={path}><h4 title={path}>{path}</h4>
             {hits.map((hit) => <button key={`${hit.line}:${hit.column}`} onClick={() => void openAt(hit.path, hit.line, hit.column)} title={`${path}:${hit.line}`}><span className="dim">{hit.line}</span> {hit.preview}</button>)}</section>)}</div>
         </div>
+        : sidebar === 'extensions' ? <ExtensionsPanel />
         : sidebar === 'agents' ? <AgentChanges projectId={project.id} onDiff={(path) => void openDiff(path, false)} onOpen={(path) => void open(path)} />
         : <SourceControl projectId={project.id} refreshKey={revision} onDiff={(path, staged) => void openDiff(path, staged)} onOpen={(path) => void open(path)} />}
     </aside>

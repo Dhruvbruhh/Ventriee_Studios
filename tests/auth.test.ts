@@ -105,6 +105,8 @@ describe('public desktop configuration', () => {
     expect(cleanSupabaseUrl('https://user:secret@example.com')).toBe('')
     expect(cleanSupabaseUrl('https://example.com/path')).toBe('')
     expect(originOf(`${RENDERER_ORIGIN}/index.html`)).toBe(RENDERER_ORIGIN)
-    expect(studioCsp(url, false)).not.toContain('unsafe-eval')
+    // JavaScript eval stays off in production; only WebAssembly compilation (syntax highlighting) is allowed.
+    expect(studioCsp(url, false)).not.toContain("'unsafe-eval'")
+    expect(studioCsp(url, false)).toContain("'wasm-unsafe-eval'")
   })
 })

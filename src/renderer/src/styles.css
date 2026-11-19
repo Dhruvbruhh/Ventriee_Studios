@@ -1429,3 +1429,17 @@
 .debug-bp .input { flex: 1; min-width: 0; padding: 2px 6px; font-size: 11px; }
 .debug-bar select, .code-debug select { background: var(--surface-2, #1a1d23); color: inherit; border: 1px solid var(--line, #2a2f38); border-radius: 6px; font-size: 12px; padding: 2px 6px; }
 .code-run { height: 100%; min-height: 0; }
+
+/* Extensions panel */
+.ext-panel { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; overflow: auto; min-height: 0; font-size: 12px; }
+.ext-panel h3 { margin: 4px 0 0; font-size: 14px; }
+.ext-panel h4 { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 4px; font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+.ext-row { display: flex; gap: 8px; align-items: flex-start; width: 100%; text-align: left; padding: 6px 4px; border-radius: 6px; }
+.ext-row:hover { background: var(--surface-2, #1a1d23); }
+.ext-row img, .ext-icon { width: 28px; height: 28px; border-radius: 6px; flex: none; background: var(--surface-2, #1a1d23); }
+.ext-row span { display: flex; flex-direction: column; min-width: 0; }
+.ext-row small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ext-installed { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+.ext-installed .change-path { flex: 1; min-width: 0; text-align: left; }
+.ext-readme { border-top: 1px solid var(--line-soft, #23272f); padding-top: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ext-panel select { background: var(--surface-2, #1a1d23); color: inherit; border: 1px solid var(--line, #2a2f38); border-radius: 6px; padding: 4px 6px; width: 100%; }

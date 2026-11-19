@@ -1,6 +1,6 @@
 /**
  * What the studio knows how to run for each language: language servers (LSP), debuggers (DAP) and test runners.
- * Plain data; installed extensions add entries through their `ventriee.*` contribution keys.
+ * Plain data, so adding a language is an entry here, not code.
  */
 export type PerOs = string | Partial<Record<'win32' | 'darwin' | 'linux' | 'default', string>>
 export interface InstallSpec { command?: PerOs; url?: string }

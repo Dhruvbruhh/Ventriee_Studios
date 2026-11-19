@@ -25,13 +25,14 @@ import type {
   Task
 } from './types'
 import type { Catalog, LspEvent, LspStatus } from './catalog'
-import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
+import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, ExtensionContributions, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
 
 export const IPC = {
   filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', projectTypes: 'files:project-types', toolsFormat: 'tools:format', toolsLint: 'tools:lint', codeAsk: 'code:ask', codeChange: 'code:change', codeComplete: 'code:complete', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
   gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action', gitLineChanges: 'git:line-changes', gitBlame: 'git:blame',
   termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
   debugStart: 'debug:start', debugConfigs: 'debug:configs', debugVariables: 'debug:variables', debugThread: 'debug:thread', debugCommand: 'debug:command', debugEvaluate: 'debug:evaluate', debugBreakpoints: 'debug:breakpoints', debugStop: 'debug:stop', debugEvent: 'debug:event',
+  extSearch: 'ext:search', extDetails: 'ext:details', extInstall: 'ext:install', extUninstall: 'ext:uninstall', extSetEnabled: 'ext:enabled', extList: 'ext:list', extUpdates: 'ext:updates', extContributions: 'ext:contributions',
   toolCatalog: 'tools:catalog', lspEnsure: 'lsp:ensure', lspRequest: 'lsp:request', lspNotify: 'lsp:notify', lspEvent: 'lsp:event',
   authStatus: 'auth:status',
   authSignIn: 'auth:signIn',
@@ -153,6 +154,14 @@ export interface VentrieeApi {
   debugBreakpoints(path: string, breakpoints: DebugBreakpoint[]): Promise<void>
   debugStop(): Promise<void>
   onDebug(cb: (event: DebugEvent) => void): () => void
+  extSearch(query: string): Promise<ExtensionSearchHit[]>
+  extDetails(id: string): Promise<ExtensionSearchHit & { supported: string[]; needsRuntime: boolean; readme: string }>
+  extInstall(id: string): Promise<ExtensionInfo>
+  extUninstall(id: string): Promise<void>
+  extSetEnabled(id: string, enabled: boolean): Promise<void>
+  extList(): Promise<ExtensionInfo[]>
+  extUpdates(): Promise<Array<{ id: string; version: string }>>
+  extContributions(): Promise<ExtensionContributions>
   toolCatalog(): Promise<Catalog>
   lspEnsure(projectId: string, languageId: string): Promise<LspStatus>
   lspRequest(projectId: string, languageId: string, method: string, params: unknown): Promise<unknown>

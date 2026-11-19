@@ -20,8 +20,8 @@ export function originOf(value: string): string | null {
   try { const url = new URL(value); return `${url.protocol}//${url.host}` } catch { return null }
 }
 export function studioCsp(url: string | null, development: boolean): string {
-  return ["default-src 'self'", `script-src 'self' ${development ? "'unsafe-eval' 'unsafe-inline'" : ''}`,
-    "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob: http://localhost:* http://127.0.0.1:*",
+  return ["default-src 'self'", `script-src 'self' 'wasm-unsafe-eval' ${development ? "'unsafe-eval' 'unsafe-inline'" : ''}`,
+    "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob: http://localhost:* http://127.0.0.1:* https://open-vsx.org",
     "font-src 'self' data:", `connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* ${url ? cleanSupabaseUrl(url) : ''}`,
     "frame-src 'self' http://localhost:* http://127.0.0.1:* data: blob:", "worker-src 'self' blob:",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'"].join('; ')

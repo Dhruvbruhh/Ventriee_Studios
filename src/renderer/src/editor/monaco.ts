@@ -16,6 +16,7 @@ monaco.editor.defineTheme('ventriee', { base: 'vs-dark', inherit: true, rules: [
   'editor.background': '#101216', 'editorLineNumber.foreground': '#59616f', 'editorCursor.foreground': '#a78bfa',
   'editor.selectionBackground': '#4a3c6c80', 'editor.inactiveSelectionBackground': '#34303f', 'editorLineNumber.activeForeground': '#d6c6fb'
 } })
+monaco.editor.setTheme('ventriee')
 export interface SupportedLanguage { id: string; filenames?: string[]; extensions?: string[]; aliases?: string[] }
 export function editorLanguages(): SupportedLanguage[] { return monaco.languages.getLanguages() }
 export function languageFor(path: string) {

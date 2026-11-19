@@ -23,6 +23,7 @@ import { DebugSession } from './debugger'
 import { DapSession, type Debugger } from './dap'
 import { debuggerFor, launchConfigs, substitute } from './launch'
 import { LspService } from './lsp'
+import { ExtensionService } from './extensions'
 import { baseCatalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
 import { projectTypes } from './typeindex'
@@ -57,7 +58,6 @@ const windows = new Map<number, { win: BrowserWindow; projectId: string | null }
 const terminals = new TerminalService()
 /** One debug session per window. */
 const debugSessions = new Map<number, Debugger>()
-// Extensions add to this later; until then it is the built-in catalog.
 const catalog = () => baseCatalog
 const lsp = new LspService(catalog)
 const stopDebug = (owner: number) => { debugSessions.get(owner)?.stop(); debugSessions.delete(owner) }
@@ -364,6 +364,16 @@ function registerIpc() {
   handle(IPC.debugBreakpoints, (event, path: string, list: DebugBreakpoint[]) => debugSessions.get(event.sender.id)?.setBreakpoints(path, Array.isArray(list) ? list : []))
   handle(IPC.debugStop, (event) => stopDebug(event.sender.id))
   handle(IPC.toolCatalog, () => catalog())
+  // Open VSX extensions: only their data (themes, snippets, languages, grammars) is used; their code never runs.
+  const extensions = new ExtensionService(join(app.getPath('userData'), 'extensions'))
+  handle(IPC.extSearch, (_e, query: string) => extensions.search(String(query)))
+  handle(IPC.extDetails, (_e, id: string) => extensions.details(String(id)))
+  handle(IPC.extInstall, (_e, id: string) => extensions.install(String(id)))
+  handle(IPC.extUninstall, (_e, id: string) => extensions.uninstall(String(id)))
+  handle(IPC.extSetEnabled, (_e, id: string, enabled: boolean) => extensions.setEnabled(String(id), enabled === true))
+  handle(IPC.extList, () => extensions.list())
+  handle(IPC.extUpdates, () => extensions.updates())
+  handle(IPC.extContributions, () => extensions.contributions())
   // Language servers are the owner's installed tools (found on PATH), run in the project folder like a terminal.
   handle(IPC.lspEnsure, (event, id: string, language: string) => {
     const sender = event.sender
