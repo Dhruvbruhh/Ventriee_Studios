@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { existsSync, mkdirSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
 import { StudioAuth } from './auth'
-import { FileService } from './files'
+import { FileService, workspacePath } from './files'
 import { GitService } from './git'
 import type { TextFile, GitAction } from '../shared/workspace'
 import { registerRendererProtocol } from './renderer-protocol'
@@ -289,6 +289,9 @@ function registerIpc() {
   handle(IPC.filesRead, (event, id: string, path: string) => files.read(projectRoot(event, id), path))
   handle(IPC.filesSave, (event, id: string, file: TextFile) => files.save(projectRoot(event, id), file))
   handle(IPC.filesCreate, (event, id: string, path: string, directory: boolean) => files.create(projectRoot(event, id), path, directory === true))
+  handle(IPC.filesRename, (event, id: string, from: string, to: string) => files.rename(projectRoot(event, id), from, to))
+  // To the Recycle Bin, so a mistaken delete can be undone outside the app.
+  handle(IPC.filesTrash, (event, id: string, path: string) => shell.trashItem(workspacePath(projectRoot(event, id), path)))
   handle(IPC.gitStatus, (event, id: string) => git.status(projectRoot(event, id)))
   handle(IPC.gitDiff, (event, id: string, path: string, staged: boolean) => git.diff(projectRoot(event, id), path, staged === true))
   handle(IPC.gitAction, (event, id: string, action: GitAction, path?: string, value?: string) => git.action(projectRoot(event, id), action, path, value))

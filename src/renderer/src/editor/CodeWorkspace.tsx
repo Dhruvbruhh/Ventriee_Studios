@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { IconChevron, IconClose } from '../icons'
+import { IconChevron, IconClose, IconEdit, IconTrash } from '../icons'
 import { monaco, languageFor, editorLanguages } from './monaco'
 import { SourceControl } from './SourceControl'
 import { AgentChanges } from './AgentChanges'
@@ -16,7 +16,8 @@ interface Proposal { path: string; range: monaco.IRange; versionId: number; repl
 interface Problem { path: string; line: number; column: number; message: string; severity: number }
 interface Command { label: string; keys?: string; run: () => void; disabled?: boolean }
 
-function Directory({ projectId, path, depth, revision, onOpen }: { projectId: string; path: string; depth: number; revision: number; onOpen: (path: string) => void }) {
+type EntryAction = (entry: FileEntry) => void
+function Directory({ projectId, path, depth, revision, onOpen, onRename, onDelete }: { projectId: string; path: string; depth: number; revision: number; onOpen: (path: string) => void; onRename: EntryAction; onDelete: EntryAction }) {
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
@@ -31,13 +32,15 @@ function Directory({ projectId, path, depth, revision, onOpen }: { projectId: st
   if (error) return <p className="editor-error" role="alert">{error}</p>
   if (!entries.length) return <p className="tree-note">Empty folder</p>
   return <div role="group">{entries.map((entry) => <div key={entry.path}>
-    <button className="file-tree-row" style={{ paddingLeft: depth * 14 + 12 }} title={entry.path}
+    <div className="file-tree-item"><button className="file-tree-row" style={{ paddingLeft: depth * 14 + 12 }} title={entry.path}
       aria-expanded={entry.directory ? expanded.has(entry.path) : undefined}
       onClick={() => {
         if (!entry.directory) { onOpen(entry.path); return }
         setExpanded((old) => { const next = new Set(old); if (next.has(entry.path)) next.delete(entry.path); else next.add(entry.path); return next })
       }}><span className="file-glyph">{entry.directory ? <IconChevron width={12} height={12} aria-hidden style={{ transform: expanded.has(entry.path) ? undefined : 'rotate(-90deg)' }} /> : null}</span><span>{entry.name}</span></button>
-    {entry.directory && expanded.has(entry.path) ? <Directory {...{ projectId, revision, onOpen }} path={entry.path} depth={depth + 1} /> : null}
+      <span className="file-tree-actions"><button className="tab-close" aria-label={`Rename or move ${entry.path}`} title="Rename or move" onClick={() => onRename(entry)}><IconEdit width={12} height={12} aria-hidden /></button>
+        <button className="tab-close" aria-label={`Delete ${entry.path}`} title="Move to Recycle Bin" onClick={() => onDelete(entry)}><IconTrash width={12} height={12} aria-hidden /></button></span></div>
+    {entry.directory && expanded.has(entry.path) ? <Directory {...{ projectId, revision, onOpen, onRename, onDelete }} path={entry.path} depth={depth + 1} /> : null}
   </div>)}</div>
 }
 
@@ -86,6 +89,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [loading, setLoading] = useState(false)
   const [cursor, setCursor] = useState({ lineNumber: 1, column: 1 })
   const [create, setCreate] = useState<'file' | 'folder' | 'copy' | null>(null)
+  const [moving, setMoving] = useState<FileEntry | null>(null)
   const [newPath, setNewPath] = useState('')
   const [quick, setQuick] = useState(false)
   const [query, setQuery] = useState('')
@@ -158,6 +162,34 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     } catch (error) {
       if (mounted.current && run === searchRun.current) { setFound(null); setFindError(String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '')) }
     } finally { if (mounted.current && run === searchRun.current) setFindBusy(false) }
+  }
+  /** Open tabs inside a file or folder; refuses when one has unsaved edits, so a move or delete never loses them. */
+  const tabsUnder = (entry: FileEntry): string[] | null => {
+    const hit = [...tabs.current.keys()].filter((p) => p === entry.path || (entry.directory && p.startsWith(`${entry.path}/`)))
+    const dirty = hit.find((p) => { const t = tabs.current.get(p)!; return t.model.getValue() !== t.saved })
+    if (dirty) { useStore.getState().notify(`Save or close ${dirty} first: it has unsaved edits.`, 'error'); return null }
+    return hit
+  }
+  const trash = async (entry: FileEntry) => {
+    const openTabs = tabsUnder(entry)
+    if (!openTabs || !window.confirm(`Move ${entry.path} to the Recycle Bin?`)) return
+    const done = await guard(() => window.ventriee.filesTrash(project.id, entry.path), `${entry.path} moved to the Recycle Bin`)
+    if (done === null) return
+    for (const path of openTabs) close(path)
+    setRevision((v) => v + 1)
+  }
+  const move = async (entry: FileEntry, to: string) => {
+    const openTabs = tabsUnder(entry)
+    if (!openTabs) return false
+    const done = await guard(() => window.ventriee.filesRename(project.id, entry.path, to))
+    if (done === null) return false
+    const wasActive = active
+    for (const path of openTabs) close(path)
+    // The file (or the active file inside a moved folder) reopens at its new path.
+    if (!entry.directory && openTabs.length) void open(to)
+    else if (entry.directory && wasActive && openTabs.includes(wasActive)) void open(`${to}${wasActive.slice(entry.path.length)}`)
+    setRevision((v) => v + 1)
+    return true
   }
   const showProposal = (p: Proposal) => {
     const tab = tabs.current.get(p.path)
@@ -336,7 +368,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     <aside className="code-sidebar"><div className="code-sidebar-tabs"><button className={sidebar === 'files' ? 'on' : ''} onClick={() => setSidebar('files')}>Explorer</button><button className={sidebar === 'search' ? 'on' : ''} onClick={() => setSidebar('search')}>Search</button><button className={sidebar === 'git' ? 'on' : ''} onClick={() => setSidebar('git')} aria-label="Source Control" title="Source Control">Git</button><button className={sidebar === 'agents' ? 'on' : ''} onClick={() => setSidebar('agents')} aria-label="Agent changes" title="Files changed by agent tasks">Agents</button></div>
       {sidebar === 'files' ? <><div className="code-section-head"><strong title={project.path}>{project.name}</strong><button className="btn tiny" onClick={() => setRevision((v) => v + 1)}>Refresh</button></div>
         <div className="code-file-actions"><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('file') }}>New file</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('folder') }}>New folder</button><button className="btn tiny" onClick={() => setQuick(true)}>Find file</button></div>
-        <div className="file-tree" aria-label="Project files"><Directory projectId={project.id} path="" depth={0} revision={revision} onOpen={(path) => void open(path)} /></div></>
+        <div className="file-tree" aria-label="Project files"><Directory projectId={project.id} path="" depth={0} revision={revision} onOpen={(path) => void open(path)} onRename={(entry) => { setNewPath(entry.path); setMoving(entry) }} onDelete={(entry) => void trash(entry)} /></div></>
         : sidebar === 'search' ? <div className="code-search">
           <form onSubmit={(event) => { event.preventDefault(); void runSearch() }}>
             <input className="input" autoFocus aria-label="Search text in project files" placeholder="Search in files" value={findText} onChange={(e) => setFindText(e.target.value)} maxLength={200} />
@@ -415,6 +447,13 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         if (event.key === 'ArrowDown' && at < items.length - 1) { event.preventDefault(); items[at + 1].focus() }
         if (event.key === 'ArrowUp') { event.preventDefault(); if (at > 0) items[at - 1].focus(); else document.querySelector<HTMLInputElement>('[aria-label="Type a command"]')?.focus() }
       }}>{shownCommands.length ? shownCommands.map((c) => <button key={c.label} onClick={() => runCommand(c)}><span>{c.label}</span>{c.keys ? <kbd>{c.keys}</kbd> : null}</button>) : <p>No matching commands.</p>}</div></Modal> : null}
+    {moving ? <Modal title={`Rename or move ${moving.directory ? 'folder' : 'file'}`} onClose={() => setMoving(null)} narrow><form onSubmit={(event) => {
+      event.preventDefault(); if (busy) return; setBusy(true)
+      void move(moving, newPath.trim()).then((ok) => { if (ok) setMoving(null) }).finally(() => setBusy(false))
+    }}><label className="field-label" htmlFor="move-path">New path, relative to the project</label>
+      <input id="move-path" className="input" autoFocus value={newPath} onChange={(e) => setNewPath(e.target.value)} onFocus={(e) => { const name = e.target.value.lastIndexOf('/') + 1; e.target.setSelectionRange(name, e.target.value.length) }} required />
+      <p className="hint">Change the name to rename it. Change the folders in the path to move it; the destination folder must exist.</p>
+      <button className="btn primary" disabled={busy || !newPath.trim() || newPath.trim() === moving.path}>Rename</button></form></Modal> : null}
     {quick ? <Modal title="Go to file" onClose={() => setQuick(false)} narrow><input className="input" autoFocus aria-label="Find a file by path" placeholder="Search file paths…" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(event) => {
       if (event.key === 'Enter' && matches[0] && !searching) { event.preventDefault(); void open(matches[0].path); setQuick(false) }
       if (event.key === 'ArrowDown') { event.preventDefault(); document.querySelector<HTMLButtonElement>('.quick-files button')?.focus() }

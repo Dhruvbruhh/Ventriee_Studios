@@ -27,7 +27,7 @@ import type {
 import type { FileEntry, TextFile, GitState, GitAction, SearchResult, CodeAskInput, CodeAskResult } from './workspace'
 
 export const IPC = {
-  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesFind: 'files:find', filesSearch: 'files:search', codeAsk: 'code:ask', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
+  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', codeAsk: 'code:ask', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
   gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action',
   termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
   authStatus: 'auth:status',
@@ -123,6 +123,8 @@ export interface VentrieeApi {
   filesRead(projectId: string, path: string): Promise<TextFile>
   filesSave(projectId: string, file: TextFile): Promise<TextFile>
   filesCreate(projectId: string, path: string, directory: boolean): Promise<void>
+  filesRename(projectId: string, from: string, to: string): Promise<void>
+  filesTrash(projectId: string, path: string): Promise<void>
   gitStatus(projectId: string): Promise<GitState>
   gitDiff(projectId: string, path: string, staged: boolean): Promise<{ original: string; modified: string; path: string }>
   gitAction(projectId: string, action: GitAction, path?: string, value?: string): Promise<void>

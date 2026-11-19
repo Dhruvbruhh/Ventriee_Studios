@@ -104,4 +104,17 @@ export class FileService {
     if (directory) mkdirSync(target)
     else writeFileSync(target, '', { flag: 'wx' })
   }
+  /** Rename or move a file or folder inside the project. Never overwrites. */
+  rename(root: string, from: string, to: string) {
+    const source = workspacePath(root, from)
+    const target = workspacePath(root, to)
+    if (!existsSync(source)) throw new Error(`${from} no longer exists`)
+    // A case-only rename (readme.md -> README.md) is the same file on Windows, not a clash.
+    const caseOnly = source !== target && source.toLowerCase() === target.toLowerCase()
+    if (existsSync(target) && !caseOnly) throw new Error(`${to} already exists`)
+    if (!existsSync(dirname(target))) throw new Error('The destination folder does not exist')
+    const inside = relative(source, target)
+    if (inside && !inside.startsWith('..') && !isAbsolute(inside)) throw new Error('A folder cannot be moved into itself')
+    renameSync(source, target)
+  }
 }

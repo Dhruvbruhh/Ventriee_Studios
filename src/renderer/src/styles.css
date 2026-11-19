@@ -1384,3 +1384,11 @@
   /* With the sidebar open the office floor needs the width more than the terminals do. */
   .shell:not(.no-sidebar) .main.with-terminals { grid-template-columns: 300px minmax(0, 1fr) 320px; }
 }
+
+@layer components {
+  .file-tree-item { position: relative; display: flex; align-items: center; }
+  .file-tree-item > .file-tree-row { flex: 1; min-width: 0; }
+  /* Row actions appear on hover or when the row is focused by keyboard. */
+  .file-tree-actions { position: absolute; right: 6px; display: none; gap: 2px; }
+  .file-tree-item:hover .file-tree-actions, .file-tree-item:focus-within .file-tree-actions { display: flex; }
+}
