@@ -32,3 +32,8 @@ export interface ExtensionContributions {
 export interface TestResult { name: string; suite: string; file?: string; line?: number; status: 'passed' | 'failed' | 'skipped'; duration?: number; message?: string }
 export type TestEvent = { type: 'started'; command: string } | { type: 'output'; text: string } | { type: 'done'; code: number; results: TestResult[] }
 export interface ProjectTask { label: string; command: string; source: string; detail?: string }
+export type GithubAction =
+  | { kind: 'prs' } | { kind: 'issues' } | { kind: 'pr'; number: number } | { kind: 'issue'; number: number } | { kind: 'diff'; number: number }
+  | { kind: 'checkout'; number: number } | { kind: 'review'; number: number; event: 'approve' | 'request-changes' | 'comment'; body: string }
+  | { kind: 'comment'; number: number; body: string; issue?: boolean } | { kind: 'merge'; number: number; method: 'merge' | 'squash' | 'rebase' }
+

@@ -27,6 +27,7 @@ import { ExtensionService } from './extensions'
 import { TestService, detectRunners } from './testrunner'
 import { listTasks } from './tasks'
 import { HistoryService } from './history'
+import { github } from './github'
 import { baseCatalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
 import { projectTypes } from './typeindex'
@@ -36,7 +37,7 @@ import { summarizeRuns } from './runs'
 import { validMcpServers, writeMcpConfig } from './mcp'
 import { applyTemplate, type TemplateId } from './templates'
 import { Updater } from './updater'
-import type { CodeAskInput, CodeChangeInput, CodeCompleteInput, DebugBreakpoint, DebugEvent, DebugStartInput } from '../shared/workspace'
+import type { GithubAction, CodeAskInput, CodeChangeInput, CodeCompleteInput, DebugBreakpoint, DebugEvent, DebugStartInput } from '../shared/workspace'
 import type {
   Agent,
   AppSettings,
@@ -381,6 +382,14 @@ function registerIpc() {
   handle(IPC.debugStop, (event) => stopDebug(event.sender.id))
   handle(IPC.toolCatalog, () => catalog())
   handle(IPC.tasksList, (event, id: string) => listTasks(projectRoot(event, id)))
+  handle(IPC.github, (event, id: string, action: GithubAction) => github(projectRoot(event, id), action))
+  handle(IPC.githubReview, async (event, id: string, number: number) => {
+    const root = projectRoot(event, id)
+    const diff = String(await github(root, { kind: 'diff', number }))
+    const clipped = diff.length > 59_000 ? `${diff.slice(0, 59_000)}\n… (diff cut at 59,000 characters)` : diff
+    return askCode(store.project(id)!, { path: `pull request #${Number(number)}`, code: clipped, mode: 'ask',
+      question: 'Review this pull request diff. List real problems first (bugs, security, data loss, missing tests), each with file and line, then smaller suggestions. Say plainly if it looks good.' }, store.settings(), creds)
+  })
   // Tests run the owner's project code with their permissions, like a terminal, only when they press Run.
   handle(IPC.testsRunners, (event, id: string) => detectRunners(projectRoot(event, id), catalog()).map((r) => ({ id: r.id, name: r.name })))
   handle(IPC.testsRun, (event, id: string, runnerId: string, target: { file?: string; name?: string }) => {

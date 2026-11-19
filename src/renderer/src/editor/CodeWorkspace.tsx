@@ -8,6 +8,7 @@ import { AgentChanges } from './AgentChanges'
 import { startLsp, type LspSession, type OutlineSymbol } from './lsp'
 import { SYMBOL_KINDS, findSymbols, outlineFor, symbolPath } from './symbols'
 import { ExtensionsPanel } from './ExtensionsPanel'
+import { GitHubPanel } from './GitHubPanel'
 import { KeybindingsModal } from './KeybindingsModal'
 import { applyKeybindings, chordOf } from './keybindings'
 import { TestsPanel, testAt, useTests } from './TestsPanel'
@@ -96,7 +97,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [active, setActive] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
   const [, setRender] = useState(0)
-  const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'agents' | 'extensions' | 'tests' | 'outline' | 'history'>('files')
+  const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'agents' | 'extensions' | 'tests' | 'outline' | 'history' | 'github'>('files')
   const [versions, setVersions] = useState<Array<{ id: string; time: number; size: number }>>([])
   const tests = useTests(project.id)
   const [panel, setPanel] = useState<'terminal' | 'problems' | 'debug' | 'run' | null>(null)
@@ -750,6 +751,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     { label: 'View: Tests', run: () => setSidebar('tests') },
     { label: 'View: Outline', run: () => setSidebar('outline') },
     { label: 'View: Local history', run: () => setSidebar('history') },
+    { label: 'View: GitHub pull requests and issues', run: () => setSidebar('github') },
     { label: 'Go to symbol in workspace', keys: 'Ctrl+T', run: () => { setSymbolQuery(''); setSymbolPick(true) } },
     { label: 'Go to symbol in file', keys: 'Ctrl+Shift+O', run: () => { editor.current?.focus(); void editor.current?.getAction('editor.action.quickOutline')?.run() }, disabled: !tab },
     { label: splitPath ? 'View: Close split editor' : 'View: Split editor right', keys: 'Ctrl+\\', run: () => setSplitPath(splitPath ? null : active), disabled: !splitPath && !active },
@@ -773,7 +775,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const runCommand = (c: Command) => { setPalette(false); c.run() }
   const grouped = found ? [...found.hits.reduce((map, hit) => map.set(hit.path, [...(map.get(hit.path) ?? []), hit]), new Map<string, SearchResult['hits']>())] : []
   return <div className={`code-workspace${preview || ask ? ' with-preview' : ''}`} style={{ display: visible ? undefined : 'none' }}>
-    <aside className="code-sidebar"><div className="code-sidebar-tabs"><button className={sidebar === 'files' ? 'on' : ''} onClick={() => setSidebar('files')}>Explorer</button><button className={sidebar === 'search' ? 'on' : ''} onClick={() => setSidebar('search')}>Search</button><button className={sidebar === 'git' ? 'on' : ''} onClick={() => setSidebar('git')} aria-label="Source Control" title="Source Control">Git</button><button className={sidebar === 'agents' ? 'on' : ''} onClick={() => setSidebar('agents')} aria-label="Agent changes" title="Files changed by agent tasks">Agents</button><button className={sidebar === 'outline' ? 'on' : ''} onClick={() => setSidebar('outline')} aria-label="Outline" title="Symbols in this file">Outline</button><button className={sidebar === 'history' ? 'on' : ''} onClick={() => setSidebar('history')} aria-label="Local history" title="Saved versions of this file">History</button><button className={sidebar === 'tests' ? 'on' : ''} onClick={() => setSidebar('tests')} aria-label="Tests" title="Run and see tests">Tests</button><button className={sidebar === 'extensions' ? 'on' : ''} onClick={() => setSidebar('extensions')} aria-label="Extensions" title="Extensions from Open VSX">Ext</button></div>
+    <aside className="code-sidebar"><div className="code-sidebar-tabs"><button className={sidebar === 'files' ? 'on' : ''} onClick={() => setSidebar('files')}>Explorer</button><button className={sidebar === 'search' ? 'on' : ''} onClick={() => setSidebar('search')}>Search</button><button className={sidebar === 'git' ? 'on' : ''} onClick={() => setSidebar('git')} aria-label="Source Control" title="Source Control">Git</button><button className={sidebar === 'agents' ? 'on' : ''} onClick={() => setSidebar('agents')} aria-label="Agent changes" title="Files changed by agent tasks">Agents</button><button className={sidebar === 'outline' ? 'on' : ''} onClick={() => setSidebar('outline')} aria-label="Outline" title="Symbols in this file">Outline</button><button className={sidebar === 'history' ? 'on' : ''} onClick={() => setSidebar('history')} aria-label="Local history" title="Saved versions of this file">History</button><button className={sidebar === 'github' ? 'on' : ''} onClick={() => setSidebar('github')} aria-label="GitHub" title="Pull requests and issues">GitHub</button><button className={sidebar === 'tests' ? 'on' : ''} onClick={() => setSidebar('tests')} aria-label="Tests" title="Run and see tests">Tests</button><button className={sidebar === 'extensions' ? 'on' : ''} onClick={() => setSidebar('extensions')} aria-label="Extensions" title="Extensions from Open VSX">Ext</button></div>
       {sidebar === 'files' ? <><div className="code-section-head"><strong title={project.path}>{project.name}</strong><button className="btn tiny" onClick={() => setRevision((v) => v + 1)}>Refresh</button></div>
         <div className="code-file-actions"><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('file') }}>New file</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('folder') }}>New folder</button><button className="btn tiny" onClick={() => setQuick(true)}>Find file</button></div>
         <div className="file-tree" aria-label="Project files"><Directory projectId={project.id} path="" depth={0} revision={revision} onOpen={(path) => void open(path)} onRename={(entry) => { setNewPath(entry.path); setMoving(entry) }} onDelete={(entry) => void trash(entry)} /></div></>
@@ -793,6 +795,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         : sidebar === 'history' ? <div className="ext-panel" aria-label="Local history">{active ? <><p className="tree-note">Every save of {active.split('/').pop()} is kept for 30 days (up to 50 versions), outside the project.</p>
           {versions.length ? versions.map((v) => <button key={v.id} className="outline-row" onClick={() => void compareVersion(v.id, v.time)}>{new Date(v.time).toLocaleString()} <span className="dim">{(v.size / 1024).toFixed(1)} KB</span></button>)
             : <p className="tree-note">No saved versions yet.</p>}</> : <p className="tree-note">Open a file to see its saved versions.</p>}</div>
+        : sidebar === 'github' ? <GitHubPanel projectId={project.id} />
         : sidebar === 'tests' ? <TestsPanel tests={tests} onOpen={(path, line) => void openAt(path, line, 1)} onFix={(r) => void fixTest(r)} />
         : sidebar === 'agents' ? <AgentChanges projectId={project.id} onDiff={(path) => void openDiff(path, false)} onOpen={(path) => void open(path)} />
         : <SourceControl projectId={project.id} refreshKey={revision} onDiff={(path, staged) => void openDiff(path, staged)} onOpen={(path) => void open(path)} />}

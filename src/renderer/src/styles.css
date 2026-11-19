@@ -1471,3 +1471,12 @@
 .kb-row small { grid-column: 1 / -1; }
 .kb-row .input { width: 150px; }
 .vim-status { font-family: var(--mono, monospace); }
+
+/* GitHub */
+.gh-diff { max-height: 50vh; overflow: auto; font: 11px var(--mono, monospace); background: var(--surface-1, #0f1115); padding: 6px; border-radius: 6px; }
+.gh-diff .add { color: #79dcb4; } .gh-diff .del { color: var(--err, #f4796b); } .gh-diff .hunk { color: #8ab4f8; }
+.gh-comment { border-left: 2px solid var(--line, #2a2f38); padding-left: 8px; white-space: pre-wrap; }
+.seg { display: inline-flex; border: 1px solid var(--line, #2a2f38); border-radius: 6px; overflow: hidden; }
+.seg button { padding: 2px 8px; font-size: 11px; } .seg button.on { background: var(--surface-2, #1a1d23); color: var(--text, #fff); }
+.code-sidebar-tabs { flex-wrap: wrap; }
+.code-sidebar-tabs button { flex: 1 0 auto; padding: 8px 7px; }
