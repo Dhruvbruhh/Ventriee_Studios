@@ -57,6 +57,15 @@ const api: VentrieeApi = {
     ipcRenderer.on(IPC.termExit, listener)
     return () => ipcRenderer.removeListener(IPC.termExit, listener)
   },
+  toolCatalog: () => ipcRenderer.invoke(IPC.toolCatalog),
+  lspEnsure: (id, language) => ipcRenderer.invoke(IPC.lspEnsure, id, language),
+  lspRequest: (id, language, method, params) => ipcRenderer.invoke(IPC.lspRequest, id, language, method, params),
+  lspNotify: (id, language, method, params) => ipcRenderer.invoke(IPC.lspNotify, id, language, method, params),
+  onLsp: (cb) => {
+    const listener = (_e: unknown, event: Parameters<typeof cb>[0]) => cb(event)
+    ipcRenderer.on(IPC.lspEvent, listener)
+    return () => ipcRenderer.removeListener(IPC.lspEvent, listener)
+  },
   authStatus: () => ipcRenderer.invoke(IPC.authStatus),
   authSignIn: (input, signup) => ipcRenderer.invoke(IPC.authSignIn, input, signup),
   authClear: () => ipcRenderer.invoke(IPC.authClear),

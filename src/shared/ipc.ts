@@ -24,6 +24,7 @@ import type {
   UpdateState,
   Task
 } from './types'
+import type { Catalog, LspEvent, LspStatus } from './catalog'
 import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, DebugEvent, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
 
 export const IPC = {
@@ -31,6 +32,7 @@ export const IPC = {
   gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action', gitLineChanges: 'git:line-changes', gitBlame: 'git:blame',
   termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
   debugStart: 'debug:start', debugCommand: 'debug:command', debugEvaluate: 'debug:evaluate', debugBreakpoints: 'debug:breakpoints', debugStop: 'debug:stop', debugEvent: 'debug:event',
+  toolCatalog: 'tools:catalog', lspEnsure: 'lsp:ensure', lspRequest: 'lsp:request', lspNotify: 'lsp:notify', lspEvent: 'lsp:event',
   authStatus: 'auth:status',
   authSignIn: 'auth:signIn',
   authClear: 'auth:clear',
@@ -148,6 +150,11 @@ export interface VentrieeApi {
   debugBreakpoints(path: string, lines: number[]): Promise<void>
   debugStop(): Promise<void>
   onDebug(cb: (event: DebugEvent) => void): () => void
+  toolCatalog(): Promise<Catalog>
+  lspEnsure(projectId: string, languageId: string): Promise<LspStatus>
+  lspRequest(projectId: string, languageId: string, method: string, params: unknown): Promise<unknown>
+  lspNotify(projectId: string, languageId: string, method: string, params: unknown): Promise<void>
+  onLsp(cb: (event: LspEvent) => void): () => void
   authStatus(): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number } | null>
   authSignIn(input: { email: string; password: string }, signup?: boolean): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number } | null; message: string }>
   authClear(): Promise<void>

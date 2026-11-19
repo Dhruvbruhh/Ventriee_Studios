@@ -20,6 +20,8 @@ import { detectProviders, testEngine, defaultEndpoint, runEngine } from './engin
 import { IPC } from '../shared/ipc'
 import { TerminalService } from './terminal'
 import { DebugSession } from './debugger'
+import { LspService } from './lsp'
+import { baseCatalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
 import { projectTypes } from './typeindex'
 import { eslintFile, prettierFormat } from './projecttools'
@@ -53,6 +55,9 @@ const windows = new Map<number, { win: BrowserWindow; projectId: string | null }
 const terminals = new TerminalService()
 /** One debug session per window. */
 const debugSessions = new Map<number, DebugSession>()
+// Extensions add to this later; until then it is the built-in catalog.
+const catalog = () => baseCatalog
+const lsp = new LspService(catalog)
 const stopDebug = (owner: number) => { debugSessions.get(owner)?.stop(); debugSessions.delete(owner) }
 let tray: Tray | null = null
 let quitting = false
@@ -225,6 +230,7 @@ function createWindow(projectId?: string) {
   win.on('closed', () => {
     terminals.closeOwner(windowId)
     stopDebug(windowId)
+    lsp.closeOwner(windowId)
     auth.clear(windowId)
     windows.delete(windowId)
     refreshTray()
@@ -241,7 +247,7 @@ function createWindow(projectId?: string) {
   // Project previews must never navigate the privileged studio document.
   // A reload starts a new renderer that cannot reach the old shells; end them so they don't pile up to the limit.
   win.webContents.on('did-start-navigation', (details) => {
-    if (details.isMainFrame && !details.isSameDocument) { terminals.closeOwner(windowId); stopDebug(windowId) }
+    if (details.isMainFrame && !details.isSameDocument) { terminals.closeOwner(windowId); stopDebug(windowId); lsp.closeOwner(windowId) }
   })
   win.webContents.on('will-navigate', (event, url) => {
     if (originOf(url) !== rendererOrigin) event.preventDefault()
@@ -330,6 +336,14 @@ function registerIpc() {
   handle(IPC.debugEvaluate, (event, expression: string) => debugOf(event.sender.id).evaluate(String(expression)))
   handle(IPC.debugBreakpoints, (event, path: string, lines: number[]) => debugSessions.get(event.sender.id)?.setBreakpoints(path, Array.isArray(lines) ? lines : []))
   handle(IPC.debugStop, (event) => stopDebug(event.sender.id))
+  handle(IPC.toolCatalog, () => catalog())
+  // Language servers are the owner's installed tools (found on PATH), run in the project folder like a terminal.
+  handle(IPC.lspEnsure, (event, id: string, language: string) => {
+    const sender = event.sender
+    return lsp.ensure(sender.id, projectRoot(event, id), String(language), (e) => { if (!sender.isDestroyed()) sender.send(IPC.lspEvent, e) })
+  })
+  handle(IPC.lspRequest, (event, id: string, language: string, method: string, params: unknown) => lsp.request(event.sender.id, projectRoot(event, id), String(language), String(method), params))
+  handle(IPC.lspNotify, (event, id: string, language: string, method: string, params: unknown) => lsp.notify(event.sender.id, projectRoot(event, id), String(language), String(method), params))
   handle(IPC.authStatus, async (event) => {
     const session = await auth.restore(event.sender.id)
     debouncedNotify()
@@ -344,6 +358,7 @@ function registerIpc() {
     const signingOut = auth.signOut()
     terminals.closeAll()
     for (const owner of [...debugSessions.keys()]) stopDebug(owner)
+    lsp.closeAll()
     for (const project of store.projects()) {
       orchestrator.stopRun(project.id)
       preview.stop(project.id)
@@ -1051,6 +1066,7 @@ app.on('before-quit', () => {
   quitting = true
   terminals.closeAll()
   for (const owner of [...debugSessions.keys()]) stopDebug(owner)
+  lsp.closeAll()
   if (scheduler) clearInterval(scheduler)
   tray?.destroy()
   for (const project of store?.projects?.() ?? []) {

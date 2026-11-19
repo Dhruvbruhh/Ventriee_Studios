@@ -5,6 +5,8 @@ import { SourceControl } from './SourceControl'
 import { findConflicts, resolveConflict } from './conflicts'
 import { applyProjectTypes, clearProjectTypes, fileUri } from './intellisense'
 import { AgentChanges } from './AgentChanges'
+import { startLsp, type LspSession } from './lsp'
+import type { LspStatus } from '../../../shared/catalog'
 import { Preview } from '../components/Preview'
 import { TerminalView } from '../components/Terminal'
 import { Modal } from '../shell'
@@ -70,7 +72,10 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [revision, setRevision] = useState(0)
   const [, setRender] = useState(0)
   const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'agents'>('files')
-  const [panel, setPanel] = useState<'terminal' | 'problems' | 'debug' | null>(null)
+  const [panel, setPanel] = useState<'terminal' | 'problems' | 'debug' | 'run' | null>(null)
+  /** A command shown running in the Run panel (installs, tasks, tests); a new key starts a fresh shell. */
+  const [run, setRun] = useState<{ label: string; command: string; key: number } | null>(null)
+  const runInPanel = (label: string, command: string) => { setRun({ label, command, key: Date.now() }); setPanel('run') }
   const [breakpoints, setBreakpoints] = useState<Record<string, number[]>>({})
   const [debug, setDebug] = useState<{ status: 'idle' | 'starting' | 'running' | 'paused' | 'exited'; frames: DebugFrame[]; variables: DebugVariable[]; output: string; code?: number; error?: string }>({ status: 'idle', frames: [], variables: [], output: '' })
   const [evalText, setEvalText] = useState('')
@@ -157,9 +162,9 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     if (tab.view) editor.current?.restoreViewState(tab.view)
     editor.current?.focus()
   }
-  const open = async (path: string) => {
-    const request = ++opening.current
-    if (tabs.current.has(path)) { activate(path); return }
+  const open = async (path: string, focus = true) => {
+    const request = focus ? ++opening.current : opening.current
+    if (tabs.current.has(path)) { if (focus) activate(path); return }
     setLoading(true)
     try {
       const file = await window.ventriee.filesRead(project.id, path)
@@ -172,11 +177,35 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         const model = existing ?? monaco.editor.createModel(file.text, languageFor(path), uri)
         tabs.current.set(path, { file, model, saved: model.getValue(), subscription: model.onDidChangeContent(changed) })
       }
-      if (request === opening.current) activate(path)
+      if (focus && request === opening.current) activate(path)
       changed()
     } catch (error) { useStore.getState().notify(String(error), 'error') }
     finally { if (mounted.current && request === opening.current) setLoading(false) }
   }
+  // Language servers for the languages in the catalog (Python, Go, Rust, C/C++, …), when installed.
+  const lspSession = useRef<LspSession | null>(null)
+  const [lspStatus, setLspStatus] = useState<Record<string, LspStatus>>({})
+  const openRef = useRef(open)
+  openRef.current = open
+  useEffect(() => {
+    let alive = true
+    let session: LspSession | null = null
+    void startLsp(project, {
+      adopt: async (path) => { await openRef.current(path, false); return tabs.current.get(path)?.model ?? null },
+      onStatus: (language, status) => { if (alive) setLspStatus((all) => ({ ...all, [language]: status })) }
+    }).then((s) => { if (alive) { session = s; lspSession.current = s } else s.dispose() }).catch(() => {})
+    return () => { alive = false; session?.dispose(); lspSession.current = null }
+  }, [project.id, project.path])
+  useEffect(() => {
+    // Go to definition into another project file opens it in a tab.
+    const opener = monaco.editor.registerEditorOpener({ openCodeEditor: (_source, resource, selection) => {
+      if (resource.scheme !== 'inmemory' || resource.authority !== project.id.toLowerCase()) return false
+      const at = selection && 'startLineNumber' in selection ? selection : selection && 'lineNumber' in selection ? { startLineNumber: selection.lineNumber, startColumn: selection.column } : null
+      void openAt(resource.path.slice(1), at?.startLineNumber ?? 1, at?.startColumn ?? 1)
+      return true
+    } })
+    return () => opener.dispose()
+  }, [project.id])
   const openAt = async (path: string, line: number, column: number) => {
     await open(path)
     if (selected.current !== path || !editor.current) return
@@ -545,6 +574,13 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     tab.model.pushStackElement()
     changed()
   }
+  const activeLanguage = tab?.model.getLanguageId()
+  const status = activeLanguage ? lspStatus[activeLanguage] : undefined
+  const languageStatus = !status || status.state === 'none' ? null
+    : status.state === 'ready' ? <span title="Language server running for this file">{status.server} ●</span>
+    : status.install ? <button className="status-btn" title={`Runs: ${status.install}`} onClick={() => runInPanel(`Install ${status.language} support`, status.install!)}>Install {status.language} support</button>
+    : status.url?.startsWith('http') ? <button className="status-btn" onClick={() => window.open(status.url)}>Get {status.language} support</button>
+    : <span title={status.url}>{status.language}: no language server</span>
   const errors = problems.filter((p) => p.severity === monaco.MarkerSeverity.Error).length
   const commands: Command[] = [
     { label: 'File: Save', keys: 'Ctrl+S', run: () => void save(), disabled: !tab },
@@ -606,12 +642,14 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         <div ref={host} className="monaco-surface" style={{ visibility: active && !diff ? 'visible' : 'hidden' }} />
         {diff ? <DiffView diff={diff} /> : !active ? <div className="code-welcome"><span className="code-welcome-symbol">{'{ }'}</span><h2>Your code, in one place</h2><p>Open a file in Explorer or press Ctrl+P.</p><p>Ctrl+S to save · Ctrl+F to find · Ctrl+H to replace</p><p>UTF-8 text files up to 2 MB. Language runtimes are installed separately.</p></div> : null}
         {loading ? <div className="editor-loading" role="status">Opening file…</div> : null}</div>
-      {panel ? <section className="code-panel" aria-label="Panel">
+      {panel || run ? <section className="code-panel" aria-label="Panel" style={{ display: panel ? undefined : 'none' }}>
         <div className="code-panel-tabs" role="tablist"><button role="tab" aria-selected={panel === 'terminal'} className={panel === 'terminal' ? 'on' : ''} onClick={() => setPanel('terminal')}>Terminal</button>
           <button role="tab" aria-selected={panel === 'problems'} className={panel === 'problems' ? 'on' : ''} onClick={() => setPanel('problems')}>Problems <span className="badge">{problems.length}</span></button>
           <button role="tab" aria-selected={panel === 'debug'} className={panel === 'debug' ? 'on' : ''} onClick={() => setPanel('debug')}>Debug{debugLive ? <span className="badge">{debug.status}</span> : null}</button>
+          {run ? <button role="tab" aria-selected={panel === 'run'} className={panel === 'run' ? 'on' : ''} onClick={() => setPanel('run')} title={run.command}>{run.label}</button> : null}
           <span className="grow" /><button className="tab-close" aria-label="Close panel" onClick={() => setPanel(null)}><IconClose width={12} height={12} aria-hidden /></button></div>
-        {panel === 'terminal' ? <TerminalView projectId={project.id} slot="panel" label="Terminal" />
+        {run ? <div className="code-run" style={{ display: panel === 'run' ? undefined : 'none' }}><TerminalView key={run.key} projectId={project.id} slot={`run-${run.key}`} label={run.label} command={run.command} closeOnUnmount /></div> : null}
+        {panel === 'run' ? null : panel === 'terminal' ? <TerminalView projectId={project.id} slot="panel" label="Terminal" />
           : panel === 'debug' ? <div className="code-debug">
             <div className="debug-bar">
               {debugLive ? <button className="btn tiny" onClick={() => void window.ventriee.debugStop()}>Stop</button>
@@ -640,7 +678,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <footer className="code-status"><span>{busy ? 'Saving…' : tab && tab.saved !== tab.model.getValue() ? 'Unsaved changes' : 'Saved'}</span>
         <button className="status-btn" onClick={() => setPanel((open) => open === 'problems' ? null : 'problems')} aria-label={`${problems.length} problems`}>{errors} errors · {problems.length - errors} warnings</button>
         <button className="status-btn" onClick={() => setPanel((open) => open === 'terminal' ? null : 'terminal')}>Terminal</button>
-        <button className="status-btn" onClick={() => { setCommand(''); setPalette(true) }} title="Command palette (Ctrl+Shift+P)">Commands</button><span className="grow" />{blame ? <span className="status-blame" title={blame}>{blame}</span> : null}{typesInfo ? <span title="Files and installed packages the TypeScript service knows about">{typesInfo}</span> : null}<span>Ln {cursor.lineNumber}, Col {cursor.column}</span><span>UTF-8{tab?.file.bom ? ' BOM' : ''}</span>
+        <button className="status-btn" onClick={() => { setCommand(''); setPalette(true) }} title="Command palette (Ctrl+Shift+P)">Commands</button><span className="grow" />{blame ? <span className="status-blame" title={blame}>{blame}</span> : null}{typesInfo ? <span title="Files and installed packages the TypeScript service knows about">{typesInfo}</span> : null}{languageStatus}<span>Ln {cursor.lineNumber}, Col {cursor.column}</span><span>UTF-8{tab?.file.bom ? ' BOM' : ''}</span>
         <select aria-label="Editor language" value={tab?.model.getLanguageId() ?? 'plaintext'} disabled={!tab || Boolean(diff)} onChange={(e) => { if (tab) { monaco.editor.setModelLanguage(tab.model, e.target.value); changed() } }}>
           {editorLanguages().sort((a, b) => a.id.localeCompare(b.id)).map((lang) => <option value={lang.id} key={lang.id}>{lang.aliases?.[0] ?? lang.id}</option>)}
         </select></footer>
