@@ -1,3 +1,4 @@
+import { cleanError } from '../store'
 import { useEffect, useRef, useState } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -8,6 +9,8 @@ const SCROLLBACK_CHARS = 200_000
 /** A slot ("office-1", "panel") keeps its shell and scrollback while its view is hidden or remounted. */
 interface Slot { projectId: string; id: string | null; buffer: string; exited: number | null; listeners: Set<(data: string) => void> }
 const slots = new Map<string, Slot>()
+/** Recent output of a terminal slot (for problem matchers); empty when it is gone. */
+export const terminalOutput = (projectId: string, slot: string) => slots.get(`${projectId}:${slot}`)?.buffer ?? ''
 let wired = false
 
 function wire() {
@@ -63,7 +66,7 @@ export function TerminalView({ projectId, slot: name, label, command, closeOnUnm
         // Give the shell a moment to print its prompt before typing the owner-chosen command.
         if (command) setTimeout(() => { if (slot.id === id) void window.ventriee.termWrite(id, `${command}\r`).catch(() => {}) }, 900)
       }
-      catch (reason) { if (alive) setError(String(reason).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '')) }
+      catch (reason) { if (alive) setError(cleanError(reason)) }
     }
     void start()
     const input = term.onData((data) => { if (slot.id) void window.ventriee.termWrite(slot.id, data).catch(() => {}) })

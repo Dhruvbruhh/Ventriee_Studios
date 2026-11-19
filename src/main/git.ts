@@ -47,7 +47,8 @@ export class GitService {
   }
   private async requireRoot(root: string) {
     const top = (await this.command(root, ['rev-parse', '--show-toplevel'])).trim()
-    const normalize = (value: string) => process.platform === 'win32' ? realpathSync(value).toLowerCase() : realpathSync(value)
+    // .native expands Windows 8.3 short names (RUNNER~1), which Git never prints.
+    const normalize = (value: string) => process.platform === 'win32' ? realpathSync.native(value).toLowerCase() : realpathSync.native(value)
     if (normalize(top) !== normalize(root)) throw new Error('Open the repository root as your project to use Source Control')
   }
   async status(root: string): Promise<GitState> {
@@ -116,7 +117,7 @@ export class GitService {
     return { hash: hash.slice(0, 8), author: field('author'), time: Number(field('author-time')) * 1000, summary: field('summary') }
   }
   async action(root: string, action: GitAction, path?: string, value?: string) {
-    const key = realpathSync(root)
+    const key = realpathSync.native(root)
     if (this.busy.has(key)) throw new Error('Another Git operation is still running')
     this.busy.add(key)
     try {

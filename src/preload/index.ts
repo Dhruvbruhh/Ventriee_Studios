@@ -42,10 +42,13 @@ const api: VentrieeApi = {
     ipcRenderer.on(IPC.termData, listener)
     return () => ipcRenderer.removeListener(IPC.termData, listener)
   },
-  debugStart: (id, file, breakpoints) => ipcRenderer.invoke(IPC.debugStart, id, file, breakpoints),
+  debugConfigs: (id) => ipcRenderer.invoke(IPC.debugConfigs, id),
+  debugStart: (id, input, breakpoints) => ipcRenderer.invoke(IPC.debugStart, id, input, breakpoints),
+  debugVariables: (ref) => ipcRenderer.invoke(IPC.debugVariables, ref),
+  debugThread: (threadId) => ipcRenderer.invoke(IPC.debugThread, threadId),
   debugCommand: (action) => ipcRenderer.invoke(IPC.debugCommand, action),
   debugEvaluate: (expression) => ipcRenderer.invoke(IPC.debugEvaluate, expression),
-  debugBreakpoints: (path, lines) => ipcRenderer.invoke(IPC.debugBreakpoints, path, lines),
+  debugBreakpoints: (path, list) => ipcRenderer.invoke(IPC.debugBreakpoints, path, list),
   debugStop: () => ipcRenderer.invoke(IPC.debugStop),
   onDebug: (cb) => {
     const listener = (_e: unknown, event: Parameters<typeof cb>[0]) => cb(event)
@@ -56,6 +59,44 @@ const api: VentrieeApi = {
     const listener = (_e: unknown, payload: { id: string; code: number }) => cb(payload)
     ipcRenderer.on(IPC.termExit, listener)
     return () => ipcRenderer.removeListener(IPC.termExit, listener)
+  },
+  extSearch: (query) => ipcRenderer.invoke(IPC.extSearch, query),
+  extDetails: (id) => ipcRenderer.invoke(IPC.extDetails, id),
+  extInstall: (id) => ipcRenderer.invoke(IPC.extInstall, id),
+  extUninstall: (id) => ipcRenderer.invoke(IPC.extUninstall, id),
+  extSetEnabled: (id, enabled) => ipcRenderer.invoke(IPC.extSetEnabled, id, enabled),
+  extList: () => ipcRenderer.invoke(IPC.extList),
+  extUpdates: () => ipcRenderer.invoke(IPC.extUpdates),
+  extContributions: () => ipcRenderer.invoke(IPC.extContributions),
+  testsRunners: (id) => ipcRenderer.invoke(IPC.testsRunners, id),
+  testsRun: (id, runnerId, target) => ipcRenderer.invoke(IPC.testsRun, id, runnerId, target),
+  testsStop: () => ipcRenderer.invoke(IPC.testsStop),
+  onTests: (cb) => {
+    const listener = (_e: unknown, event: Parameters<typeof cb>[0]) => cb(event)
+    ipcRenderer.on(IPC.testsEvent, listener)
+    return () => ipcRenderer.removeListener(IPC.testsEvent, listener)
+  },
+  tasksList: (id) => ipcRenderer.invoke(IPC.tasksList, id),
+  filesReadLarge: (id, path) => ipcRenderer.invoke(IPC.filesReadLarge, id, path),
+  toolsDetect: () => ipcRenderer.invoke(IPC.toolsDetect),
+  errorReport: (message, stack) => ipcRenderer.invoke(IPC.errorReport, message, stack),
+  errorLog: () => ipcRenderer.invoke(IPC.errorLog),
+  errorClear: () => ipcRenderer.invoke(IPC.errorClear),
+  reportProblem: () => ipcRenderer.invoke(IPC.reportProblem),
+  syncPush: () => ipcRenderer.invoke(IPC.syncPush),
+  syncPull: () => ipcRenderer.invoke(IPC.syncPull),
+  github: (id, action) => ipcRenderer.invoke(IPC.github, id, action),
+  githubReview: (id, number) => ipcRenderer.invoke(IPC.githubReview, id, number),
+  historyList: (id, path) => ipcRenderer.invoke(IPC.historyList, id, path),
+  historyRead: (id, path, version) => ipcRenderer.invoke(IPC.historyRead, id, path, version),
+  toolCatalog: () => ipcRenderer.invoke(IPC.toolCatalog),
+  lspEnsure: (id, language) => ipcRenderer.invoke(IPC.lspEnsure, id, language),
+  lspRequest: (id, language, method, params) => ipcRenderer.invoke(IPC.lspRequest, id, language, method, params),
+  lspNotify: (id, language, method, params) => ipcRenderer.invoke(IPC.lspNotify, id, language, method, params),
+  onLsp: (cb) => {
+    const listener = (_e: unknown, event: Parameters<typeof cb>[0]) => cb(event)
+    ipcRenderer.on(IPC.lspEvent, listener)
+    return () => ipcRenderer.removeListener(IPC.lspEvent, listener)
   },
   authStatus: () => ipcRenderer.invoke(IPC.authStatus),
   authSignIn: (input, signup) => ipcRenderer.invoke(IPC.authSignIn, input, signup),

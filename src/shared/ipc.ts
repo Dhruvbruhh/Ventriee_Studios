@@ -24,13 +24,18 @@ import type {
   UpdateState,
   Task
 } from './types'
-import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, DebugEvent, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
+import type { Catalog, LspEvent, LspStatus } from './catalog'
+import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, GithubAction, ProjectTask, TestEvent, ExtensionContributions, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
 
 export const IPC = {
   filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', projectTypes: 'files:project-types', toolsFormat: 'tools:format', toolsLint: 'tools:lint', codeAsk: 'code:ask', codeChange: 'code:change', codeComplete: 'code:complete', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
   gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action', gitLineChanges: 'git:line-changes', gitBlame: 'git:blame',
   termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
-  debugStart: 'debug:start', debugCommand: 'debug:command', debugEvaluate: 'debug:evaluate', debugBreakpoints: 'debug:breakpoints', debugStop: 'debug:stop', debugEvent: 'debug:event',
+  debugStart: 'debug:start', debugConfigs: 'debug:configs', debugVariables: 'debug:variables', debugThread: 'debug:thread', debugCommand: 'debug:command', debugEvaluate: 'debug:evaluate', debugBreakpoints: 'debug:breakpoints', debugStop: 'debug:stop', debugEvent: 'debug:event',
+  extSearch: 'ext:search', extDetails: 'ext:details', extInstall: 'ext:install', extUninstall: 'ext:uninstall', extSetEnabled: 'ext:enabled', extList: 'ext:list', extUpdates: 'ext:updates', extContributions: 'ext:contributions',
+  testsRunners: 'tests:runners', testsRun: 'tests:run', testsStop: 'tests:stop', testsEvent: 'tests:event',
+  tasksList: 'tasks:list', filesReadLarge: 'files:read-large', toolsDetect: 'tools:detect', errorReport: 'errors:report', errorLog: 'errors:log', errorClear: 'errors:clear', reportProblem: 'errors:issue', syncPush: 'sync:push', syncPull: 'sync:pull', github: 'github:run', githubReview: 'github:review', historyList: 'history:list', historyRead: 'history:read',
+  toolCatalog: 'tools:catalog', lspEnsure: 'lsp:ensure', lspRequest: 'lsp:request', lspNotify: 'lsp:notify', lspEvent: 'lsp:event',
   authStatus: 'auth:status',
   authSignIn: 'auth:signIn',
   authClear: 'auth:clear',
@@ -142,12 +147,45 @@ export interface VentrieeApi {
   termClose(id: string): Promise<void>
   onTermData(cb: (payload: { id: string; data: string }) => void): () => void
   onTermExit(cb: (payload: { id: string; code: number }) => void): () => void
-  debugStart(projectId: string, file: string, breakpoints: Record<string, number[]>): Promise<void>
+  debugConfigs(projectId: string): Promise<Array<{ name: string; type: string; request: string }>>
+  debugStart(projectId: string, input: DebugStartInput, breakpoints: Record<string, DebugBreakpoint[]>): Promise<void>
+  debugVariables(ref: number): Promise<DebugVariable[]>
+  debugThread(threadId: number): Promise<void>
   debugCommand(action: 'continue' | 'over' | 'into' | 'out' | 'pause'): Promise<void>
   debugEvaluate(expression: string): Promise<string>
-  debugBreakpoints(path: string, lines: number[]): Promise<void>
+  debugBreakpoints(path: string, breakpoints: DebugBreakpoint[]): Promise<void>
   debugStop(): Promise<void>
   onDebug(cb: (event: DebugEvent) => void): () => void
+  extSearch(query: string): Promise<ExtensionSearchHit[]>
+  extDetails(id: string): Promise<ExtensionSearchHit & { supported: string[]; needsRuntime: boolean; readme: string }>
+  extInstall(id: string): Promise<ExtensionInfo>
+  extUninstall(id: string): Promise<void>
+  extSetEnabled(id: string, enabled: boolean): Promise<void>
+  extList(): Promise<ExtensionInfo[]>
+  extUpdates(): Promise<Array<{ id: string; version: string }>>
+  extContributions(): Promise<ExtensionContributions>
+  testsRunners(projectId: string): Promise<Array<{ id: string; name: string }>>
+  testsRun(projectId: string, runnerId: string, target: { file?: string; name?: string }): Promise<void>
+  testsStop(): Promise<void>
+  onTests(cb: (event: TestEvent) => void): () => void
+  tasksList(projectId: string): Promise<ProjectTask[]>
+  filesReadLarge(projectId: string, path: string): Promise<{ text: string; size: number; truncated: boolean }>
+  toolsDetect(): Promise<{ tools: Array<{ name: string; found: boolean }>; languages: Array<{ id: string; name: string; server: string | null; install?: string }>; debuggers: Array<{ id: string; name: string; found: boolean; install?: string }> }>
+  errorReport(message: string, stack: string): Promise<void>
+  errorLog(): Promise<string>
+  errorClear(): Promise<void>
+  reportProblem(): Promise<void>
+  syncPush(): Promise<number>
+  syncPull(): Promise<{ syncedAt: number; missingExtensions: string[] } | null>
+  github(projectId: string, action: GithubAction): Promise<unknown>
+  githubReview(projectId: string, number: number): Promise<CodeAskResult>
+  historyList(projectId: string, path: string): Promise<Array<{ id: string; time: number; size: number }>>
+  historyRead(projectId: string, path: string, id: string): Promise<string>
+  toolCatalog(): Promise<Catalog>
+  lspEnsure(projectId: string, languageId: string): Promise<LspStatus>
+  lspRequest(projectId: string, languageId: string, method: string, params: unknown): Promise<unknown>
+  lspNotify(projectId: string, languageId: string, method: string, params: unknown): Promise<void>
+  onLsp(cb: (event: LspEvent) => void): () => void
   authStatus(): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number } | null>
   authSignIn(input: { email: string; password: string }, signup?: boolean): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number } | null; message: string }>
   authClear(): Promise<void>

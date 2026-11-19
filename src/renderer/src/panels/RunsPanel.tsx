@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Modal } from '../shell'
-import { guard, useStore } from '../store'
+import { guard, useStore, cleanError } from '../store'
 import type { RunSummary, UsageRow } from '../../../shared/types'
 
 type Change = { path: string; status: 'added' | 'modified' | 'deleted' }
@@ -24,7 +24,7 @@ export function RunsPanel({ onClose }: { onClose: () => void }) {
   const [undoing, setUndoing] = useState('')
   const load = useCallback(async () => {
     if (!project) return
-    try { setRuns(await window.ventriee.runsList(project.id)); setError('') } catch (e) { setError(String(e).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '')) }
+    try { setRuns(await window.ventriee.runsList(project.id)); setError('') } catch (e) { setError(cleanError(e)) }
   }, [project])
   useEffect(() => { void load() }, [load, snapshot.running])
   const review = async (jobId: string) => {

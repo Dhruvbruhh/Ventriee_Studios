@@ -8,6 +8,7 @@ import { IconClose, IconCheck, IconPlus, IconRefresh, IconTrash } from '../icons
 import { ModelPicker, resolveModel } from '../components/ModelPicker'
 import { AddProviderDialog } from '../components/AddProviderDialog'
 import { TerminalView } from '../components/Terminal'
+import { Toolchains } from '../components/Toolchains'
 import { installUpdate, useUpdateState } from '../components/UpdateNotice'
 import type { CredentialInfo } from '../../../shared/ipc'
 
@@ -536,6 +537,47 @@ function NewWorker({ engineDefault, onDone }: { engineDefault: EngineKind; onDon
   )
 }
 
+/** Editor settings sync through the owner's account, and the opt-in local error log behind "Report a problem". */
+function SyncAndReports() {
+  const settings = useStore((s) => s.snapshot?.settings)
+  const [missing, setMissing] = useState<string[]>([])
+  const [log, setLog] = useState<string | null>(null)
+  if (!settings) return null
+  return <>
+    <div className="section-label" style={{ marginTop: 14 }}>Settings sync</div>
+    <div className="kv-row">
+      <div className="kv-row-main">
+        <div className="kv-row-title">Editor theme, Vim mode, shortcuts and extensions</div>
+        <div className="kv-row-sub">Stored on your Ventriee account so another computer can download them. API keys, endpoints and MCP settings are never synced.</div>
+      </div>
+      <button className="btn tiny" onClick={() => void guard(() => window.ventriee.syncPush(), 'Settings uploaded to your account')}>Upload</button>
+      <button className="btn tiny" onClick={() => void guard(() => window.ventriee.syncPull()).then((r) => {
+        if (r === null) return
+        if (!r) { useStore.getState().notify('Nothing synced to this account yet', 'info'); return }
+        setMissing(r.missingExtensions)
+        useStore.getState().notify(r.missingExtensions.length ? `Settings downloaded. ${r.missingExtensions.length} extension(s) to install.` : 'Settings downloaded')
+      })}>Download</button>
+    </div>
+    {missing.length ? <div className="kv-row"><div className="kv-row-main"><div className="kv-row-sub">Extensions from your other computer: {missing.join(', ')}</div></div>
+      <button className="btn tiny primary" onClick={() => void (async () => { for (const id of missing) await guard(() => window.ventriee.extInstall(id)); setMissing([]) })()}>Install them</button></div> : null}
+
+    <div className="section-label" style={{ marginTop: 14 }}>Problems and crashes</div>
+    <div className="kv-row">
+      <div className="kv-row-main">
+        <div className="kv-row-title">Keep a local error log</div>
+        <div className="kv-row-sub">Off by default. Errors and crashes are written to a file on this computer, with secrets removed. Nothing is sent anywhere.</div>
+      </div>
+      <Switch on={settings.errorReports} onClick={() => void guard(() => window.ventriee.saveSettings({ errorReports: !settings.errorReports }))} label="Keep a local error log" />
+    </div>
+    <div className="kv-row">
+      <div className="kv-row-main"><div className="kv-row-sub">Report a problem opens a prefilled GitHub issue in your browser with the recent errors. You read and edit it before posting.</div></div>
+      <button className="btn tiny" onClick={() => void guard(() => window.ventriee.errorLog()).then((t) => t !== null && setLog(t || 'The log is empty.'))}>View log</button>
+      <button className="btn tiny" onClick={() => void guard(() => window.ventriee.reportProblem())}>Report a problem</button>
+    </div>
+    {log !== null ? <pre className="debug-output" style={{ maxHeight: 200 }} aria-label="Error log">{log}</pre> : null}
+  </>
+}
+
 function RunPolicy() {
   const snapshot = useStore((s) => s.snapshot)!
   const settings = snapshot.settings
@@ -614,6 +656,11 @@ function RunPolicy() {
           onAddProvider={() => useStore.getState().notify('Add local models under Engines, or start Ollama and reopen Settings.', 'info')} />
         {settings.completionModel ? <button className="btn tiny" onClick={() => void update({ completionModel: '' })}>Turn off</button> : null}
       </div>
+
+      <div className="section-label" style={{ marginTop: 14 }}>Languages and tools</div>
+      <Toolchains />
+
+      <SyncAndReports />
 
       <div className="section-label" style={{ marginTop: 14 }}>Run</div>
       <div className="kv-row">

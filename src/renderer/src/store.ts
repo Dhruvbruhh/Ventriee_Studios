@@ -110,7 +110,7 @@ export async function guard<T>(work: () => Promise<T>, success?: string): Promis
   }
 }
 
-function cleanError(error: unknown): string {
+export function cleanError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   return message.replace(/^Error invoking remote method '[^']+':\s*/, '').replace(/^Error:\s*/, '')
 }

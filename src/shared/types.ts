@@ -398,6 +398,13 @@ export interface AppSettings {
   /** Inline completions as you type; an empty model means off. API or local engines only. */
   completionEngine: EngineKind
   completionModel: string
+  /** Monaco theme: 'ventriee' or an installed extension theme id. */
+  editorTheme: string
+  vimMode: boolean
+  /** Owner keyboard shortcuts: a Monaco/studio command id and a key chord like "ctrl+shift+k"; '-' before the id removes a default. */
+  keybindings: Array<{ key: string; command: string }>
+  /** Opt-in: keep a local log of crashes and errors for "Report a problem". */
+  errorReports: boolean
   completionEndpoint: string
   /** Set true once the first-run engine onboarding has been dismissed. */
   onboardingSeen?: boolean
