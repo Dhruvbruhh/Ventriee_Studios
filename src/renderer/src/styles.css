@@ -1488,3 +1488,6 @@
 .toolchains .kv-row-sub { display: flex; flex-wrap: wrap; gap: 6px; }
 .tool-chip { padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line, #2a2f38); font-size: 11px; color: var(--muted); }
 .tool-chip.on { color: var(--text); border-color: #79dcb4; }
+
+.budget-field { display: grid; gap: 4px; font-size: 11px; color: var(--muted); }
+.budget-field .input { width: 90px; }

@@ -1,4 +1,5 @@
 import { withRules } from './rules'
+import { spendBlock, startOfToday } from './spend'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { existsSync, readdirSync, statSync } from 'node:fs'
@@ -534,6 +535,12 @@ JSON shape:
         }
         if (this.paused.has(agent.id)) continue
         if (agent.status === 'working' || this.runners.has(agent.id)) continue
+        const cap = spendBlock((p) => this.deps.store.spendSince(startOfToday(), p), this.deps.store.settings(), project.id)
+        if (cap) {
+          this.deps.store.updateTask(task.id, { status: 'failed', review: cap })
+          this.log(project.id, agent.id, task.id, 'error', cap)
+          continue
+        }
         // Budget is a hard stop on reported spend. Engines that do not report
         // cost leave it at 0, so this gates Claude/OpenAI-style runs only.
         if (agent.budgetUsd > 0) {

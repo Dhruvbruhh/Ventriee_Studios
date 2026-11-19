@@ -13,6 +13,7 @@ const api: VentrieeApi = {
   codeChange: (id, input) => ipcRenderer.invoke(IPC.codeChange, id, input),
   codeComplete: (id, input) => ipcRenderer.invoke(IPC.codeComplete, id, input),
   runsList: (id) => ipcRenderer.invoke(IPC.runsList, id),
+  spendToday: (id) => ipcRenderer.invoke(IPC.spendToday, id),
   runChanges: (id, jobId) => ipcRenderer.invoke(IPC.runChanges, id, jobId),
   runUndo: (id, jobId) => ipcRenderer.invoke(IPC.runUndo, id, jobId),
   updateState: () => ipcRenderer.invoke(IPC.updateState),

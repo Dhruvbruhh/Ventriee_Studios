@@ -561,6 +561,16 @@ function SyncAndReports() {
     {missing.length ? <div className="kv-row"><div className="kv-row-main"><div className="kv-row-sub">Extensions from your other computer: {missing.join(', ')}</div></div>
       <button className="btn tiny primary" onClick={() => void (async () => { for (const id of missing) await guard(() => window.ventriee.extInstall(id)); setMissing([]) })()}>Install them</button></div> : null}
 
+    <div className="section-label" style={{ marginTop: 14 }}>Spending limits</div>
+    <div className="kv-row">
+      <div className="kv-row-main">
+        <div className="kv-row-title">Daily limits in USD (0 = no limit)</div>
+        <div className="kv-row-sub">At a limit, new agent tasks and editor AI requests wait until tomorrow; nothing running is stopped. Counts what API engines report; subscription CLIs report no cost.</div>
+      </div>
+      <label className="budget-field">All projects <input className="input" type="number" min={0} step={1} aria-label="Daily limit for all projects in dollars" defaultValue={settings.dailyBudgetUsd} onBlur={(e) => void guard(() => window.ventriee.saveSettings({ dailyBudgetUsd: Number(e.target.value) }))} /></label>
+      <label className="budget-field">Each project <input className="input" type="number" min={0} step={1} aria-label="Daily limit per project in dollars" defaultValue={settings.projectBudgetUsd} onBlur={(e) => void guard(() => window.ventriee.saveSettings({ projectBudgetUsd: Number(e.target.value) }))} /></label>
+    </div>
+
     <div className="section-label" style={{ marginTop: 14 }}>Problems and crashes</div>
     <div className="kv-row">
       <div className="kv-row-main">

@@ -22,9 +22,10 @@ export function RunsPanel({ onClose }: { onClose: () => void }) {
   const [open, setOpen] = useState<string | null>(null)
   const [changes, setChanges] = useState<Record<string, Change[] | 'loading'>>({})
   const [undoing, setUndoing] = useState('')
+  const [spend, setSpend] = useState<Awaited<ReturnType<typeof window.ventriee.spendToday>> | null>(null)
   const load = useCallback(async () => {
     if (!project) return
-    try { setRuns(await window.ventriee.runsList(project.id)); setError('') } catch (e) { setError(cleanError(e)) }
+    try { setRuns(await window.ventriee.runsList(project.id)); setSpend(await window.ventriee.spendToday(project.id)); setError('') } catch (e) { setError(cleanError(e)) }
   }, [project])
   useEffect(() => { void load() }, [load, snapshot.running])
   const review = async (jobId: string) => {
@@ -45,6 +46,7 @@ export function RunsPanel({ onClose }: { onClose: () => void }) {
   const total = runs?.reduce((n, r) => n + r.costUsd, 0) ?? 0
   return <Modal title="Runs" subtitle={project ? `${project.name}: usage, cost and undo for each run` : 'No project open'} onClose={onClose}>
     {error ? <p className="editor-error" role="alert">{error}</p> : null}
+    {spend ? <p className="hint">Today: ${spend.all.toFixed(2)} reported{spend.dailyBudgetUsd > 0 ? ` of your $${spend.dailyBudgetUsd.toFixed(2)} daily limit` : ''} · this project ${spend.project.toFixed(2)}{spend.projectBudgetUsd > 0 ? ` of $${spend.projectBudgetUsd.toFixed(2)}` : ''}. Limits are in Settings.</p> : null}
     {!runs ? <p className="hint" role="status">Loading runs…</p> : !runs.length ? <p className="hint">No runs yet. Assign a prompt or brief the orchestrator to start one.</p> : <>
       <p className="hint">{runs.length} run{runs.length === 1 ? '' : 's'} · reported cost {total > 0 ? `$${total.toFixed(2)}` : 'none'}. Cost is only what an engine reports (API usage); subscription CLIs usually report none. Sessions are matched to a run by when they started.</p>
       {runs.map((run) => {

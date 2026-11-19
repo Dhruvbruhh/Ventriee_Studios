@@ -54,6 +54,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   vimMode: false,
   keybindings: [],
   errorReports: false,
+  dailyBudgetUsd: 0,
+  projectBudgetUsd: 0,
   completionEndpoint: '',
   onboardingSeen: false
 }
@@ -298,6 +300,14 @@ export class Store {
       outputTokens: Number(r.outputTokens ?? 0),
       costUsd: Number(r.costUsd ?? 0)
     }))
+  }
+
+  /** Reported spend since a time, for all projects or one. */
+  spendSince(since: number, projectId?: string): number {
+    const row = projectId
+      ? this.db.get<{ total: number | null }>('SELECT SUM(costUsd) AS total FROM sessions WHERE startedAt >= ? AND projectId = ?', since, projectId)
+      : this.db.get<{ total: number | null }>('SELECT SUM(costUsd) AS total FROM sessions WHERE startedAt >= ?', since)
+    return Number(row?.total ?? 0)
   }
 
   /** Reported spend for one worker. Engines that do not report cost stay at 0. */
