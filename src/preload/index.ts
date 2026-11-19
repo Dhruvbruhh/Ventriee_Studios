@@ -77,6 +77,8 @@ const api: VentrieeApi = {
     return () => ipcRenderer.removeListener(IPC.testsEvent, listener)
   },
   tasksList: (id) => ipcRenderer.invoke(IPC.tasksList, id),
+  historyList: (id, path) => ipcRenderer.invoke(IPC.historyList, id, path),
+  historyRead: (id, path, version) => ipcRenderer.invoke(IPC.historyRead, id, path, version),
   toolCatalog: () => ipcRenderer.invoke(IPC.toolCatalog),
   lspEnsure: (id, language) => ipcRenderer.invoke(IPC.lspEnsure, id, language),
   lspRequest: (id, language, method, params) => ipcRenderer.invoke(IPC.lspRequest, id, language, method, params),

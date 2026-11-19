@@ -34,7 +34,7 @@ export const IPC = {
   debugStart: 'debug:start', debugConfigs: 'debug:configs', debugVariables: 'debug:variables', debugThread: 'debug:thread', debugCommand: 'debug:command', debugEvaluate: 'debug:evaluate', debugBreakpoints: 'debug:breakpoints', debugStop: 'debug:stop', debugEvent: 'debug:event',
   extSearch: 'ext:search', extDetails: 'ext:details', extInstall: 'ext:install', extUninstall: 'ext:uninstall', extSetEnabled: 'ext:enabled', extList: 'ext:list', extUpdates: 'ext:updates', extContributions: 'ext:contributions',
   testsRunners: 'tests:runners', testsRun: 'tests:run', testsStop: 'tests:stop', testsEvent: 'tests:event',
-  tasksList: 'tasks:list',
+  tasksList: 'tasks:list', historyList: 'history:list', historyRead: 'history:read',
   toolCatalog: 'tools:catalog', lspEnsure: 'lsp:ensure', lspRequest: 'lsp:request', lspNotify: 'lsp:notify', lspEvent: 'lsp:event',
   authStatus: 'auth:status',
   authSignIn: 'auth:signIn',
@@ -169,6 +169,8 @@ export interface VentrieeApi {
   testsStop(): Promise<void>
   onTests(cb: (event: TestEvent) => void): () => void
   tasksList(projectId: string): Promise<ProjectTask[]>
+  historyList(projectId: string, path: string): Promise<Array<{ id: string; time: number; size: number }>>
+  historyRead(projectId: string, path: string, id: string): Promise<string>
   toolCatalog(): Promise<Catalog>
   lspEnsure(projectId: string, languageId: string): Promise<LspStatus>
   lspRequest(projectId: string, languageId: string, method: string, params: unknown): Promise<unknown>

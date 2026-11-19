@@ -24,7 +24,7 @@ import type { Project } from '../../../shared/types'
 
 interface Tab { file: TextFile; model: monaco.editor.ITextModel; saved: string; subscription: monaco.IDisposable; view?: monaco.editor.ICodeEditorViewState | null }
 type Change = CodeChangeResult['changes'][number]
-interface Diff { path: string; original: string; modified: string; staged: boolean; label?: string; proposal?: boolean; change?: Change }
+interface Diff { path: string; original: string; modified: string; staged: boolean; label?: string; proposal?: boolean; change?: Change; restore?: string }
 interface Proposal { path: string; range: monaco.IRange; versionId: number; replacement: string }
 interface Problem { path: string; line: number; column: number; message: string; severity: number }
 interface Command { label: string; keys?: string; run: () => void; disabled?: boolean }
@@ -96,7 +96,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [active, setActive] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
   const [, setRender] = useState(0)
-  const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'agents' | 'extensions' | 'tests' | 'outline'>('files')
+  const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'agents' | 'extensions' | 'tests' | 'outline' | 'history'>('files')
+  const [versions, setVersions] = useState<Array<{ id: string; time: number; size: number }>>([])
   const tests = useTests(project.id)
   const [panel, setPanel] = useState<'terminal' | 'problems' | 'debug' | 'run' | null>(null)
   /** A command shown running in the Run panel (installs, tasks, tests); a new key starts a fresh shell. */
@@ -711,6 +712,26 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     const gone = model.onWillDispose(() => setSplitPath(null))
     return () => { gone.dispose(); second.dispose() }
   }, [splitPath])
+  useEffect(() => {
+    if (sidebar !== 'history' || !active) { setVersions([]); return }
+    let alive = true
+    void window.ventriee.historyList(project.id, active).then((v) => { if (alive) setVersions(v) }).catch(() => {})
+    return () => { alive = false }
+  }, [sidebar, active, revision, project.id])
+  const compareVersion = async (id: string, time: number) => {
+    const current = active ? tabs.current.get(active) : null
+    const text = active ? await guard(() => window.ventriee.historyRead(project.id, active, id)) : null
+    if (current && text !== null && active) setDiff({ path: active, original: text, modified: current.model.getValue(), staged: false, label: `Saved ${new Date(time).toLocaleString()} (left) / now (right)`, restore: text })
+  }
+  const restoreVersion = (text: string) => {
+    const current = active ? tabs.current.get(active) : null
+    if (!current || current.model.isDisposed()) return
+    // An undoable edit; it reaches disk when the owner saves.
+    current.model.pushStackElement()
+    current.model.pushEditOperations([], [{ range: current.model.getFullModelRange(), text }], () => null)
+    current.model.pushStackElement()
+    setDiff(null); changed()
+  }
   const errors = problems.filter((p) => p.severity === monaco.MarkerSeverity.Error).length
   const commands: Command[] = [
     { label: 'File: Save', keys: 'Ctrl+S', run: () => void save(), disabled: !tab },
@@ -728,6 +749,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     { label: 'View: Extensions', run: () => setSidebar('extensions') },
     { label: 'View: Tests', run: () => setSidebar('tests') },
     { label: 'View: Outline', run: () => setSidebar('outline') },
+    { label: 'View: Local history', run: () => setSidebar('history') },
     { label: 'Go to symbol in workspace', keys: 'Ctrl+T', run: () => { setSymbolQuery(''); setSymbolPick(true) } },
     { label: 'Go to symbol in file', keys: 'Ctrl+Shift+O', run: () => { editor.current?.focus(); void editor.current?.getAction('editor.action.quickOutline')?.run() }, disabled: !tab },
     { label: splitPath ? 'View: Close split editor' : 'View: Split editor right', keys: 'Ctrl+\\', run: () => setSplitPath(splitPath ? null : active), disabled: !splitPath && !active },
@@ -751,7 +773,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const runCommand = (c: Command) => { setPalette(false); c.run() }
   const grouped = found ? [...found.hits.reduce((map, hit) => map.set(hit.path, [...(map.get(hit.path) ?? []), hit]), new Map<string, SearchResult['hits']>())] : []
   return <div className={`code-workspace${preview || ask ? ' with-preview' : ''}`} style={{ display: visible ? undefined : 'none' }}>
-    <aside className="code-sidebar"><div className="code-sidebar-tabs"><button className={sidebar === 'files' ? 'on' : ''} onClick={() => setSidebar('files')}>Explorer</button><button className={sidebar === 'search' ? 'on' : ''} onClick={() => setSidebar('search')}>Search</button><button className={sidebar === 'git' ? 'on' : ''} onClick={() => setSidebar('git')} aria-label="Source Control" title="Source Control">Git</button><button className={sidebar === 'agents' ? 'on' : ''} onClick={() => setSidebar('agents')} aria-label="Agent changes" title="Files changed by agent tasks">Agents</button><button className={sidebar === 'outline' ? 'on' : ''} onClick={() => setSidebar('outline')} aria-label="Outline" title="Symbols in this file">Outline</button><button className={sidebar === 'tests' ? 'on' : ''} onClick={() => setSidebar('tests')} aria-label="Tests" title="Run and see tests">Tests</button><button className={sidebar === 'extensions' ? 'on' : ''} onClick={() => setSidebar('extensions')} aria-label="Extensions" title="Extensions from Open VSX">Ext</button></div>
+    <aside className="code-sidebar"><div className="code-sidebar-tabs"><button className={sidebar === 'files' ? 'on' : ''} onClick={() => setSidebar('files')}>Explorer</button><button className={sidebar === 'search' ? 'on' : ''} onClick={() => setSidebar('search')}>Search</button><button className={sidebar === 'git' ? 'on' : ''} onClick={() => setSidebar('git')} aria-label="Source Control" title="Source Control">Git</button><button className={sidebar === 'agents' ? 'on' : ''} onClick={() => setSidebar('agents')} aria-label="Agent changes" title="Files changed by agent tasks">Agents</button><button className={sidebar === 'outline' ? 'on' : ''} onClick={() => setSidebar('outline')} aria-label="Outline" title="Symbols in this file">Outline</button><button className={sidebar === 'history' ? 'on' : ''} onClick={() => setSidebar('history')} aria-label="Local history" title="Saved versions of this file">History</button><button className={sidebar === 'tests' ? 'on' : ''} onClick={() => setSidebar('tests')} aria-label="Tests" title="Run and see tests">Tests</button><button className={sidebar === 'extensions' ? 'on' : ''} onClick={() => setSidebar('extensions')} aria-label="Extensions" title="Extensions from Open VSX">Ext</button></div>
       {sidebar === 'files' ? <><div className="code-section-head"><strong title={project.path}>{project.name}</strong><button className="btn tiny" onClick={() => setRevision((v) => v + 1)}>Refresh</button></div>
         <div className="code-file-actions"><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('file') }}>New file</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('folder') }}>New folder</button><button className="btn tiny" onClick={() => setQuick(true)}>Find file</button></div>
         <div className="file-tree" aria-label="Project files"><Directory projectId={project.id} path="" depth={0} revision={revision} onOpen={(path) => void open(path)} onRename={(entry) => { setNewPath(entry.path); setMoving(entry) }} onDelete={(entry) => void trash(entry)} /></div></>
@@ -768,6 +790,9 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         : sidebar === 'extensions' ? <ExtensionsPanel />
         : sidebar === 'outline' ? <div className="ext-panel" aria-label="Outline">{outline.length ? <OutlineTree items={outline} current={crumbs.at(-1)} onOpen={(line, column) => { if (active) void openAt(active, line, column) }} />
           : <p className="tree-note">{active ? 'No symbols in this file. TypeScript and JavaScript work out of the box; other languages need their language server.' : 'Open a file to see its outline.'}</p>}</div>
+        : sidebar === 'history' ? <div className="ext-panel" aria-label="Local history">{active ? <><p className="tree-note">Every save of {active.split('/').pop()} is kept for 30 days (up to 50 versions), outside the project.</p>
+          {versions.length ? versions.map((v) => <button key={v.id} className="outline-row" onClick={() => void compareVersion(v.id, v.time)}>{new Date(v.time).toLocaleString()} <span className="dim">{(v.size / 1024).toFixed(1)} KB</span></button>)
+            : <p className="tree-note">No saved versions yet.</p>}</> : <p className="tree-note">Open a file to see its saved versions.</p>}</div>
         : sidebar === 'tests' ? <TestsPanel tests={tests} onOpen={(path, line) => void openAt(path, line, 1)} onFix={(r) => void fixTest(r)} />
         : sidebar === 'agents' ? <AgentChanges projectId={project.id} onDiff={(path) => void openDiff(path, false)} onOpen={(path) => void open(path)} />
         : <SourceControl projectId={project.id} refreshKey={revision} onDiff={(path, staged) => void openDiff(path, staged)} onOpen={(path) => void open(path)} />}
@@ -778,6 +803,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <div className="code-toolbar"><span className="code-breadcrumb" title={diff?.path ?? active ?? project.path}>{diff ? `${diff.label ?? (diff.staged ? 'Staged' : 'Working tree')} / ${diff.path}` : active ? [active.split('/').join(' › '), ...crumbs.map((c) => c.name)].join(' › ') : 'Open a file to begin'}</span>
         {diff?.change ? <><button className="btn tiny" onClick={() => dropChange(diff.change!)}>Reject</button><button className="btn tiny primary" onClick={() => void acceptChange(diff.change!)}>Accept into editor</button></>
           : diff?.proposal && proposal ? <><button className="btn tiny" onClick={() => { setProposal(null); setDiff(null) }}>Reject</button><button className="btn tiny primary" onClick={acceptProposal}>Accept into editor</button></>
+          : diff?.restore !== undefined ? <><button className="btn tiny" onClick={() => setDiff(null)}>Back to editor</button><button className="btn tiny primary" onClick={() => restoreVersion(diff.restore!)}>Restore this version</button></>
           : diff ? <button className="btn tiny" onClick={() => setDiff(null)}>Back to editor</button> : <><button className="btn tiny" disabled={!tab || busy} onClick={() => void reload()}>Reload</button><button className="btn tiny" disabled={!tab || busy} onClick={() => { setNewPath(''); setCreate('copy') }}>Save copy</button><button className="btn tiny primary" disabled={!tab || busy || tab.saved === tab.model.getValue()} onClick={() => void save()}>Save</button></>}
         <button className="btn tiny" aria-pressed={ask} onClick={() => { setAsk(!ask); setPreview(false) }}>Ask agent</button>
         <button className="btn tiny" aria-pressed={preview} onClick={() => { setPreview(!preview); setAsk(false) }}>{preview ? 'Hide preview' : 'Show preview'}</button></div>

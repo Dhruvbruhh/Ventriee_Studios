@@ -26,6 +26,7 @@ import { LspService } from './lsp'
 import { ExtensionService } from './extensions'
 import { TestService, detectRunners } from './testrunner'
 import { listTasks } from './tasks'
+import { HistoryService } from './history'
 import { baseCatalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
 import { projectTypes } from './typeindex'
@@ -312,7 +313,17 @@ function registerIpc() {
   handle(IPC.codeChange, (event, id: string, input: CodeChangeInput) => { projectRoot(event, id); return changeFiles(store.project(id)!, input, store.settings(), creds, files) })
   handle(IPC.codeAsk,(event, id: string, input: CodeAskInput) => { projectRoot(event, id); return askCode(store.project(id)!, input, store.settings(), creds) })
   handle(IPC.filesRead, (event, id: string, path: string) => files.read(projectRoot(event, id), path))
-  handle(IPC.filesSave, (event, id: string, file: TextFile) => files.save(projectRoot(event, id), file))
+  const history = new HistoryService(join(app.getPath('userData'), 'history'))
+  handle(IPC.filesSave, async (event, id: string, file: TextFile) => {
+    const root = projectRoot(event, id)
+    // The version on disk before the first save we see is kept too, so the first change can be undone.
+    if (!history.has(id, file.path)) { try { history.record(id, file.path, (await files.read(root, file.path)).text, Date.now() - 1) } catch { /* new file */ } }
+    const saved = await files.save(root, file)
+    try { history.record(id, file.path, file.text) } catch { /* history is best effort; the save succeeded */ }
+    return saved
+  })
+  handle(IPC.historyList, (event, id: string, path: string) => { workspacePath(projectRoot(event, id), path); return history.list(id, path) })
+  handle(IPC.historyRead, (event, id: string, path: string, version: string) => { workspacePath(projectRoot(event, id), path); return history.read(id, path, String(version)) })
   handle(IPC.filesCreate, (event, id: string, path: string, directory: boolean) => files.create(projectRoot(event, id), path, directory === true))
   handle(IPC.filesRename, (event, id: string, from: string, to: string) => files.rename(projectRoot(event, id), from, to))
   // To the Recycle Bin, so a mistaken delete can be undone outside the app.
