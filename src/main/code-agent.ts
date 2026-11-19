@@ -1,3 +1,4 @@
+import { withRules } from './rules'
 import type { Credentials } from './credentials'
 import { runEngine, modelFor, defaultEndpoint, isCliEngine } from './engines'
 import { redact } from './redact'
@@ -27,7 +28,7 @@ export async function askCode(project: Project, input: CodeAskInput, settings: A
     ? 'First explain the change in at most three sentences. Then give the complete replacement for exactly the code shown above, in a single fenced code block, with nothing after it. Keep the surrounding indentation.'
     : 'Answer the request. Do not rewrite the code unless asked.'}`
   const engine = settings.plannerEngine
-  const result = await runEngine({ engine, model: settings.plannerModel, endpoint: settings.plannerEndpoint || defaultEndpoint(engine), system: SYSTEM, prompt,
+  const result = await runEngine({ engine, model: settings.plannerModel, endpoint: settings.plannerEndpoint || defaultEndpoint(engine), system: withRules(SYSTEM, project.path), prompt,
     cwd: project.path, maxTokens: edit ? 8000 : 3000, timeoutMs: 5 * 60_000, stallMs: 120_000 }, creds)
   if (!result.ok || !result.text.trim()) throw new Error(`The agent did not answer: ${result.error ?? 'empty reply'}`)
   const text = redact(result.text, creds.secretValues())
@@ -59,7 +60,7 @@ export async function changeFiles(project: Project, input: CodeChangeInput, sett
   const prompt = `Project: ${project.name}\nProject files (first ${tree.length}):\n${tree.join('\n')}\n\nOpen files:\n${context.join('\n\n') || '(none)'}\n\nOwner's request: ${input.request.trim()}\n\n` +
     'First explain the change in at most four sentences. Then give the COMPLETE new content of every file you change or create, each in this exact form and nothing else inside the block:\n=== FILE: path/relative/to/project ===\n<complete file content>\n=== END FILE ===\nOnly include files that change. Use relative paths inside the project. Never touch .git or node_modules.'
   const engine = settings.plannerEngine
-  const result = await runEngine({ engine, model: settings.plannerModel, endpoint: settings.plannerEndpoint || defaultEndpoint(engine), system: SYSTEM, prompt,
+  const result = await runEngine({ engine, model: settings.plannerModel, endpoint: settings.plannerEndpoint || defaultEndpoint(engine), system: withRules(SYSTEM, project.path), prompt,
     cwd: project.path, maxTokens: 16000, timeoutMs: 8 * 60_000, stallMs: 150_000 }, creds)
   if (!result.ok || !result.text.trim()) throw new Error(`The agent did not answer: ${result.error ?? 'empty reply'}`)
   const text = redact(result.text, creds.secretValues())

@@ -34,7 +34,7 @@ export const IPC = {
   debugStart: 'debug:start', debugConfigs: 'debug:configs', debugVariables: 'debug:variables', debugThread: 'debug:thread', debugCommand: 'debug:command', debugEvaluate: 'debug:evaluate', debugBreakpoints: 'debug:breakpoints', debugStop: 'debug:stop', debugEvent: 'debug:event',
   extSearch: 'ext:search', extDetails: 'ext:details', extInstall: 'ext:install', extUninstall: 'ext:uninstall', extSetEnabled: 'ext:enabled', extList: 'ext:list', extUpdates: 'ext:updates', extContributions: 'ext:contributions',
   testsRunners: 'tests:runners', testsRun: 'tests:run', testsStop: 'tests:stop', testsEvent: 'tests:event',
-  tasksList: 'tasks:list', github: 'github:run', githubReview: 'github:review', historyList: 'history:list', historyRead: 'history:read',
+  tasksList: 'tasks:list', errorReport: 'errors:report', errorLog: 'errors:log', errorClear: 'errors:clear', reportProblem: 'errors:issue', syncPush: 'sync:push', syncPull: 'sync:pull', github: 'github:run', githubReview: 'github:review', historyList: 'history:list', historyRead: 'history:read',
   toolCatalog: 'tools:catalog', lspEnsure: 'lsp:ensure', lspRequest: 'lsp:request', lspNotify: 'lsp:notify', lspEvent: 'lsp:event',
   authStatus: 'auth:status',
   authSignIn: 'auth:signIn',
@@ -169,6 +169,12 @@ export interface VentrieeApi {
   testsStop(): Promise<void>
   onTests(cb: (event: TestEvent) => void): () => void
   tasksList(projectId: string): Promise<ProjectTask[]>
+  errorReport(message: string, stack: string): Promise<void>
+  errorLog(): Promise<string>
+  errorClear(): Promise<void>
+  reportProblem(): Promise<void>
+  syncPush(): Promise<number>
+  syncPull(): Promise<{ syncedAt: number; missingExtensions: string[] } | null>
   github(projectId: string, action: GithubAction): Promise<unknown>
   githubReview(projectId: string, number: number): Promise<CodeAskResult>
   historyList(projectId: string, path: string): Promise<Array<{ id: string; time: number; size: number }>>

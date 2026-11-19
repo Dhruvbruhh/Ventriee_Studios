@@ -77,6 +77,12 @@ const api: VentrieeApi = {
     return () => ipcRenderer.removeListener(IPC.testsEvent, listener)
   },
   tasksList: (id) => ipcRenderer.invoke(IPC.tasksList, id),
+  errorReport: (message, stack) => ipcRenderer.invoke(IPC.errorReport, message, stack),
+  errorLog: () => ipcRenderer.invoke(IPC.errorLog),
+  errorClear: () => ipcRenderer.invoke(IPC.errorClear),
+  reportProblem: () => ipcRenderer.invoke(IPC.reportProblem),
+  syncPush: () => ipcRenderer.invoke(IPC.syncPush),
+  syncPull: () => ipcRenderer.invoke(IPC.syncPull),
   github: (id, action) => ipcRenderer.invoke(IPC.github, id, action),
   githubReview: (id, number) => ipcRenderer.invoke(IPC.githubReview, id, number),
   historyList: (id, path) => ipcRenderer.invoke(IPC.historyList, id, path),

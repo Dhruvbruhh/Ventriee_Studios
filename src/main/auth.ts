@@ -1,6 +1,6 @@
 export interface StudioSession { userId: string; sessionId: string; email: string; expiresAt: number }
 interface Tokens { access_token: string; refresh_token: string }
-interface AuthReply { id?: string; email?: string; access_token?: string; refresh_token?: string }
+interface AuthReply { id?: string; email?: string; access_token?: string; refresh_token?: string; user_metadata?: Record<string, unknown> }
 interface TokenStore { get(): string | null; set(value: string): void; clear(): void }
 /** Supabase Auth REST runs in main: passwords and refresh tokens never enter logs or snapshots. */
 export class StudioAuth {
@@ -18,10 +18,10 @@ export class StudioAuth {
   requireSession(id: number) { const session = this.session(id); if (!session) throw new Error('Sign in to Ventriee Studios to continue'); return session }
   clear(id: number) { this.sessions.delete(id) }
   clearAll() { this.epoch++; this.tokens = null; this.loading = null; this.sessions.clear(); this.storage.clear() }
-  private async api(path: string, body?: unknown, token?: string): Promise<AuthReply> {
+  private async api(path: string, body?: unknown, token?: string, method?: 'PUT'): Promise<AuthReply> {
     if (!this.url || !this.key) throw new Error('Configure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY')
     const response = await this.request(`${this.url}/auth/v1/${path}`, {
-      method: body === undefined ? 'GET' : 'POST', redirect: 'error', signal: AbortSignal.timeout(15_000),
+      method: method ?? (body === undefined ? 'GET' : 'POST'), redirect: 'error', signal: AbortSignal.timeout(15_000),
       headers: { apikey: this.key, 'content-type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) })
     })
@@ -83,6 +83,16 @@ export class StudioAuth {
     if (epoch !== this.epoch) return null
     if (session) this.sessions.set(id, session)
     return session
+  }
+  /** The signed-in owner's synced preferences, kept by Supabase on their own user record (no table to set up). */
+  async syncedData(): Promise<Record<string, unknown>> {
+    if (!this.tokens) throw new Error('Sign in to sync settings')
+    return (await this.api('user', undefined, this.tokens.access_token)).user_metadata ?? {}
+  }
+  async saveSyncedData(data: Record<string, unknown>) {
+    if (!this.tokens) throw new Error('Sign in to sync settings')
+    if (JSON.stringify(data).length > 60_000) throw new Error('Too much to sync')
+    await this.api('user', { data }, this.tokens.access_token, 'PUT')
   }
   async signOut() {
     const token = this.tokens?.access_token

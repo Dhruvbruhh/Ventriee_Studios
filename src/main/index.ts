@@ -28,6 +28,7 @@ import { TestService, detectRunners } from './testrunner'
 import { listTasks } from './tasks'
 import { HistoryService } from './history'
 import { github } from './github'
+import { ErrorLog, issueUrl } from './errorlog'
 import { baseCatalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
 import { projectTypes } from './typeindex'
@@ -70,6 +71,7 @@ let tray: Tray | null = null
 let quitting = false
 let store: Store
 let creds: Credentials
+let errors: ErrorLog | null = null
 let memory: MemoryService
 let skills: SkillService
 let preview: PreviewService
@@ -382,6 +384,26 @@ function registerIpc() {
   handle(IPC.debugStop, (event) => stopDebug(event.sender.id))
   handle(IPC.toolCatalog, () => catalog())
   handle(IPC.tasksList, (event, id: string) => listTasks(projectRoot(event, id)))
+  handle(IPC.errorReport, (_e, message: string, stack: string) => errors?.record('renderer', String(message).slice(0, 2000), String(stack ?? '').slice(0, 4000)))
+  handle(IPC.errorLog, () => errors?.recent() ?? '')
+  handle(IPC.errorClear, () => errors?.clear())
+  handle(IPC.reportProblem, () => shell.openExternal(issueUrl('Dhruvbruhh/Ventriee_Studios', app.getVersion(), `${process.platform} ${process.arch}`, errors?.recent() ?? '')))
+  // Settings sync: editor preferences and the extension list only; never keys, endpoints or MCP settings.
+  handle(IPC.syncPush, async () => {
+    const s = store.settings()
+    const payload = { editorTheme: s.editorTheme, vimMode: s.vimMode, keybindings: s.keybindings, extensions: extensions.list().map((e) => e.id), syncedAt: Date.now() }
+    await auth.saveSyncedData({ ventrieeSync: payload })
+    return payload.syncedAt
+  })
+  handle(IPC.syncPull, async () => {
+    const data = (await auth.syncedData()).ventrieeSync as { editorTheme?: unknown; vimMode?: unknown; keybindings?: unknown; extensions?: unknown; syncedAt?: number } | undefined
+    if (!data) return null
+    const keybindings = Array.isArray(data.keybindings) ? data.keybindings.filter((b): b is { key: string; command: string } => typeof b?.key === 'string' && typeof b?.command === 'string').slice(0, 500) : []
+    store.saveSettings({ ...(typeof data.editorTheme === 'string' ? { editorTheme: data.editorTheme } : {}), vimMode: data.vimMode === true, keybindings })
+    debouncedNotify()
+    const have = new Set(extensions.list().map((e) => e.id))
+    return { syncedAt: Number(data.syncedAt ?? 0), missingExtensions: (Array.isArray(data.extensions) ? data.extensions : []).filter((x): x is string => typeof x === 'string' && !have.has(x)).slice(0, 100) }
+  })
   handle(IPC.github, (event, id: string, action: GithubAction) => github(projectRoot(event, id), action))
   handle(IPC.githubReview, async (event, id: string, number: number) => {
     const root = projectRoot(event, id)
@@ -1114,6 +1136,12 @@ app.whenReady().then(async () => {
     app.quit()
     return
   }
+  errors = new ErrorLog(join(app.getPath('userData'), 'errors.log'), () => store.settings().errorReports, () => creds.secretValues().filter((v): v is string => Boolean(v)))
+  // Observe only: these listeners record, they do not change how errors are handled.
+  process.on('uncaughtExceptionMonitor', (error) => errors?.record('main', error.message, error.stack))
+  process.on('unhandledRejection', (reason) => errors?.record('main-promise', reason instanceof Error ? reason.message : String(reason), reason instanceof Error ? reason.stack : ''))
+  app.on('render-process-gone', (_e, _contents, details) => errors?.record('renderer-gone', `${details.reason} (exit ${details.exitCode})`))
+  app.on('child-process-gone', (_e, details) => errors?.record('process-gone', `${details.type} ${details.reason} (exit ${details.exitCode})`))
   registerIpc()
   bus.on('output', (payload: { sessionId: string; agentId: string; taskId: string | null; chunk: string }) => {
     // Only windows showing that project need the chunk.

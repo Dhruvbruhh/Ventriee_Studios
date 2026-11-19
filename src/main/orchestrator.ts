@@ -1,3 +1,4 @@
+import { withRules } from './rules'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { existsSync, readdirSync, statSync } from 'node:fs'
@@ -319,7 +320,7 @@ JSON shape:
         engine: orchestrator.engine,
         model: orchestrator.model,
         endpoint: orchestrator.endpoint,
-        system: orchestrator.instructions,
+        system: withRules(orchestrator.instructions, project.path),
         prompt: this.planningPrompt(project, instruction, roster, this.deps.memory.promptBlock(memoryDocs)),
         cwd: project.path,
         maxTokens: 3000,
@@ -663,7 +664,7 @@ JSON shape:
           model: run.model,
           endpoint: run.endpoint,
           mcpConfig: run.engine === 'cli-claude' ? this.deps.mcpConfig?.() || undefined : undefined,
-          system: agent.instructions,
+          system: withRules(agent.instructions, project.path),
           prompt: ask,
           cwd: project.path,
           // Room for a thinking model to plan before it writes, and for a
@@ -1106,7 +1107,7 @@ ${rules}
         engine: reviewer.engine,
         model: reviewer.model,
         endpoint: reviewer.endpoint,
-        system: reviewer.instructions,
+        system: withRules(reviewer.instructions, project.path),
         prompt: `Review the delivered work for this task inside ${project.path}.
 
 Task: ${task.title}
