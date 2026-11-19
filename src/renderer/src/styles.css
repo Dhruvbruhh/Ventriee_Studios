@@ -1443,3 +1443,14 @@
 .ext-installed .change-path { flex: 1; min-width: 0; text-align: left; }
 .ext-readme { border-top: 1px solid var(--line-soft, #23272f); padding-top: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ext-panel select { background: var(--surface-2, #1a1d23); color: inherit; border: 1px solid var(--line, #2a2f38); border-radius: 6px; padding: 4px 6px; width: 100%; }
+
+/* Tests */
+.test-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.test-row > button:first-child { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.test-passed > button:first-child span:first-child { color: #79dcb4; }
+.test-failed > button:first-child span:first-child { color: var(--err, #f4796b); }
+.test-message { flex-basis: 100%; margin: 2px 0 4px; max-height: 140px; overflow: auto; font: 11px var(--mono, monospace); white-space: pre-wrap; color: var(--muted); }
+.test-mark { margin-left: 3px; width: 6px !important; border-radius: 2px; }
+.test-mark.test-passed { background: #79dcb4; }
+.test-mark.test-failed { background: var(--err, #f4796b); }
+.code-search-row select { background: var(--surface-2, #1a1d23); color: inherit; border: 1px solid var(--line, #2a2f38); border-radius: 6px; padding: 2px 6px; }

@@ -29,3 +29,5 @@ export interface ExtensionContributions {
   languages: Array<{ id: string; extensions?: string[]; filenames?: string[]; aliases?: string[]; configuration?: Record<string, unknown> }>
   grammars: Array<{ language?: string; scopeName: string; path: string; content: string }>
 }
+export interface TestResult { name: string; suite: string; file?: string; line?: number; status: 'passed' | 'failed' | 'skipped'; duration?: number; message?: string }
+export type TestEvent = { type: 'started'; command: string } | { type: 'output'; text: string } | { type: 'done'; code: number; results: TestResult[] }

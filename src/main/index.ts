@@ -24,6 +24,7 @@ import { DapSession, type Debugger } from './dap'
 import { debuggerFor, launchConfigs, substitute } from './launch'
 import { LspService } from './lsp'
 import { ExtensionService } from './extensions'
+import { TestService, detectRunners } from './testrunner'
 import { baseCatalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
 import { projectTypes } from './typeindex'
@@ -60,6 +61,7 @@ const terminals = new TerminalService()
 const debugSessions = new Map<number, Debugger>()
 const catalog = () => baseCatalog
 const lsp = new LspService(catalog)
+let tests: TestService
 const stopDebug = (owner: number) => { debugSessions.get(owner)?.stop(); debugSessions.delete(owner) }
 let tray: Tray | null = null
 let quitting = false
@@ -233,6 +235,7 @@ function createWindow(projectId?: string) {
     terminals.closeOwner(windowId)
     stopDebug(windowId)
     lsp.closeOwner(windowId)
+    tests?.stop(windowId)
     auth.clear(windowId)
     windows.delete(windowId)
     refreshTray()
@@ -264,6 +267,7 @@ function createWindow(projectId?: string) {
 function registerIpc() {
   const files = new FileService()
   const git = new GitService()
+  tests = new TestService(files)
   const projectRoot = (event: Electron.IpcMainInvokeEvent, id: string) => {
     if (id !== projectOf(event)) throw new Error('Select this project before editing its files')
     const project = store.project(id)
@@ -364,6 +368,18 @@ function registerIpc() {
   handle(IPC.debugBreakpoints, (event, path: string, list: DebugBreakpoint[]) => debugSessions.get(event.sender.id)?.setBreakpoints(path, Array.isArray(list) ? list : []))
   handle(IPC.debugStop, (event) => stopDebug(event.sender.id))
   handle(IPC.toolCatalog, () => catalog())
+  // Tests run the owner's project code with their permissions, like a terminal, only when they press Run.
+  handle(IPC.testsRunners, (event, id: string) => detectRunners(projectRoot(event, id), catalog()).map((r) => ({ id: r.id, name: r.name })))
+  handle(IPC.testsRun, (event, id: string, runnerId: string, target: { file?: string; name?: string }) => {
+    const sender = event.sender
+    const root = projectRoot(event, id)
+    const runner = detectRunners(root, catalog()).find((r) => r.id === runnerId)
+    if (!runner) throw new Error('That test runner is not used by this project')
+    const file = typeof target?.file === 'string' && target.file ? target.file : undefined
+    if (file) workspacePath(root, file)
+    return tests.run(sender.id, root, runner, { file, name: typeof target?.name === 'string' ? target.name.slice(0, 300) : undefined }, (e) => { if (!sender.isDestroyed()) sender.send(IPC.testsEvent, e) })
+  })
+  handle(IPC.testsStop, (event) => tests.stop(event.sender.id))
   // Open VSX extensions: only their data (themes, snippets, languages, grammars) is used; their code never runs.
   const extensions = new ExtensionService(join(app.getPath('userData'), 'extensions'))
   handle(IPC.extSearch, (_e, query: string) => extensions.search(String(query)))
@@ -1104,6 +1120,7 @@ app.on('before-quit', () => {
   terminals.closeAll()
   for (const owner of [...debugSessions.keys()]) stopDebug(owner)
   lsp.closeAll()
+  tests?.stopAll()
   if (scheduler) clearInterval(scheduler)
   tray?.destroy()
   for (const project of store?.projects?.() ?? []) {

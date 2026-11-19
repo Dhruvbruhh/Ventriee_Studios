@@ -68,6 +68,14 @@ const api: VentrieeApi = {
   extList: () => ipcRenderer.invoke(IPC.extList),
   extUpdates: () => ipcRenderer.invoke(IPC.extUpdates),
   extContributions: () => ipcRenderer.invoke(IPC.extContributions),
+  testsRunners: (id) => ipcRenderer.invoke(IPC.testsRunners, id),
+  testsRun: (id, runnerId, target) => ipcRenderer.invoke(IPC.testsRun, id, runnerId, target),
+  testsStop: () => ipcRenderer.invoke(IPC.testsStop),
+  onTests: (cb) => {
+    const listener = (_e: unknown, event: Parameters<typeof cb>[0]) => cb(event)
+    ipcRenderer.on(IPC.testsEvent, listener)
+    return () => ipcRenderer.removeListener(IPC.testsEvent, listener)
+  },
   toolCatalog: () => ipcRenderer.invoke(IPC.toolCatalog),
   lspEnsure: (id, language) => ipcRenderer.invoke(IPC.lspEnsure, id, language),
   lspRequest: (id, language, method, params) => ipcRenderer.invoke(IPC.lspRequest, id, language, method, params),

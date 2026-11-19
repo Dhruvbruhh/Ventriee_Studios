@@ -7,13 +7,14 @@ import { applyProjectTypes, clearProjectTypes, fileUri } from './intellisense'
 import { AgentChanges } from './AgentChanges'
 import { startLsp, type LspSession } from './lsp'
 import { ExtensionsPanel } from './ExtensionsPanel'
+import { TestsPanel, testAt, useTests } from './TestsPanel'
 import { loadExtensions } from './extensions'
 import type { LspStatus } from '../../../shared/catalog'
 import { Preview } from '../components/Preview'
 import { TerminalView } from '../components/Terminal'
 import { Modal } from '../shell'
 import { guard, useStore } from '../store'
-import type { CodeChangeResult, DebugBreakpoint, DebugFrame, DebugVariable, FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
+import type { CodeChangeResult, TestResult, DebugBreakpoint, DebugFrame, DebugVariable, FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
 import type { Catalog } from '../../../shared/catalog'
 import type { Project } from '../../../shared/types'
 
@@ -83,7 +84,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [active, setActive] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
   const [, setRender] = useState(0)
-  const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'agents' | 'extensions'>('files')
+  const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'agents' | 'extensions' | 'tests'>('files')
+  const tests = useTests(project.id)
   const [panel, setPanel] = useState<'terminal' | 'problems' | 'debug' | 'run' | null>(null)
   /** A command shown running in the Run panel (installs, tasks, tests); a new key starts a fresh shell. */
   const [run, setRun] = useState<{ label: string; command: string; key: number } | null>(null)
@@ -304,13 +306,13 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     tab.model.pushStackElement()
     setProposal(null); setDiff(null); activate(proposal.path); changed()
   }
-  const askChange = async () => {
-    if (!question.trim() || asking) return
+  const askChange = async (request = question) => {
+    if (!request.trim() || asking) return
     // Open tabs are the agent's context, the file being looked at first.
     const paths = [...new Set([...(active ? [active] : []), ...tabs.current.keys()])]
     setAsking('change'); setAskError(''); setReply(null); setProposal(null); setChanges([])
     try {
-      const result = await window.ventriee.codeChange(project.id, { request: question, paths })
+      const result = await window.ventriee.codeChange(project.id, { request, paths })
       if (!mounted.current) return
       setReply({ answer: result.answer, model: result.model, path: `${result.changes.length} file${result.changes.length === 1 ? '' : 's'}` })
       setChanges(result.changes)
@@ -554,6 +556,21 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       ...(paused ? [{ range: new monaco.Range(paused.line, 1, paused.line, 1), options: { isWholeLine: true, className: 'debug-current-line', glyphMarginClassName: 'debug-arrow' } }] : [])
     ])
   }, [breakpoints, active, debug])
+  // Pass/fail marks next to tests in the open file.
+  const testMarks = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
+  useEffect(() => {
+    testMarks.current?.clear()
+    if (!editor.current || !active) return
+    testMarks.current = editor.current.createDecorationsCollection(tests.results.filter((r) => r.file === active && r.line).map((r) => ({ range: new monaco.Range(r.line!, 1, r.line!, 1),
+      options: { linesDecorationsClassName: `test-mark test-${r.status}`, hoverMessage: { value: `${r.status === 'passed' ? '✓ Passed' : r.status === 'failed' ? '✗ Failed' : 'Skipped'}: ${r.name}${r.message ? `\n\n\`\`\`\n${r.message.slice(0, 2000)}\n\`\`\`` : ''}` } } })))
+  }, [tests.results, active])
+  const fixTest = async (r: TestResult) => {
+    if (r.file) await openAt(r.file, r.line ?? 1, 1)
+    setAsk(true); setPreview(false)
+    const request = `The test "${r.name}"${r.file ? ` in ${r.file}` : ''} fails. Fix the code (or the test, only if the test itself is wrong). Failure output:\n${(r.message ?? '').slice(0, 6000)}`
+    setQuestion(request)
+    await askChange(request)
+  }
   /** The project's Prettier (with its config) when installed, otherwise Monaco's own formatter. One undoable edit. */
   const formatDocument = async () => {
     const current = active ? tabs.current.get(active) : null
@@ -617,6 +634,10 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     { label: 'View: Source Control', run: () => setSidebar('git') },
     { label: 'View: Agent changes', run: () => setSidebar('agents') },
     { label: 'View: Extensions', run: () => setSidebar('extensions') },
+    { label: 'View: Tests', run: () => setSidebar('tests') },
+    { label: 'Test: Run all tests', run: () => { setSidebar('tests'); tests.run() }, disabled: !tests.runner },
+    { label: 'Test: Run tests in this file', run: () => { setSidebar('tests'); tests.run({ file: active! }) }, disabled: !tests.runner || !active },
+    { label: 'Test: Run the test at the cursor', run: () => { const name = tab ? testAt(tab.model.getValue(), cursor.lineNumber) : null; if (name) { setSidebar('tests'); tests.run({ name }) } else useStore.getState().notify('No test found above the cursor', 'info') }, disabled: !tests.runner || !tab },
     { label: 'View: Toggle terminal', keys: 'Ctrl+`', run: () => setPanel((open) => open === 'terminal' ? null : 'terminal') },
     { label: 'View: Problems', run: () => setPanel('problems') },
     { label: `View: ${preview ? 'Hide' : 'Show'} preview`, run: () => { setPreview(!preview); setAsk(false) } },
@@ -631,7 +652,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const runCommand = (c: Command) => { setPalette(false); c.run() }
   const grouped = found ? [...found.hits.reduce((map, hit) => map.set(hit.path, [...(map.get(hit.path) ?? []), hit]), new Map<string, SearchResult['hits']>())] : []
   return <div className={`code-workspace${preview || ask ? ' with-preview' : ''}`} style={{ display: visible ? undefined : 'none' }}>
-    <aside className="code-sidebar"><div className="code-sidebar-tabs"><button className={sidebar === 'files' ? 'on' : ''} onClick={() => setSidebar('files')}>Explorer</button><button className={sidebar === 'search' ? 'on' : ''} onClick={() => setSidebar('search')}>Search</button><button className={sidebar === 'git' ? 'on' : ''} onClick={() => setSidebar('git')} aria-label="Source Control" title="Source Control">Git</button><button className={sidebar === 'agents' ? 'on' : ''} onClick={() => setSidebar('agents')} aria-label="Agent changes" title="Files changed by agent tasks">Agents</button><button className={sidebar === 'extensions' ? 'on' : ''} onClick={() => setSidebar('extensions')} aria-label="Extensions" title="Extensions from Open VSX">Ext</button></div>
+    <aside className="code-sidebar"><div className="code-sidebar-tabs"><button className={sidebar === 'files' ? 'on' : ''} onClick={() => setSidebar('files')}>Explorer</button><button className={sidebar === 'search' ? 'on' : ''} onClick={() => setSidebar('search')}>Search</button><button className={sidebar === 'git' ? 'on' : ''} onClick={() => setSidebar('git')} aria-label="Source Control" title="Source Control">Git</button><button className={sidebar === 'agents' ? 'on' : ''} onClick={() => setSidebar('agents')} aria-label="Agent changes" title="Files changed by agent tasks">Agents</button><button className={sidebar === 'tests' ? 'on' : ''} onClick={() => setSidebar('tests')} aria-label="Tests" title="Run and see tests">Tests</button><button className={sidebar === 'extensions' ? 'on' : ''} onClick={() => setSidebar('extensions')} aria-label="Extensions" title="Extensions from Open VSX">Ext</button></div>
       {sidebar === 'files' ? <><div className="code-section-head"><strong title={project.path}>{project.name}</strong><button className="btn tiny" onClick={() => setRevision((v) => v + 1)}>Refresh</button></div>
         <div className="code-file-actions"><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('file') }}>New file</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('folder') }}>New folder</button><button className="btn tiny" onClick={() => setQuick(true)}>Find file</button></div>
         <div className="file-tree" aria-label="Project files"><Directory projectId={project.id} path="" depth={0} revision={revision} onOpen={(path) => void open(path)} onRename={(entry) => { setNewPath(entry.path); setMoving(entry) }} onDelete={(entry) => void trash(entry)} /></div></>
@@ -646,6 +667,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
             {hits.map((hit) => <button key={`${hit.line}:${hit.column}`} onClick={() => void openAt(hit.path, hit.line, hit.column)} title={`${path}:${hit.line}`}><span className="dim">{hit.line}</span> {hit.preview}</button>)}</section>)}</div>
         </div>
         : sidebar === 'extensions' ? <ExtensionsPanel />
+        : sidebar === 'tests' ? <TestsPanel tests={tests} onOpen={(path, line) => void openAt(path, line, 1)} onFix={(r) => void fixTest(r)} />
         : sidebar === 'agents' ? <AgentChanges projectId={project.id} onDiff={(path) => void openDiff(path, false)} onOpen={(path) => void open(path)} />
         : <SourceControl projectId={project.id} refreshKey={revision} onDiff={(path, staged) => void openDiff(path, staged)} onOpen={(path) => void open(path)} />}
     </aside>

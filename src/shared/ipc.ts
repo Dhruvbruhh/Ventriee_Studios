@@ -25,7 +25,7 @@ import type {
   Task
 } from './types'
 import type { Catalog, LspEvent, LspStatus } from './catalog'
-import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, ExtensionContributions, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
+import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, TestEvent, ExtensionContributions, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
 
 export const IPC = {
   filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', projectTypes: 'files:project-types', toolsFormat: 'tools:format', toolsLint: 'tools:lint', codeAsk: 'code:ask', codeChange: 'code:change', codeComplete: 'code:complete', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
@@ -33,6 +33,7 @@ export const IPC = {
   termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
   debugStart: 'debug:start', debugConfigs: 'debug:configs', debugVariables: 'debug:variables', debugThread: 'debug:thread', debugCommand: 'debug:command', debugEvaluate: 'debug:evaluate', debugBreakpoints: 'debug:breakpoints', debugStop: 'debug:stop', debugEvent: 'debug:event',
   extSearch: 'ext:search', extDetails: 'ext:details', extInstall: 'ext:install', extUninstall: 'ext:uninstall', extSetEnabled: 'ext:enabled', extList: 'ext:list', extUpdates: 'ext:updates', extContributions: 'ext:contributions',
+  testsRunners: 'tests:runners', testsRun: 'tests:run', testsStop: 'tests:stop', testsEvent: 'tests:event',
   toolCatalog: 'tools:catalog', lspEnsure: 'lsp:ensure', lspRequest: 'lsp:request', lspNotify: 'lsp:notify', lspEvent: 'lsp:event',
   authStatus: 'auth:status',
   authSignIn: 'auth:signIn',
@@ -162,6 +163,10 @@ export interface VentrieeApi {
   extList(): Promise<ExtensionInfo[]>
   extUpdates(): Promise<Array<{ id: string; version: string }>>
   extContributions(): Promise<ExtensionContributions>
+  testsRunners(projectId: string): Promise<Array<{ id: string; name: string }>>
+  testsRun(projectId: string, runnerId: string, target: { file?: string; name?: string }): Promise<void>
+  testsStop(): Promise<void>
+  onTests(cb: (event: TestEvent) => void): () => void
   toolCatalog(): Promise<Catalog>
   lspEnsure(projectId: string, languageId: string): Promise<LspStatus>
   lspRequest(projectId: string, languageId: string, method: string, params: unknown): Promise<unknown>
