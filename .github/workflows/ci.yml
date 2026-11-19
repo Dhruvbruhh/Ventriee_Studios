@@ -7,8 +7,12 @@ permissions:
   contents: read
 jobs:
   check:
-    # The app ships for Windows and uses node-pty, so test where it runs.
-    runs-on: windows-latest
+    # Windows is where most owners run it; Linux catches path and shell assumptions.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
