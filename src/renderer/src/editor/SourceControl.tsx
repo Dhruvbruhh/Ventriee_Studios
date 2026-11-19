@@ -56,6 +56,7 @@ export function SourceControl({ projectId, onDiff, onOpen, refreshKey }: {
       {group('STAGED CHANGES', state.changes.filter((c) => c.index !== ' ' && c.index !== '?'), true)}
       {group('WORKING TREE', state.changes.filter((c) => c.working !== ' '), false)}
       {!state.changes.length ? <p className="code-empty">Working tree clean</p> : null}
+      {state.totalChanges ? <p className="tree-note" role="status">Showing {state.changes.length.toLocaleString()} of {state.totalChanges.toLocaleString()} changes. Add generated folders to .gitignore to see the rest.</p> : null}
       <form className="sc-new-branch" onSubmit={(e) => { e.preventDefault(); void run('branch', undefined, branch) }}><input className="input" aria-label="New branch name" placeholder="New branch name" value={branch} onChange={(e) => setBranch(e.target.value)} /><button className="btn" disabled={busy || !branch.trim()}>Create branch</button></form>
       <section className="sc-group"><h3>RECENT COMMITS</h3>{state.log.map((entry) => <div className="sc-log" key={entry.hash}><code>{entry.hash}</code><span>{entry.message}</span></div>)}</section>
     </>}

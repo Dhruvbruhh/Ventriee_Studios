@@ -64,7 +64,14 @@ export class Updater {
 
   async check() {
     if (this.state.status === 'unsupported' || this.state.status === 'downloading' || this.state.status === 'ready') return this.state
-    await autoUpdater.checkForUpdates().catch(() => { /* reported through the error event */ })
+    try {
+      // null means the updater decided it is inactive; say so instead of sitting on "idle".
+      const result = await autoUpdater.checkForUpdates()
+      if (!result && this.state.status === 'idle') this.set({ status: 'error', message: 'The updater did not run a check.' })
+    } catch (error) {
+      // Configuration and network failures do not always reach the error event.
+      if (this.state.status !== 'error') this.set({ status: 'error', version: this.state.version, message: String((error as Error)?.message ?? error).split('\n')[0].slice(0, 200) })
+    }
     return this.state
   }
 
