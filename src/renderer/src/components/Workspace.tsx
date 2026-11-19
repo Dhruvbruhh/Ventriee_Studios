@@ -6,6 +6,7 @@ import { AddProviderDialog } from './AddProviderDialog'
 import { AssignDialog, RecentAssignments } from './AssignDialog'
 import { BackgroundSection, EnvironmentSection } from './PlanSide'
 import { RichText } from './RichText'
+import { useAttachments, useVoice } from './Attachments'
 import type { ChatMessage, PromptDoc } from '../../../shared/types'
 
 /** Six stages, in order. Two of them leave this screen; the rest happen here. */
@@ -60,13 +61,14 @@ export function Workspace() {
     )
   }
 
-  const send = async (text: string) => {
+  const send = async (text: string, images: string[] = []) => {
     if (!project || !text.trim() || sending) return
     setSending(true)
     const result = await guard(() =>
       window.ventriee.chatSend({
         projectId: project.id,
         text: text.trim(),
+        images,
         engine: planner.engine,
         model: planner.model,
         endpoint: planner.endpoint
@@ -257,7 +259,7 @@ function ChatComposer({
   createPrompt
 }: {
   sending: boolean
-  send: (text: string) => void
+  send: (text: string, images?: string[]) => void
   planner: ResolvedModel
   onPick: (pick: ResolvedModel) => void
   onAddProvider: () => void
@@ -268,6 +270,9 @@ function ChatComposer({
   const draft = useStore((s) => s.chatDraft)
   const setDraft = useStore((s) => s.setChatDraft)
   const ref = useRef<HTMLTextAreaElement>(null)
+  const attach = useAttachments(useStore((s) => s.snapshot?.activeProjectId ?? undefined))
+  const mic = useVoice((text) => { const d = useStore.getState().chatDraft; setDraft(d ? `${d} ${text}` : text) })
+  const submit = () => { if (!draft.trim()) return; send(draft, attach.paths); attach.clear() }
 
   useEffect(() => {
     const el = ref.current
@@ -289,24 +294,27 @@ function ChatComposer({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
               e.preventDefault()
-              send(draft)
+              submit()
               return
             }
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
-              send(draft)
+              submit()
             }
           }}
           aria-label="Message the planner"
+          {...attach.handlers}
         />
+        {attach.strip}
         <div className="chat-box-foot">
           <ModelPicker value={planner} onPick={(o) => onPick(resolveModel(o, useStore.getState().snapshot!.providerConfigs))} onAddProvider={onAddProvider} compact />
           <span className="chat-hint"><span className="kbd">Enter</span> send · <span className="kbd">Shift</span>+<span className="kbd">Enter</span> newline</span>
           <div className="ml-auto flex gap-8">
+            {attach.button}{mic}
             <button className="btn" onClick={createPrompt} disabled={!canCreate || creating} title="Turn the conversation into a structured development prompt">
               <IconSpark width={12} height={12} /> {creating ? 'Writing…' : 'Create prompt'}
             </button>
-            <button className="btn primary" onClick={() => send(draft)} disabled={!draft.trim() || sending}>
+            <button className="btn primary" onClick={submit} disabled={!draft.trim() || sending}>
               <IconSend width={12} height={12} /> {sending ? 'Thinking…' : 'Send'}
             </button>
           </div>

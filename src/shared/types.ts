@@ -405,6 +405,9 @@ export interface AppSettings {
   keybindings: Array<{ key: string; command: string }>
   /** Opt-in: keep a local log of crashes and errors for "Report a problem". */
   errorReports: boolean
+  /** Spending caps per day, across all projects and per project, in USD; 0 is off. */
+  dailyBudgetUsd: number
+  projectBudgetUsd: number
   completionEndpoint: string
   /** Set true once the first-run engine onboarding has been dismissed. */
   onboardingSeen?: boolean
@@ -482,6 +485,8 @@ export interface Snapshot {
 export interface StartRunInput {
   projectId: string
   instruction: string
+  /** Project-relative paths of attached images (.ventriee/attachments/…). */
+  attachments?: string[]
 }
 
 export interface CreateAgentInput {

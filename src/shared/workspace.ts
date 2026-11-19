@@ -1,7 +1,7 @@
 export interface FileEntry { name: string; path: string; directory: boolean }
-export interface CodeAskInput { path: string; code: string; question: string; mode: 'ask' | 'edit'; startLine?: number; endLine?: number }
+export interface CodeAskInput { path: string; code: string; question: string; mode: 'ask' | 'edit'; startLine?: number; endLine?: number; images?: string[] }
 export interface CodeCompleteInput { path: string; language: string; prefix: string; suffix: string }
-export interface CodeChangeInput { request: string; paths: string[] }
+export interface CodeChangeInput { request: string; paths: string[]; images?: string[] }
 export interface CodeChangeResult { answer: string; model: string; changes: Array<{ path: string; original: string; text: string; created: boolean }> }
 export interface CodeAskResult { answer: string; replacement: string | null; model: string }
 export interface SearchHit { path: string; line: number; column: number; preview: string }

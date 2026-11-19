@@ -6,6 +6,7 @@ import { findConflicts, resolveConflict } from './conflicts'
 import { applyProjectTypes, clearProjectTypes, fileUri } from './intellisense'
 import { GraphPanel } from '../components/GraphPanel'
 import { AgentChanges } from './AgentChanges'
+import { useAttachments, useVoice } from '../components/Attachments'
 import { startLsp, type LspSession, type OutlineSymbol } from './lsp'
 import { SYMBOL_KINDS, findSymbols, outlineFor, symbolPath } from './symbols'
 import { ExtensionsPanel } from './ExtensionsPanel'
@@ -137,6 +138,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   useEffect(() => { void loadTypes() }, [loadTypes])
   const [ask, setAsk] = useState(false)
   const [question, setQuestion] = useState('')
+  const attach = useAttachments(project.id)
+  const mic = useVoice((text) => setQuestion((q) => (q ? `${q} ${text}` : text)))
   const [asking, setAsking] = useState<'ask' | 'edit' | 'change' | null>(null)
   const [changes, setChanges] = useState<Change[]>([])
   const [reply, setReply] = useState<{ answer: string; model: string; path: string } | null>(null)
@@ -313,7 +316,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     const versionId = tab.model.getAlternativeVersionId()
     setAsking(mode); setAskError(''); setReply(null); setProposal(null)
     try {
-      const result = await window.ventriee.codeAsk(project.id, { path, code: tab.model.getValueInRange(range), question, mode,
+      const result = await window.ventriee.codeAsk(project.id, { path, code: tab.model.getValueInRange(range), question, mode, images: attach.paths,
         ...(picked && !picked.isEmpty() ? { startLine: range.startLineNumber, endLine: range.endLineNumber } : {}) })
       if (!mounted.current) return
       setReply({ answer: result.answer, model: result.model, path })
@@ -341,7 +344,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     const paths = [...new Set([...(active ? [active] : []), ...tabs.current.keys()])]
     setAsking('change'); setAskError(''); setReply(null); setProposal(null); setChanges([])
     try {
-      const result = await window.ventriee.codeChange(project.id, { request, paths })
+      const result = await window.ventriee.codeChange(project.id, { request, paths, images: attach.paths })
       if (!mounted.current) return
       setReply({ answer: result.answer, model: result.model, path: `${result.changes.length} file${result.changes.length === 1 ? '' : 's'}` })
       setChanges(result.changes)
@@ -888,9 +891,10 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     {ask ? <aside className="code-ask" aria-label="Ask agent">
       <div className="code-section-head"><strong>ASK AGENT</strong><button className="tab-close" aria-label="Close Ask agent" onClick={() => setAsk(false)}><IconClose width={12} height={12} aria-hidden /></button></div>
       <p className="tree-note">{tab && active ? `About ${selection ? `lines ${selection[0]}–${selection[1]} of` : 'all of'} ${active}. Select code to narrow it.` : 'Open a file first.'} Answers come from the planner model in Settings; nothing is saved until you save.</p>
-      <textarea className="textarea" aria-label="Question for the agent" rows={4} maxLength={4000} placeholder="Explain this, find the bug, add error handling…" value={question} onChange={(e) => setQuestion(e.target.value)}
+      <textarea className="textarea" aria-label="Question for the agent" rows={4} maxLength={4000} placeholder="Explain this, find the bug, add error handling…" value={question} onChange={(e) => setQuestion(e.target.value)} {...attach.handlers}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void askAgent('ask') } }} />
-      <div className="code-ask-actions"><button className="btn" disabled={!tab || !question.trim() || Boolean(asking)} onClick={() => void askAgent('ask')}>{asking === 'ask' ? 'Asking…' : 'Ask'}</button>
+      {attach.strip}
+      <div className="code-ask-actions">{attach.button}{mic}<button className="btn" disabled={!tab || !question.trim() || Boolean(asking)} onClick={() => void askAgent('ask')}>{asking === 'ask' ? 'Asking…' : 'Ask'}</button>
         <button className="btn" disabled={!tab || !question.trim() || Boolean(asking)} onClick={() => void askAgent('edit')}>{asking === 'edit' ? 'Writing edit…' : 'Propose edit'}</button>
         <button className="btn primary" disabled={!question.trim() || Boolean(asking)} onClick={() => void askChange()} title="Change or create several files; your open tabs are the context">{asking === 'change' ? 'Changing files…' : 'Change files'}</button></div>
       {askError ? <p className="editor-error" role="alert">{askError}</p> : null}

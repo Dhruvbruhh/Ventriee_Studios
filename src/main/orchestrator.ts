@@ -1,4 +1,5 @@
 import { withRules } from './rules'
+import { spendBlock, startOfToday } from './spend'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { existsSync, readdirSync, statSync } from 'node:fs'
@@ -50,6 +51,8 @@ export interface OrchestratorDeps {
   checkpoints?: CheckpointService
   /** Path of the MCP servers file for Claude Code workers, or '' when none are enabled. */
   mcpConfig?: () => string
+  /** The project's running preview URL, if any, so browser-capable workers can test it. */
+  previewUrl?: (projectId: string) => string | null
 }
 
 interface Runner {
@@ -174,6 +177,8 @@ const pathsOverlap = (a: string[], b: string[]) =>
 
 
 export class Orchestrator {
+  // shortcut: a run's images live in memory (one active run per project); a retry after an app restart runs without them.
+  private images = new Map<string, string[]>()
   private runners = new Map<string, Runner>()
   private paused = new Set<string>()
   private stopping = new Set<string>()
@@ -322,6 +327,7 @@ JSON shape:
         endpoint: orchestrator.endpoint,
         system: withRules(orchestrator.instructions, project.path),
         prompt: this.planningPrompt(project, instruction, roster, this.deps.memory.promptBlock(memoryDocs)),
+        images: this.images.get(project.id),
         cwd: project.path,
         maxTokens: 3000,
         timeoutMs: 4 * 60 * 1000,
@@ -343,7 +349,7 @@ JSON shape:
   }
 
   // ------------------------------------------------------------------ run
-  async startRun(projectId: string, instruction: string): Promise<string> {
+  async startRun(projectId: string, instruction: string, images: string[] = []): Promise<string> {
     const project = this.deps.store.project(projectId)
     if (!project) throw new Error('Project not found')
     if (this.deps.store.runningJob(projectId)) throw new Error('A run is already active for this project')
@@ -352,6 +358,7 @@ JSON shape:
     // just after the previous queue drained) must not poison the next run: run #23
     // left the flag set and the following assignment queued work that never started.
     this.stopping.delete(projectId)
+    this.images.set(projectId, images)
 
     const roster = this.ensureRoster(project, this.deps.creds)
     const job: Job = {
@@ -534,6 +541,12 @@ JSON shape:
         }
         if (this.paused.has(agent.id)) continue
         if (agent.status === 'working' || this.runners.has(agent.id)) continue
+        const cap = spendBlock((p) => this.deps.store.spendSince(startOfToday(), p), this.deps.store.settings(), project.id)
+        if (cap) {
+          this.deps.store.updateTask(task.id, { status: 'failed', review: cap })
+          this.log(project.id, agent.id, task.id, 'error', cap)
+          continue
+        }
         // Budget is a hard stop on reported spend. Engines that do not report
         // cost leave it at 0, so this gates Claude/OpenAI-style runs only.
         if (agent.budgetUsd > 0) {
@@ -650,7 +663,11 @@ JSON shape:
     this.deps.notify()
 
     const timeoutMs = Math.max(2, this.deps.store.settings().sessionTimeoutMinutes) * 60 * 1000
-    const prompt = this.taskPrompt(project, task, { ...agent, ...run }, team, memoryDocs.length ? this.deps.memory.promptBlock(memoryDocs) : '', dependencyContext, inbox, skills)
+    let prompt = this.taskPrompt(project, task, { ...agent, ...run }, team, memoryDocs.length ? this.deps.memory.promptBlock(memoryDocs) : '', dependencyContext, inbox, skills)
+    const url = this.deps.previewUrl?.(project.id)
+    if (url && run.engine === 'cli-claude' && this.deps.store.settings().mcpServers.some((m) => m.name === 'playwright' && m.enabled)) {
+      prompt += `\n\nThe app is running at ${url}. If you change anything visible, open it with the Playwright browser tools, click through what you changed, and take a screenshot of the result before you finish.`
+    }
 
     const effort = agent.reasoning ?? 'auto'
     // The cap the last attempt actually ran with, for the failure messages below.
@@ -666,6 +683,7 @@ JSON shape:
           mcpConfig: run.engine === 'cli-claude' ? this.deps.mcpConfig?.() || undefined : undefined,
           system: withRules(agent.instructions, project.path),
           prompt: ask,
+          images: this.images.get(project.id),
           cwd: project.path,
           // Room for a thinking model to plan before it writes, and for a
           // file-heavy deliverable to finish. Probes: 8000 produced nothing on a

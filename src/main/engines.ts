@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { extname } from 'node:path'
 import { which } from './exec'
 import { runCli } from './cli'
 import type { Credentials } from './credentials'
@@ -20,6 +22,28 @@ export interface EngineRunInput {
   onChunk?: (chunk: string) => void
   /** Path to an MCP servers JSON file; only Claude Code accepts one per run. */
   mcpConfig?: string
+  /** Absolute paths of images the owner attached (screenshots, mockups). */
+  images?: string[]
+}
+
+const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }
+
+/** Attached images an engine can be sent: a known type, readable, up to 5 MB, at most four. */
+export function loadImages(paths: string[] = []): Array<{ path: string; type: string; data: string }> {
+  return paths.slice(0, 4).flatMap((path) => {
+    const type = IMAGE_TYPES[extname(path).toLowerCase()]
+    try { const data = type ? readFileSync(path) : null; return data && data.length <= 5 * 1024 * 1024 ? [{ path, type, data: data.toString('base64') }] : [] } catch { return [] }
+  })
+}
+
+/** The user turn with its images, in each API's own shape; plain text when there are none. */
+export function userContent(input: Pick<EngineRunInput, 'prompt' | 'images'>, api: 'openai' | 'anthropic' | 'gemini') {
+  const images = loadImages(input.images)
+  if (api === 'gemini') return [{ text: input.prompt }, ...images.map((i) => ({ inline_data: { mime_type: i.type, data: i.data } }))]
+  if (!images.length) return input.prompt
+  return api === 'openai'
+    ? [{ type: 'text', text: input.prompt }, ...images.map((i) => ({ type: 'image_url', image_url: { url: `data:${i.type};base64,${i.data}` } }))]
+    : [...images.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.type, data: i.data } })), { type: 'text', text: input.prompt }]
 }
 
 export interface EngineRunOutput {
@@ -159,6 +183,7 @@ export function buildCliInvocation(input: EngineRunInput): { bin: string; args: 
       const effort = input.reasoning && input.reasoning !== 'auto' ? input.reasoning : ''
       if (effort) args.push('--config', `model_reasoning_effort="${effort}"`)
       if (model) args.push('--model', model)
+      for (const image of loadImages(input.images)) args.push('--image', image.path)
       return { bin: 'codex', args, stdin: input.prompt }
     }
     case 'cli-gemini': {
@@ -252,6 +277,9 @@ function parseCodexJson(raw: string) {
 export async function runEngine(input: EngineRunInput, creds: Credentials): Promise<EngineRunOutput> {
   const model = modelFor(input.engine, input.model)
   if (isCliEngine(input.engine)) {
+    // CLI agents open files themselves, so attached images are named by path.
+    const images = loadImages(input.images)
+    if (images.length) input = { ...input, prompt: `${input.prompt}\n\nThe owner attached these images; open and look at them before you start:\n${images.map((i) => `- ${i.path}`).join('\n')}` }
     const { bin, args, stdin } = buildCliInvocation({ ...input, model })
     const command = `${bin} ${args.map((a) => (a.length > 80 ? `${a.slice(0, 77)}...` : a)).join(' ')}`
     const result = await runCli({
@@ -417,7 +445,7 @@ async function openaiCompatible(
         ...(input.reasoning && input.reasoning !== 'auto' && input.reasoning !== 'none' ? { reasoning_effort: input.reasoning } : {}),
         messages: [
           { role: 'system', content: input.system },
-          { role: 'user', content: input.prompt }
+          { role: 'user', content: userContent(input, 'openai') }
         ]
       })
     })
@@ -500,7 +528,7 @@ async function anthropic(
         system: input.system,
         stream: true,
         ...(thinking ? { thinking: { type: 'enabled', budget_tokens: thinking } } : {}),
-        messages: [{ role: 'user', content: input.prompt }]
+        messages: [{ role: 'user', content: userContent(input, 'anthropic') }]
       })
     })
     if (!res.ok || !res.body) return fail(`HTTP ${res.status}: ${(await res.text()).slice(0, 400)}`, 'anthropic')
@@ -557,7 +585,7 @@ async function gemini(
       signal: input.signal,
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: input.system }] },
-        contents: [{ role: 'user', parts: [{ text: input.prompt }] }],
+        contents: [{ role: 'user', parts: userContent(input, 'gemini') }],
         generationConfig: { maxOutputTokens: input.maxTokens }
       })
     })

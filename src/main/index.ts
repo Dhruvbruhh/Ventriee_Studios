@@ -39,6 +39,9 @@ import { validMcpServers, writeMcpConfig } from './mcp'
 import { GraphifyService } from './graphify'
 import { applyTemplate, type TemplateId } from './templates'
 import { Updater } from './updater'
+import { spendBlock, startOfToday } from './spend'
+import { attachmentPaths, recentScreenshots, saveAttachment } from './attachments'
+import { transcribe } from './transcribe'
 import type { GithubAction, CodeAskInput, CodeChangeInput, CodeCompleteInput, DebugBreakpoint, DebugEvent, DebugStartInput } from '../shared/workspace'
 import type {
   Agent,
@@ -266,7 +269,11 @@ function createWindow(projectId?: string) {
   win.webContents.on('will-redirect', (event, url) => {
     if (event.isMainFrame && originOf(url) !== rendererOrigin) event.preventDefault()
   })
-  win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
+  // Only the app's own page may use the microphone (voice input): audio only, no camera, nothing else.
+  win.webContents.session.setPermissionRequestHandler((_contents, permission, callback, details) => {
+    const types = 'mediaTypes' in details ? details.mediaTypes ?? [] : []
+    callback(permission === 'media' && originOf(details.requestingUrl) === rendererOrigin && types.length > 0 && types.every((t) => t === 'audio'))
+  })
   return win
 }
 
@@ -315,8 +322,11 @@ function registerIpc() {
     return changes.length
   })
   handle(IPC.codeComplete, (event, id: string, input: CodeCompleteInput) => { projectRoot(event, id); return completeCode(event.sender.id, input, store.settings(), creds) })
-  handle(IPC.codeChange, (event, id: string, input: CodeChangeInput) => { projectRoot(event, id); return changeFiles(store.project(id)!, input, store.settings(), creds, files) })
-  handle(IPC.codeAsk,(event, id: string, input: CodeAskInput) => { projectRoot(event, id); return askCode(store.project(id)!, input, store.settings(), creds) })
+  /** Editor AI calls stop at the spending caps too; they are not metered themselves. */
+  const capCheck = (id: string) => { const cap = spendBlock((p) => store.spendSince(startOfToday(), p), store.settings(), id); if (cap) throw new Error(cap) }
+  handle(IPC.spendToday, (event, id: string) => { projectRoot(event, id); const s = store.settings(); return { all: store.spendSince(startOfToday()), project: store.spendSince(startOfToday(), id), dailyBudgetUsd: s.dailyBudgetUsd, projectBudgetUsd: s.projectBudgetUsd } })
+  handle(IPC.codeChange, (event, id: string, input: CodeChangeInput) => { projectRoot(event, id); capCheck(id); return changeFiles(store.project(id)!, input, store.settings(), creds, files) })
+  handle(IPC.codeAsk,(event, id: string, input: CodeAskInput) => { projectRoot(event, id); capCheck(id); return askCode(store.project(id)!, input, store.settings(), creds) })
   handle(IPC.filesRead, (event, id: string, path: string) => files.read(projectRoot(event, id), path))
   handle(IPC.filesReadLarge, (event, id: string, path: string) => files.readLarge(projectRoot(event, id), path))
   handle(IPC.toolsDetect, () => {
@@ -424,6 +434,7 @@ function registerIpc() {
   handle(IPC.github, (event, id: string, action: GithubAction) => github(projectRoot(event, id), action))
   handle(IPC.githubReview, async (event, id: string, number: number) => {
     const root = projectRoot(event, id)
+    capCheck(id)
     const diff = String(await github(root, { kind: 'diff', number }))
     const clipped = diff.length > 59_000 ? `${diff.slice(0, 59_000)}\n… (diff cut at 59,000 characters)` : diff
     return askCode(store.project(id)!, { path: `pull request #${Number(number)}`, code: clipped, mode: 'ask',
@@ -604,11 +615,14 @@ function registerIpc() {
     return copy
   })
 
-  handle(IPC.startRun, async (_e, input: { projectId: string; instruction: string }) => {
+  handle(IPC.transcribe, (_e, audio: Uint8Array) => transcribe(audio, creds))
+  handle(IPC.screenshots, (event, id: string) => recentScreenshots(projectRoot(event, id)))
+  handle(IPC.attachmentSave, (event, id: string, name: string, data: Uint8Array) => saveAttachment(projectRoot(event, id), name, data))
+  handle(IPC.startRun, async (_e, input: { projectId: string; instruction: string; attachments?: string[] }) => {
     await refreshProviders()
     const project = store.project(input.projectId)
     if (project) preview.rescan(project)
-    const jobId = await orchestrator.startRun(input.projectId, input.instruction)
+    const jobId = await orchestrator.startRun(input.projectId, input.instruction, project ? attachmentPaths(project.path, input.attachments) : [])
     debouncedNotify()
     return { jobId }
   })
@@ -793,6 +807,7 @@ function registerIpc() {
 
   handle(IPC.saveSettings, async (_e, patch: Partial<AppSettings>) => {
     if (patch && 'mcpServers' in patch) patch = { ...patch, mcpServers: validMcpServers(patch.mcpServers) }
+    for (const key of ['dailyBudgetUsd', 'projectBudgetUsd'] as const) if (patch && key in patch) patch = { ...patch, [key]: Math.min(100_000, Math.max(0, Number(patch[key]) || 0)) }
     const next = store.saveSettings(patch)
     debouncedNotify()
     return next
@@ -872,10 +887,11 @@ function registerIpc() {
     store.setActiveConversation(projectId, conversationId)
     debouncedNotify()
   })
-  handle(IPC.chatSend, async (_e, input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string }) => {
+  handle(IPC.chatSend, async (_e, input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string; images?: string[] }) => {
     const project = store.project(input.projectId)
     if (!project) throw new Error('Project not found')
-    const result = await planning.sendChat(project, input.text, input)
+    capCheck(project.id)
+    const result = await planning.sendChat(project, input.text, input, attachmentPaths(project.path, input.images))
     debouncedNotify()
     return result.assistant
   })
@@ -917,7 +933,7 @@ function registerIpc() {
    * Advisor side-chat: answers on the planner engine, with a summary of the
    * current project so it can give concrete improvement advice.
    */
-  handle(IPC.chatAdvisor, async (_e, input: { projectId: string; text: string; history?: Array<{ role: 'user' | 'assistant'; text: string }> }) => {
+  handle(IPC.chatAdvisor, async (_e, input: { projectId: string; text: string; history?: Array<{ role: 'user' | 'assistant'; text: string }>; images?: string[] }) => {
     const project = store.project(input.projectId)
     if (!project) throw new Error('Project not found')
     const tasks = store.tasks(project.id).slice(-12).map((t) => `- [${t.status}] ${t.title} (${t.role}${t.attempts ? `, attempt ${t.attempts}` : ''})`)
@@ -942,7 +958,8 @@ Answer the owner's question directly.`
         cwd: project.path,
         maxTokens: 8000,
         timeoutMs: 120_000,
-        reasoning: 'auto'
+        reasoning: 'auto',
+        images: attachmentPaths(project.path, input.images)
       },
       creds
     )
@@ -1114,7 +1131,8 @@ function bootstrapData() {
     models: () => lastModels,
     providerConfigs: () => store.providers(),
     checkpoints,
-    mcpConfig: () => writeMcpConfig(userData, store.settings().mcpServers)
+    mcpConfig: () => writeMcpConfig(userData, store.settings().mcpServers),
+    previewUrl: (id) => { const p = store.project(id); const s = p ? preview.stateForProject(p) : null; return s?.status === 'ready' || s?.status === 'external' ? s.url : null }
   })
 
   // Mark anything that was mid-flight at shutdown, so the UI never shows a stale spinner.

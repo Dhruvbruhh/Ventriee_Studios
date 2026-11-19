@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { RichText } from './RichText'
 import { guard, useStore } from '../store'
+import { useAttachments, useVoice } from './Attachments'
 import { IconSend } from '../icons'
 
 interface AdvisorMsg {
@@ -19,6 +20,8 @@ export function SideChat({ onClose }: { onClose: () => void }) {
   const project = snapshot.projects.find((p) => p.id === snapshot.activeProjectId) ?? null
   const [msgs, setMsgs] = useState<AdvisorMsg[]>([])
   const [draft, setDraft] = useState('')
+  const attach = useAttachments(project?.id)
+  const mic = useVoice((text) => setDraft((d) => (d ? `${d} ${text}` : text)))
   const [busy, setBusy] = useState(false)
   const end = useRef<HTMLDivElement>(null)
 
@@ -34,7 +37,9 @@ export function SideChat({ onClose }: { onClose: () => void }) {
     setDraft('')
     setBusy(true)
     const history = msgs.slice(-12).map((m) => ({ role: m.role, text: m.text }))
-    const res = await guard(() => window.ventriee.chatAdvisor({ projectId: project.id, text: t, history }))
+    const images = attach.paths
+    attach.clear()
+    const res = await guard(() => window.ventriee.chatAdvisor({ projectId: project.id, text: t, history, images }))
     setBusy(false)
     if (res) {
       setMsgs((m) => [...m, { role: 'assistant', text: res.reply, model: res.model, time: Date.now() }])
@@ -90,6 +95,7 @@ export function SideChat({ onClose }: { onClose: () => void }) {
             Copy last reply
           </button>
         ) : null}
+        {attach.strip}
         <div className="sidechat-input-row">
           <textarea
             className="textarea sidechat-input"
@@ -104,7 +110,9 @@ export function SideChat({ onClose }: { onClose: () => void }) {
             placeholder="Ask anything: what next, ideas, how something works…"
             aria-label="Advisor message"
             rows={2}
+            {...attach.handlers}
           />
+          {attach.button}{mic}
           <button className="btn primary" onClick={() => void send(draft)} disabled={!draft.trim() || busy || !project}>
             <IconSend width={11} height={11} />
           </button>

@@ -28,7 +28,7 @@ import type { Catalog, LspEvent, LspStatus } from './catalog'
 import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, GithubAction, ProjectTask, TestEvent, ExtensionContributions, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
 
 export const IPC = {
-  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', projectTypes: 'files:project-types', toolsFormat: 'tools:format', toolsLint: 'tools:lint', codeAsk: 'code:ask', codeChange: 'code:change', codeComplete: 'code:complete', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
+  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', projectTypes: 'files:project-types', toolsFormat: 'tools:format', toolsLint: 'tools:lint', codeAsk: 'code:ask', codeChange: 'code:change', codeComplete: 'code:complete', runsList: 'runs:list', spendToday: 'spend:today', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
   gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action', gitLineChanges: 'git:line-changes', gitBlame: 'git:blame',
   termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
   debugStart: 'debug:start', debugConfigs: 'debug:configs', debugVariables: 'debug:variables', debugThread: 'debug:thread', debugCommand: 'debug:command', debugEvaluate: 'debug:evaluate', debugBreakpoints: 'debug:breakpoints', debugStop: 'debug:stop', debugEvent: 'debug:event',
@@ -94,6 +94,9 @@ export const IPC = {
   promptSave: 'prompt:save',
   assignPrompt: 'prompt:assign',
   chatAdvisor: 'chat:advisor',
+  attachmentSave: 'attachment:save',
+  screenshots: 'screenshots:list',
+  transcribe: 'voice:transcribe',
   modelsDiscover: 'models:discover',
   modelPrefs: 'models:prefs',
   addProvider: 'provider:add',
@@ -128,6 +131,8 @@ export interface VentrieeApi {
   codeChange(projectId: string, input: CodeChangeInput): Promise<CodeChangeResult>
   codeComplete(projectId: string, input: CodeCompleteInput): Promise<string>
   runsList(projectId: string): Promise<RunSummary[]>
+  /** Reported spend today, everywhere and in this project, with the caps. */
+  spendToday(projectId: string): Promise<{ all: number; project: number; dailyBudgetUsd: number; projectBudgetUsd: number }>
   runChanges(projectId: string, jobId: string): Promise<Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>>
   runUndo(projectId: string, jobId: string): Promise<number>
   updateState(): Promise<UpdateState>
@@ -248,7 +253,7 @@ export interface VentrieeApi {
   openPath(path: string): Promise<void>
   openExternal(url: string): Promise<void>
   revealFile(path: string): Promise<void>
-  chatSend(input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string }): Promise<ChatMessage>
+  chatSend(input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string; images?: string[] }): Promise<ChatMessage>
   chatSessionNew(projectId: string): Promise<void>
   chatSessionSelect(projectId: string, conversationId: string): Promise<void>
   onChatChunk(cb: (payload: { projectId: string; messageId: string; chunk: string }) => void): () => void
@@ -257,7 +262,13 @@ export interface VentrieeApi {
   promptSave(input: { projectId: string; promptId: string; body: string; source: 'edited' | 'restored' }): Promise<PromptDoc>
   assignPrompt(input: AssignPromptInput): Promise<{ jobId: string; taskCount: number }>
   /** Advisor side-chat: talk with a model that sees the current project state. */
-  chatAdvisor(input: { projectId: string; text: string; history?: Array<{ role: 'user' | 'assistant'; text: string }> }): Promise<{ reply: string; model: string }>
+  chatAdvisor(input: { projectId: string; text: string; history?: Array<{ role: 'user' | 'assistant'; text: string }>; images?: string[] }): Promise<{ reply: string; model: string }>
+  /** Saves a pasted or dropped image in the project; returns its project-relative path. */
+  attachmentSave(projectId: string, name: string, data: Uint8Array): Promise<string>
+  /** Screenshots agents took of the app (.ventriee/screens), newest first. */
+  screenshots(projectId: string): Promise<Array<{ name: string; time: number; url: string }>>
+  /** Speech to text: a local Whisper, else an OpenAI or Mistral key the owner added. */
+  transcribe(audio: Uint8Array): Promise<string>
   modelsDiscover(projectId: string | null): Promise<ModelOption[]>
   saveModelPrefs(patch: Partial<ModelPrefs>): Promise<ModelPrefs>
   addProvider(input: {
