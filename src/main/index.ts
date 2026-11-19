@@ -212,6 +212,8 @@ function createWindow(projectId?: string) {
   })
 
   const initial = projectId ?? store.activeProjectId() ?? store.projects()[0]?.id ?? null
+  // No File/Edit/View/Window bar: the studio has its own controls, and text editing shortcuts work without it.
+  win.removeMenu()
   const windowId = win.webContents.id
   windows.set(windowId, { win, projectId: initial })
   win.on('closed', () => {

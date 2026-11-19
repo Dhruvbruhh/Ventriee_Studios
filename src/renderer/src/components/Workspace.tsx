@@ -4,6 +4,7 @@ import { IconCheck, IconCopy, IconRefresh, IconSend, IconSpark } from '../icons'
 import { ModelPicker, resolveModel, type ResolvedModel } from './ModelPicker'
 import { AddProviderDialog } from './AddProviderDialog'
 import { AssignDialog, RecentAssignments } from './AssignDialog'
+import { BackgroundSection, EnvironmentSection } from './PlanSide'
 import { RichText } from './RichText'
 import type { ChatMessage, PromptDoc } from '../../../shared/types'
 
@@ -114,10 +115,8 @@ export function Workspace() {
             useStore.getState().setRailTab('plan')
           }}
         />
-        <div className="session-tabs" role="tablist" aria-label="Planning sessions">
-          {snapshot.conversations.map((c, i) => <button key={c.id} role="tab" aria-selected={c.id === snapshot.conversation?.id} className={c.id === snapshot.conversation?.id ? 'on' : ''} disabled={sending}
-            onClick={() => void guard(() => window.ventriee.chatSessionSelect(project.id, c.id))}>{c.title || `Session ${i + 1}`}</button>)}
-          <button className="session-new" disabled={sending} onClick={() => void guard(() => window.ventriee.chatSessionNew(project.id))} title="Start another planning session for this project">+ New session</button>
+        {/* Sessions are listed in the sidebar; this row only explains how to reach another one. */}
+        <div className="session-tabs">
           {snapshot.conversations.length > 1 ? <span className="session-hint">Type @Session 2 to bring another session into this one</span> : null}
         </div>
         <ChatThread chat={chat} stream={chatStream} />
@@ -134,6 +133,7 @@ export function Workspace() {
       </div>
 
       <aside className="plan-side">
+        <EnvironmentSection />
         <PromptPanel
           prompts={prompts}
           active={active}
@@ -144,6 +144,7 @@ export function Workspace() {
           disabled={!active}
         />
         <RecentAssignments assignments={snapshot.assignments} />
+        <BackgroundSection />
       </aside>
 
       {adding ? <AddProviderDialog onClose={() => setAdding(false)} /> : null}

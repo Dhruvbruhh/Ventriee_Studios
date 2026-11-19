@@ -458,6 +458,7 @@ export interface Snapshot {
   /** Planning state for the active project. */
   conversation: Conversation | null
   conversations: Conversation[]
+  sessionIndex: Array<{ id: string; projectId: string; title: string }>
   chat: ChatMessage[]
   prompts: PromptDoc[]
   providerConfigs: ProviderConfig[]

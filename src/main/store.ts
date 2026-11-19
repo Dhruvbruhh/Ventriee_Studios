@@ -674,6 +674,8 @@ export class Store {
       running: Boolean(projectId && this.runningJob(projectId)),
       conversation: projectId ? this.conversation(projectId) : null,
       conversations: projectId ? this.conversations(projectId) : [],
+      // Every project's sessions, for the sidebar; titles only, no messages.
+      sessionIndex: this.db.all<{ id: string; projectId: string; title: string }>('SELECT id, projectId, title FROM conversations ORDER BY createdAt ASC, rowid ASC'),
       chat: projectId ? this.chatMessages(projectId) : [],
       prompts: projectId ? this.prompts(projectId) : [],
       providerConfigs: this.providers(),

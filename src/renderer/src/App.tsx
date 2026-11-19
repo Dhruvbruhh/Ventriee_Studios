@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { guard, useStore } from './store'
-import { Modal, NewProjectDialog, ProjectSwitcher, Toast } from './shell'
+import { Modal, NewProjectDialog, Toast } from './shell'
 import { Floor } from './components/Floor'
 import { Rail } from './components/Rail'
 import { Preview } from './components/Preview'
@@ -14,8 +14,8 @@ import { MemoryPanel } from './panels/MemoryPanel'
 import { AutomationsPanel, SkillsPanel } from './panels/SkillsPanel'
 import { ProjectPanel } from './panels/ProjectPanel'
 import { RunsPanel } from './panels/RunsPanel'
-import { IconMemory, IconClock, IconSettings, IconSkill, IconSpark, IconPulse } from './icons'
-import { AccountButton } from './auth'
+import { IconSidebar, IconSpark } from './icons'
+import { Sidebar } from './components/Sidebar'
 import { UpdateNotice } from './components/UpdateNotice'
 const CodeWorkspace = lazy(() => import('./editor/CodeWorkspace'))
 
@@ -32,6 +32,12 @@ export function App() {
   const selectedAgentId = useStore((s) => s.selectedAgentId)
   const [newProject, setNewProject] = useState(false)
   const [showAdvisor, setShowAdvisor] = useState(false)
+  const [sidebar, setSidebar] = useState(true)
+  useEffect(() => {
+    const keys = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'b' && useStore.getState().workspace !== 'code') { event.preventDefault(); setSidebar((v) => !v) } }
+    window.addEventListener('keydown', keys)
+    return () => window.removeEventListener('keydown', keys)
+  }, [])
   const [codeOpened, setCodeOpened] = useState(false)
   useEffect(() => { if (workspace === 'code') setCodeOpened(true) }, [workspace])
 
@@ -89,20 +95,22 @@ export function App() {
   const project = snapshot.projects.find((p) => p.id === snapshot.activeProjectId) ?? null
   const working = snapshot.agents.filter((a) => a.status === 'working').length
   const configured = snapshot.providers.filter((p) => p.available).length
+  const sessionNumber = snapshot.conversations.findIndex((c) => c.id === snapshot.conversation?.id) + 1
+  const sessionTitle = snapshot.conversation?.title || (sessionNumber ? `Session ${sessionNumber}` : 'Plan')
 
   return (
+    <div className={`shell${sidebar ? '' : ' no-sidebar'}`}>
+    {sidebar ? <Sidebar onNewProject={() => setNewProject(true)} /> : null}
     <div className="app">
       <header className="topbar">
-        <div className="brand">
-          <div className="brand-mark" role="img" aria-label="Ventriee Studios" />
-          <div className="brand-text">
-            <span className="brand-name">VENTRIEE</span>
-            <span className="brand-sub">STUDIOS</span>
-          </div>
+        <button className="icon-btn" onClick={() => setSidebar((v) => !v)} aria-label={sidebar ? 'Hide sidebar' : 'Show sidebar'} aria-expanded={sidebar} title="Toggle sidebar (Ctrl+B)">
+          <IconSidebar />
+        </button>
+        <div className="tb-title" title={project?.path}>
+          <span className="tb-session">{workspace === 'plan' ? sessionTitle : workspace === 'code' ? 'Code' : 'Office'}</span>
+          {project ? <span className="tb-project">{project.name}</span> : null}
         </div>
-        <div className="tb-divider" />
-        <ProjectSwitcher onOpen={() => setNewProject(true)} />
-        <div className="tb-divider" />
+        <div className="tb-spacer" />
         <div className="ws-toggle" role="tablist" aria-label="Workspace" onKeyDown={(event) => {
           if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
           const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
@@ -131,32 +139,14 @@ export function App() {
             {working > 0 ? <span className="ws-live" aria-label={`${working} working`} /> : null}
           </button>
         </div>
-        <div className="tb-spacer" />
         <UpdateNotice />
-        <AccountButton />
         <div className="health" title={`${configured} of ${snapshot.providers.length} engines ready`}>
           <span className={`health-dot${working > 0 ? ' on' : configured > 0 ? ' warn' : ''}`} />
           <span className="health-label">
             {working > 0 ? `${working} active` : configured > 0 ? `${configured} engines` : 'no engines'}
           </span>
         </div>
-        <div className="tb-divider" />
-        <button className={`icon-btn${panel === 'memory' ? ' active' : ''}`} onClick={() => setPanel('memory')} title="Memory" aria-label="Memory">
-          <IconMemory />
-        </button>
-        <button className={`icon-btn${panel === 'skills' ? ' active' : ''}`} onClick={() => setPanel('skills')} title="Skills" aria-label="Skills">
-          <IconSkill />
-        </button>
-        <button className={`icon-btn${panel === 'runs' ? ' active' : ''}`} onClick={() => setPanel('runs')} title="Runs: usage, cost and undo" aria-label="Runs">
-          <IconPulse />
-        </button>
-        <button className={`icon-btn${panel === 'automations' ? ' active' : ''}`} onClick={() => setPanel('automations')} title="Automations" aria-label="Automations">
-          <IconClock />
-        </button>
-        <button className={`icon-btn${panel === 'settings' ? ' active' : ''}`} onClick={() => setPanel('settings')} title="Settings" aria-label="Settings">
-          <IconSettings />
-        </button>
-        <button className={`icon-btn${showAdvisor ? ' active' : ''}`} onClick={() => setShowAdvisor((v) => !v)} title="Advisor chat" aria-label="Advisor chat">
+        <button className={`icon-btn${showAdvisor ? ' active' : ''}`} onClick={() => setShowAdvisor((v) => !v)} title="Side chat" aria-label="Side chat">
           <IconSpark />
         </button>
       </header>
@@ -196,7 +186,7 @@ export function App() {
       {!project && snapshot.projects.length > 0 ? (
         <Modal title="No active project" onClose={() => setPanel('none')} narrow>
           <p className="dim" style={{ fontSize: 12 }}>
-            Pick a project from the switcher, or create a new one.
+            Pick a project in the sidebar, or create a new one.
           </p>
         </Modal>
       ) : null}
@@ -205,6 +195,7 @@ export function App() {
       ) : null}
       {showAdvisor ? <SideChat onClose={() => setShowAdvisor(false)} /> : null}
       <Toast />
+    </div>
     </div>
   )
 }

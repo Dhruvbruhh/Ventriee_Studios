@@ -101,3 +101,6 @@ export const IconSearch = (p: P) => (
 export const IconStar = (p: P) => (
   <svg {...base(p)}><path d="M12 4l2.3 4.9 5.2.7-3.8 3.6.9 5.2-4.6-2.5-4.6 2.5.9-5.2L4.5 9.6l5.2-.7z" /></svg>
 )
+export const IconSidebar = (p: P) => (
+  <svg {...base(p)}><rect x="3" y="4.5" width="18" height="15" rx="2" /><path d="M9 4.5v15" /></svg>
+)
