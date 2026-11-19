@@ -1,9 +1,9 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { buildCliInvocation, loadImages, userContent } from '../src/main/engines'
-import { attachmentPaths, saveAttachment } from '../src/main/attachments'
+import { attachmentPaths, recentScreenshots, saveAttachment } from '../src/main/attachments'
 
 const png = Buffer.from('89504e470d0a1a0a', 'hex')
 
@@ -16,6 +16,17 @@ describe('attached images', () => {
     expect(attachmentPaths(root, [rel, 'secret.png', '../x.png', '.ventriee/attachments/../../secret.png', 42])).toEqual([join(root, rel)])
     expect(() => saveAttachment(root, 'evil.exe', new Uint8Array(png))).toThrow('PNG')
     expect(() => saveAttachment(root, 'big.png', new Uint8Array(6 * 1024 * 1024))).toThrow('5 MB')
+  })
+
+  it('screenshots agents took are listed newest first, images only', () => {
+    const root = mkdtempSync(join(tmpdir(), 'ventriee-shots-'))
+    expect(recentScreenshots(root)).toEqual([])
+    mkdirSync(join(root, '.ventriee', 'screens'), { recursive: true })
+    writeFileSync(join(root, '.ventriee', 'screens', 'a.png'), png)
+    writeFileSync(join(root, '.ventriee', 'screens', 'trace.zip'), 'x')
+    const shots = recentScreenshots(root)
+    expect(shots.map((s) => s.name)).toEqual(['a.png'])
+    expect(shots[0].url).toBe(`data:image/png;base64,${png.toString('base64')}`)
   })
 
   it('go to each API in its own shape, and to CLI agents by path', () => {

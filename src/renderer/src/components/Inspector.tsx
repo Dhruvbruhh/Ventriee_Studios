@@ -7,6 +7,13 @@ import type { Agent } from '../../../shared/types'
 
 type Tab = 'live' | 'task' | 'messages' | 'config'
 
+/** Screenshots the worker took of the running app while on this task. */
+function Screens({ projectId, since }: { projectId: string; since: number }) {
+  const [shots, setShots] = useState<Array<{ name: string; time: number; url: string }>>([])
+  useEffect(() => { void window.ventriee.screenshots(projectId).then((all) => setShots(all.filter((s) => s.time >= since)), () => setShots([])) }, [projectId, since])
+  return shots.length ? <div className="kv"><dt>Screenshots</dt><dd className="attach-strip">{shots.map((s) => <a key={s.name} href={s.url} target="_blank" rel="noreferrer" title={s.name}><img src={s.url} alt={`Screenshot ${s.name}`} /></a>)}</dd></div> : null
+}
+
 export function Inspector({ agentId }: { agentId: string }) {
   const snapshot = useStore((s) => s.snapshot)!
   const select = useStore((s) => s.select)
@@ -144,6 +151,7 @@ export function Inspector({ agentId }: { agentId: string }) {
                 <div className="kv"><dt>Brief</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{task.description}</dd></div>
                 <div className="kv"><dt>Acceptance</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{task.acceptance}</dd></div>
                 {task.review ? <div className="kv"><dt>Review</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{task.review}</dd></div> : null}
+                {project ? <Screens projectId={project.id} since={task.createdAt} /> : null}
                 {task.routedBy && task.routedBy !== 'manual' ? (
                   <div className="kv"><dt>Model chosen by</dt><dd>{task.routedBy === 'automatic' ? 'Orchestrator (automatic routing)' : 'Orchestrator (hybrid, worker default kept)'}</dd></div>
                 ) : null}

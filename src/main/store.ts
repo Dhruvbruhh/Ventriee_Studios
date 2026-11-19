@@ -84,6 +84,16 @@ export class Store {
       }
       this.db.kvSet('mcpSeeded', '1')
     }
+    // Playwright's MCP server lets Claude Code workers click through the app they built; off until the owner enables it.
+    // Screenshots land in the project's .ventriee/screens (the server runs in the worker's project folder).
+    if (!this.db.kvGet('mcpSeededPlaywright')) {
+      const s = this.settings()
+      const args = ['-y', '@playwright/mcp@0.0.86', '--output-dir', '.ventriee/screens']
+      if (!s.mcpServers.some((m) => m.name === 'playwright')) {
+        this.saveSettings({ mcpServers: [...s.mcpServers, process.platform === 'win32' ? { name: 'playwright', command: 'cmd', args: ['/c', 'npx', ...args], enabled: false } : { name: 'playwright', command: 'npx', args, enabled: false }] })
+      }
+      this.db.kvSet('mcpSeededPlaywright', '1')
+    }
   }
 
   // ---------- settings ----------

@@ -95,6 +95,7 @@ export const IPC = {
   assignPrompt: 'prompt:assign',
   chatAdvisor: 'chat:advisor',
   attachmentSave: 'attachment:save',
+  screenshots: 'screenshots:list',
   modelsDiscover: 'models:discover',
   modelPrefs: 'models:prefs',
   addProvider: 'provider:add',
@@ -263,6 +264,8 @@ export interface VentrieeApi {
   chatAdvisor(input: { projectId: string; text: string; history?: Array<{ role: 'user' | 'assistant'; text: string }>; images?: string[] }): Promise<{ reply: string; model: string }>
   /** Saves a pasted or dropped image in the project; returns its project-relative path. */
   attachmentSave(projectId: string, name: string, data: Uint8Array): Promise<string>
+  /** Screenshots agents took of the app (.ventriee/screens), newest first. */
+  screenshots(projectId: string): Promise<Array<{ name: string; time: number; url: string }>>
   modelsDiscover(projectId: string | null): Promise<ModelOption[]>
   saveModelPrefs(patch: Partial<ModelPrefs>): Promise<ModelPrefs>
   addProvider(input: {

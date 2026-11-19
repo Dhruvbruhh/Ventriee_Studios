@@ -51,6 +51,8 @@ export interface OrchestratorDeps {
   checkpoints?: CheckpointService
   /** Path of the MCP servers file for Claude Code workers, or '' when none are enabled. */
   mcpConfig?: () => string
+  /** The project's running preview URL, if any, so browser-capable workers can test it. */
+  previewUrl?: (projectId: string) => string | null
 }
 
 interface Runner {
@@ -661,7 +663,11 @@ JSON shape:
     this.deps.notify()
 
     const timeoutMs = Math.max(2, this.deps.store.settings().sessionTimeoutMinutes) * 60 * 1000
-    const prompt = this.taskPrompt(project, task, { ...agent, ...run }, team, memoryDocs.length ? this.deps.memory.promptBlock(memoryDocs) : '', dependencyContext, inbox, skills)
+    let prompt = this.taskPrompt(project, task, { ...agent, ...run }, team, memoryDocs.length ? this.deps.memory.promptBlock(memoryDocs) : '', dependencyContext, inbox, skills)
+    const url = this.deps.previewUrl?.(project.id)
+    if (url && run.engine === 'cli-claude' && this.deps.store.settings().mcpServers.some((m) => m.name === 'playwright' && m.enabled)) {
+      prompt += `\n\nThe app is running at ${url}. If you change anything visible, open it with the Playwright browser tools, click through what you changed, and take a screenshot of the result before you finish.`
+    }
 
     const effort = agent.reasoning ?? 'auto'
     // The cap the last attempt actually ran with, for the failure messages below.

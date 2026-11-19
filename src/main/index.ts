@@ -40,7 +40,7 @@ import { GraphifyService } from './graphify'
 import { applyTemplate, type TemplateId } from './templates'
 import { Updater } from './updater'
 import { spendBlock, startOfToday } from './spend'
-import { attachmentPaths, saveAttachment } from './attachments'
+import { attachmentPaths, recentScreenshots, saveAttachment } from './attachments'
 import type { GithubAction, CodeAskInput, CodeChangeInput, CodeCompleteInput, DebugBreakpoint, DebugEvent, DebugStartInput } from '../shared/workspace'
 import type {
   Agent,
@@ -610,6 +610,7 @@ function registerIpc() {
     return copy
   })
 
+  handle(IPC.screenshots, (event, id: string) => recentScreenshots(projectRoot(event, id)))
   handle(IPC.attachmentSave, (event, id: string, name: string, data: Uint8Array) => saveAttachment(projectRoot(event, id), name, data))
   handle(IPC.startRun, async (_e, input: { projectId: string; instruction: string; attachments?: string[] }) => {
     await refreshProviders()
@@ -1123,7 +1124,8 @@ function bootstrapData() {
     models: () => lastModels,
     providerConfigs: () => store.providers(),
     checkpoints,
-    mcpConfig: () => writeMcpConfig(userData, store.settings().mcpServers)
+    mcpConfig: () => writeMcpConfig(userData, store.settings().mcpServers),
+    previewUrl: (id) => { const p = store.project(id); const s = p ? preview.stateForProject(p) : null; return s?.status === 'ready' || s?.status === 'external' ? s.url : null }
   })
 
   // Mark anything that was mid-flight at shutdown, so the UI never shows a stale spinner.
