@@ -126,7 +126,8 @@ async function runFrontend(reply: (attempt: number) => string) {
   return { bodies, store, task, workspace, project }
 }
 
-describe('truncated replies', () => {
+// Real HTTP round trips: slower on CI runners than the 5 s default.
+describe('truncated replies', { timeout: 20_000 }, () => {
   it('continues the answer instead of repeating the prompt', async () => {
     const { bodies, store, task, project, workspace } = await runFrontend((attempt) =>
       attempt === 1

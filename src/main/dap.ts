@@ -1,6 +1,7 @@
 import { type ChildProcess } from 'node:child_process'
 import { createServer, connect, type Socket } from 'node:net'
 import { isAbsolute, relative } from 'node:path'
+import { realpathSync } from 'node:fs'
 import { FrameReader, encodeMessage, findExecutable, spawnTool } from './lsp'
 import { forOs, type DebuggerSpec } from '../shared/catalog'
 import type { DebugBreakpoint, DebugEvent, DebugFrame, DebugVariable } from '../shared/workspace'
@@ -38,7 +39,9 @@ export class DapSession implements Debugger {
   private stderr = ''
   private ended = false
 
-  constructor(private root: string, private spec: DebuggerSpec, private emit: (event: DebugEvent) => void) {
+  private root: string
+  constructor(root: string, private spec: DebuggerSpec, private emit: (event: DebugEvent) => void) {
+    try { this.root = realpathSync.native(root) } catch { this.root = root }
     this.initialized = new Promise((resolve) => { this.markInitialized = resolve })
   }
 

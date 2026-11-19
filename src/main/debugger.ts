@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { relative } from 'node:path'
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { workspacePath } from './files'
 import type { DebugBreakpoint, DebugEvent, DebugFrame, DebugVariable } from '../shared/workspace'
 import type { Debugger } from './dap'
@@ -25,7 +25,9 @@ export class DebugSession implements Debugger {
   /** scriptId -> URL; paused frames carry only the id. */
   private scripts = new Map<string, string>()
 
-  constructor(private root: string, private emit: (event: DebugEvent) => void) {}
+  private root: string
+  // Node reports long paths; a Windows short-name root (RUNNER~1) would never match a breakpoint URL.
+  constructor(root: string, private emit: (event: DebugEvent) => void) { try { this.root = realpathSync.native(root) } catch { this.root = root } }
 
   private send(method: string, params: Record<string, unknown> = {}): Promise<Cdp> {
     return new Promise((resolve, reject) => {
