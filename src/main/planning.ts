@@ -67,6 +67,12 @@ Rewrite the brief so it is unambiguous and complete. You must:
 
 Keep the same section headings. Output the improved document only, no commentary.`
 
+/** Session numbers named as "@Session 2" / "@session2" in a message, deduplicated and within range. */
+export function mentionedSessions(text: string, count: number): number[] {
+  const found = [...text.matchAll(/@session\s*(\d+)/gi)].map((m) => Number(m[1])).filter((n) => n >= 1 && n <= count)
+  return [...new Set(found)]
+}
+
 export class PlanningService {
   constructor(
     private store: Store,
@@ -115,11 +121,19 @@ export class PlanningService {
     this.store.touchConversation(conversation.id)
     this.notify()
 
-    const history = this.store.chatMessages(project.id).slice(-14)
+    const history = this.store.chatMessages(project.id, 14, conversation.id)
     const transcript = history
       .filter((m) => m.id !== assistant.id && m.content.trim())
       .map((m) => `${m.role === 'owner' ? 'Owner' : 'You'}: ${m.content}`)
       .join('\n\n')
+    // "@Session 2" pulls that session's recent transcript in, read-only, so sessions can consult each other.
+    const sessions = this.store.conversations(project.id)
+    const pulled = mentionedSessions(text, sessions.length).filter((n) => sessions[n - 1].id !== conversation.id).map((n) => {
+      const lines = this.store.chatMessages(project.id, 30, sessions[n - 1].id).filter((m) => m.content.trim())
+        .map((m) => `${m.role === 'owner' ? 'Owner' : 'Planner'}: ${m.content}`).join('\n\n').slice(-8000)
+      return `--- Session ${n}${sessions[n - 1].title ? ` (${sessions[n - 1].title})` : ''}, read-only context ---\n${lines || '(this session is empty)'}`
+    })
+    const context = pulled.length ? `The owner referenced other planning sessions of this project. Use them to answer.\n\n${pulled.join('\n\n')}\n\n--- Current session ---\n` : ''
 
     let text2 = ''
     const result = await runEngine(
@@ -128,7 +142,7 @@ export class PlanningService {
         model: choice.model,
         endpoint: choice.endpoint || defaultEndpoint(choice.engine),
         system: this.systemPrompt(project),
-        prompt: `${transcript}\n\nReply to the Owner's last message.`,
+        prompt: `${context}${transcript}\n\nReply to the Owner's last message.`,
         cwd: project.path,
         maxTokens: 3000,
         timeoutMs: 6 * 60_000,
@@ -163,7 +177,7 @@ export class PlanningService {
   ): Promise<PromptDoc> {
     const conversation = this.store.conversation(project.id)
     const transcript = this.store
-      .chatMessages(project.id)
+      .chatMessages(project.id, 400, conversation.id)
       .filter((m) => m.content.trim())
       .map((m) => `${m.role === 'owner' ? 'Owner' : 'Planner'}: ${m.content}`)
       .join('\n\n')

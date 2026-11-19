@@ -13,7 +13,8 @@ import { SettingsPanel } from './panels/SettingsPanel'
 import { MemoryPanel } from './panels/MemoryPanel'
 import { AutomationsPanel, SkillsPanel } from './panels/SkillsPanel'
 import { ProjectPanel } from './panels/ProjectPanel'
-import { IconMemory, IconClock, IconSettings, IconSkill, IconSpark } from './icons'
+import { RunsPanel } from './panels/RunsPanel'
+import { IconMemory, IconClock, IconSettings, IconSkill, IconSpark, IconPulse } from './icons'
 import { AccountButton } from './auth'
 const CodeWorkspace = lazy(() => import('./editor/CodeWorkspace'))
 
@@ -144,6 +145,9 @@ export function App() {
         <button className={`icon-btn${panel === 'skills' ? ' active' : ''}`} onClick={() => setPanel('skills')} title="Skills" aria-label="Skills">
           <IconSkill />
         </button>
+        <button className={`icon-btn${panel === 'runs' ? ' active' : ''}`} onClick={() => setPanel('runs')} title="Runs: usage, cost and undo" aria-label="Runs">
+          <IconPulse />
+        </button>
         <button className={`icon-btn${panel === 'automations' ? ' active' : ''}`} onClick={() => setPanel('automations')} title="Automations" aria-label="Automations">
           <IconClock />
         </button>
@@ -182,6 +186,7 @@ export function App() {
 
       {newProject ? <NewProjectDialog onClose={() => setNewProject(false)} /> : null}
       {panel === 'settings' ? <SettingsPanel onClose={() => setPanel('none')} /> : null}
+      {panel === 'runs' ? <RunsPanel onClose={() => setPanel('none')} /> : null}
       {panel === 'memory' ? <MemoryPanel onClose={() => setPanel('none')} /> : null}
       {panel === 'skills' ? <SkillsPanel onClose={() => setPanel('none')} /> : null}
       {panel === 'automations' ? <AutomationsPanel onClose={() => setPanel('none')} /> : null}

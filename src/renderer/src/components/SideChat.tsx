@@ -32,7 +32,8 @@ export function SideChat({ onClose }: { onClose: () => void }) {
     setMsgs((m) => [...m, userMsg])
     setDraft('')
     setBusy(true)
-    const res = await guard(() => window.ventriee.chatAdvisor({ projectId: project.id, text: t }))
+    const history = msgs.slice(-12).map((m) => ({ role: m.role, text: m.text }))
+    const res = await guard(() => window.ventriee.chatAdvisor({ projectId: project.id, text: t, history }))
     setBusy(false)
     if (res) {
       setMsgs((m) => [...m, { role: 'assistant', text: res.reply, model: res.model, time: Date.now() }])
@@ -48,8 +49,8 @@ export function SideChat({ onClose }: { onClose: () => void }) {
     <aside className="sidechat" aria-label="Advisor chat">
       <div className="sidechat-head">
         <div>
-          <div className="sidechat-title">Advisor</div>
-          <div className="sidechat-sub">Talks with your project state · {project?.name ?? 'no project'}</div>
+          <div className="sidechat-title">Side chat</div>
+          <div className="sidechat-sub">Talk about anything · knows {project?.name ?? 'no project'}'s state · nothing here starts work</div>
         </div>
         <button className="icon-btn drawer-close" onClick={onClose} aria-label="Close advisor chat">
           ✕
@@ -99,7 +100,7 @@ export function SideChat({ onClose }: { onClose: () => void }) {
                 void send(draft)
               }
             }}
-            placeholder="Ask the advisor…"
+            placeholder="Ask anything: what next, ideas, how something works…"
             aria-label="Advisor message"
             rows={2}
           />

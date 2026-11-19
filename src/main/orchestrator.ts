@@ -8,6 +8,8 @@ import type { MemoryService } from './memory'
 import type { Credentials } from './credentials'
 import { runEngine, isCliEngine, modelFor, detectProviders } from './engines'
 import { deliverFiles } from './deliver'
+import { Mailbox, parseMessageBlocks } from './mailbox'
+import type { CheckpointService } from './checkpoint'
 import { parseVerdict } from './review'
 import { ROLE_TEMPLATES, roleByName, MANDATORY_SKILLS, type Phase } from './roles'
 import { scopeToRole, DELIVERABLE_BY_ROLE } from './brief'
@@ -43,6 +45,10 @@ export interface OrchestratorDeps {
   /** Discovered models, used only when the owner turned routing on. */
   models: () => ModelOption[]
   providerConfigs: () => ProviderConfig[]
+  /** Pre-run snapshots; optional so tests can run without Git. */
+  checkpoints?: CheckpointService
+  /** Path of the MCP servers file for Claude Code workers, or '' when none are enabled. */
+  mcpConfig?: () => string
 }
 
 interface Runner {
@@ -170,6 +176,27 @@ export class Orchestrator {
   private runners = new Map<string, Runner>()
   private paused = new Set<string>()
   private stopping = new Set<string>()
+  private mailboxes = new Map<string, Mailbox>()
+
+  private mailbox(project: Project): Mailbox {
+    const box = this.mailboxes.get(project.id) ?? new Mailbox(project.path)
+    this.mailboxes.set(project.id, box)
+    return box
+  }
+
+  /** Worker-to-worker mail: from mailbox files (live) or MESSAGE TO blocks (on finish). */
+  private relayMail(project: Project, mails: Array<{ to: string; from: string; text: string }>, taskId: string | null = null) {
+    if (!mails.length) return
+    const team = this.deps.store.agents(project.id)
+    const find = (name: string) => team.find((a) => a.name.toLowerCase() === name.toLowerCase() || a.name.replace(/[^A-Za-z0-9_-]/g, '_').toLowerCase() === name.toLowerCase())
+    for (const mail of mails.slice(0, 20)) {
+      const to = find(mail.to)
+      const from = find(mail.from)
+      const content = this.safe(mail.text).slice(0, 2000)
+      this.deps.store.addMessage({ projectId: project.id, taskId, sender: from?.id ?? mail.from, recipient: to?.id ?? mail.to, type: 'note', content, status: 'unread' })
+      this.log(project.id, from?.id ?? null, taskId, 'mail', `${from?.name ?? mail.from} → ${to?.name ?? mail.to}: ${content.slice(0, 160)}`)
+    }
+  }
   /** Decrypting every stored key on every streamed chunk would be wasteful. */
   private secretCache: { at: number; values: string[] } | null = null
 
@@ -259,12 +286,13 @@ Rules:
 - dependsOn uses the task "key" values you define (t1, t2, ...).
 - 4 to 12 tasks. Each description is an instruction to a worker, concrete and self-contained.
 - Do not include a task for the owner.
+- difficulty: "low" for small or mechanical work (copy, docs, simple pages, renames), "high" for architecture, tricky logic, security or review, otherwise "medium". Low tasks may run on cheaper models.
 
 Relevant stored memory:
 ${memoryBlock}
 
 JSON shape:
-{"summary":"one line","tasks":[{"key":"t1","title":"...","description":"...","acceptance":"...","role":"researcher","phase":"research","dependsOn":[]}]}`
+{"summary":"one line","tasks":[{"key":"t1","title":"...","description":"...","acceptance":"...","role":"researcher","phase":"research","difficulty":"low","dependsOn":[]}]}`
   }
 
   private async makePlan(project: Project, instruction: string, roster: Agent[]): Promise<Plan> {
@@ -413,7 +441,7 @@ JSON shape:
         acceptance: planned.acceptance,
         role: planned.role,
         agentId: agent?.id ?? null,
-        status: planned.dependsOnKeys.length ? 'blocked' : 'ready',
+        status: planned.dependsOnKeys.length && this.deps.store.settings().runMode !== 'parallel' ? 'blocked' : 'ready',
         dependsOn: [],
         output: '',
         review: '',
@@ -423,6 +451,7 @@ JSON shape:
         model: null,
         endpoint: null,
         routedBy: null,
+        difficulty: planned.difficulty ?? null,
         createdAt: Date.now(),
         updatedAt: Date.now()
       })
@@ -440,8 +469,21 @@ JSON shape:
   }
 
   private async runQueue(job: Job, project: Project): Promise<'done' | 'paused'> {
+    // Snapshot the folder before any worker touches it, once per run, so the owner can undo the run.
+    const checkpoints = this.deps.checkpoints
+    if (checkpoints) {
+      try {
+        if (!(await checkpoints.has(project.id, project.path, job.id))) {
+          await checkpoints.create(project.id, project.path, job.id, `Before run: ${job.instruction.slice(0, 120)}`)
+          this.log(project.id, null, null, 'checkpoint', 'Saved a checkpoint of the project; this run can be undone from Runs')
+        }
+      } catch (error) {
+        this.log(project.id, null, null, 'error', `Could not save a checkpoint, so this run cannot be undone automatically: ${(error as Error).message}`)
+      }
+    }
     const settings = this.deps.store.settings()
-    const maxSessions = Math.max(1, settings.maxConcurrentSessions)
+    // Sequential runs one task at a time in plan order; the other modes share the session limit.
+    const maxSessions = settings.runMode === 'sequential' ? 1 : Math.max(1, settings.maxConcurrentSessions)
     const inflight = new Map<string, Promise<void>>()
     /** Path claims of the writers currently running. */
     const claims: Array<{ taskId: string; scope: string[] }> = []
@@ -449,6 +491,7 @@ JSON shape:
 
     for (;;) {
       if (this.stopping.has(project.id)) break
+      try { this.relayMail(project, this.mailbox(project).collect()) } catch { /* mail is best effort; the run goes on */ }
       const tasks = this.deps.store.tasks(project.id)
 
       // Promote satisfied dependencies before reading the queue: a task whose
@@ -570,13 +613,26 @@ JSON shape:
     const controller = new AbortController()
     this.runners.set(agent.id, { controller, sessionId, startedAt: Date.now() })
 
+    // Automatic routing picks per task, so an easy task can run on a cheaper model than a hard one.
+    const run = { engine: agent.engine, model: agent.model, endpoint: agent.endpoint }
+    const settings = this.deps.store.settings()
+    if (settings.routingMode === 'automatic' || (settings.routingMode === 'hybrid' && !agent.model.trim())) {
+      const choice = routeModel({ role: task.role, models: this.deps.models(), costPreference: settings.costPreference, difficulty: task.difficulty })
+      if (choice) {
+        const config = this.deps.providerConfigs().find((p) => p.id === choice.option.provider)
+        Object.assign(run, { engine: (config?.engine ?? choice.option.provider) as EngineKind, model: choice.option.model, endpoint: config?.baseUrl ?? '' })
+        this.deps.store.updateTask(task.id, { ...run, routedBy: settings.routingMode })
+        this.log(project.id, agent.id, task.id, 'plan', `Routed "${task.title}" to ${run.model}: ${choice.reason}`)
+      }
+    }
+
     const session: SessionRecord = {
       id: sessionId,
       projectId: project.id,
       agentId: agent.id,
       taskId: task.id,
-      engine: agent.engine,
-      model: agent.model,
+      engine: run.engine,
+      model: run.model,
       cwd: project.path,
       reasoning: agent.reasoning ?? 'auto',
       status: 'running',
@@ -593,7 +649,7 @@ JSON shape:
     this.deps.notify()
 
     const timeoutMs = Math.max(2, this.deps.store.settings().sessionTimeoutMinutes) * 60 * 1000
-    const prompt = this.taskPrompt(project, task, agent, team, memoryDocs.length ? this.deps.memory.promptBlock(memoryDocs) : '', dependencyContext, inbox, skills)
+    const prompt = this.taskPrompt(project, task, { ...agent, ...run }, team, memoryDocs.length ? this.deps.memory.promptBlock(memoryDocs) : '', dependencyContext, inbox, skills)
 
     const effort = agent.reasoning ?? 'auto'
     // The cap the last attempt actually ran with, for the failure messages below.
@@ -603,9 +659,10 @@ JSON shape:
       capUsed = cap
       const outcome = await runEngine(
         {
-          engine: agent.engine,
-          model: agent.model,
-          endpoint: agent.endpoint,
+          engine: run.engine,
+          model: run.model,
+          endpoint: run.endpoint,
+          mcpConfig: run.engine === 'cli-claude' ? this.deps.mcpConfig?.() || undefined : undefined,
           system: agent.instructions,
           prompt: ask,
           cwd: project.path,
@@ -648,7 +705,7 @@ JSON shape:
     // burn the whole budget thinking. One automatic retry with thinking off beats
     // failing a task that only wanted an answer. CLI engines are skipped: they manage
     // their own loop and the flag differs per tool.
-    if (result.ok && result.reasoningOnly && effort !== 'none' && !isCliEngine(agent.engine)) {
+    if (result.ok && result.reasoningOnly && effort !== 'none' && !isCliEngine(run.engine)) {
       const retryId = newId('ses')
       this.deps.store.insertSession({ ...session, id: retryId, reasoning: 'none', startedAt: Date.now() })
       this.log(
@@ -677,7 +734,7 @@ JSON shape:
     let whole = result.text
     for (
       let part = 0;
-      result.ok && result.truncated && !result.reasoningOnly && !isCliEngine(agent.engine) && part < WORKER_CONTINUATIONS;
+      result.ok && result.truncated && !result.reasoningOnly && !isCliEngine(run.engine) && part < WORKER_CONTINUATIONS;
       part++
     ) {
       const retryId = newId('ses')
@@ -708,7 +765,7 @@ JSON shape:
     // HTTP models never touched disk; the studio did, so record what it wrote.
     // Reasoning text is a plan and a truncated reply is half a file: never write either.
     const written =
-      result.ok && !result.reasoningOnly && !result.truncated && !isCliEngine(agent.engine)
+      result.ok && !result.reasoningOnly && !result.truncated && !isCliEngine(run.engine)
         ? deliverFiles(project.path, text)
         : []
 
@@ -778,6 +835,9 @@ JSON shape:
 
     const after = await this.evidenceDigest(project.path)
     const evidence = this.checkEvidence(task, before, after, text)
+    const outgoing = parseMessageBlocks(text).map((m) => ({ ...m, from: agent.name }))
+    this.relayMail(project, outgoing, task.id)
+    for (const mail of outgoing) { try { this.mailbox(project).deliver(mail) } catch { /* the Mail tab still has it */ } }
     if (written.length) {
       evidence.summary = `${evidence.summary} (studio wrote ${written.slice(0, 5).join(', ')})`
     }
@@ -803,7 +863,7 @@ JSON shape:
     this.log(project.id, agent.id, task.id, 'task', `${agent.name} delivered "${task.title}" (${evidence.summary})`)
 
     if (CODE_ROLES.has(agent.role) && !evidence.passed) {
-      const how = isCliEngine(agent.engine)
+      const how = isCliEngine(run.engine)
         ? `Produce the actual deliverable in ${project.path}, then report back.`
         : 'Reply with the deliverable as === FILE: … === blocks and nothing else outside them.'
       this.deps.store.updateTask(task.id, { status: 'rework', review: `Evidence check failed: ${evidence.summary}` })
@@ -861,6 +921,16 @@ JSON shape:
 5. Never include secrets. Never propose destructive operations.
 6. Do not expand the task. Deliver the file named in the acceptance criteria and what it directly needs, then stop.
 7. After the blocks, state what each file is for and anything the next worker needs.`
+    const mailPath = (name: string) => `.ventriee/mail/${name.replace(/[^A-Za-z0-9_-]/g, '_')}.md`
+    const talking = cli
+      ? `Teammates may be working at the same time as you. Your mailbox is ${mailPath(agent.name)}: read it before you start and again between steps, and act on what it says. To tell a teammate something they need (a changed contract, a file you own, a question), append one line to their mailbox, for example ${mailPath(team[0]?.name ?? 'Kai')}, in exactly this form:
+- from ${agent.name}: <one-line message>
+Only message when it changes their work. Never edit anything else under .ventriee.`
+      : `To tell a teammate something they need, add this block after your files (they get it when you finish):
+=== MESSAGE TO: <teammate name> ===
+<message>
+=== END MESSAGE ===
+Only message when it changes their work.`
 
     return `# Task: ${task.title}
 
@@ -880,6 +950,9 @@ ${dependencyContext || '(this is the first task in the chain)'}
 
 ## Teammates (use them instead of guessing)
 ${roster || '(none)'}
+
+## Talking to teammates
+${team.length ? talking : '(you are working alone)'}
 
 ## Available skills
 ${skills.length ? skills.map((s) => `- ${s.name}: ${s.description} (${s.path})`).join('\n') + '\n\nRead a skill\'s SKILL.md before you rely on it. It holds the rules and examples; this line is only a pointer.' : '(none installed)'}
@@ -907,7 +980,7 @@ ${rules}
         return
       }
       for (const entry of entries) {
-        if (entry === 'node_modules' || entry === '.git' || entry === 'dist' || entry === 'build' || entry === '.next') continue
+        if (entry === 'node_modules' || entry === '.git' || entry === '.ventriee' || entry === 'dist' || entry === 'build' || entry === '.next') continue
         const full = join(dir, entry)
         try {
           const stat = statSync(full)

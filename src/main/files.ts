@@ -6,7 +6,7 @@ import { TextDecoder } from 'node:util'
 import { isInside } from './paths'
 import type { FileEntry, SearchResult, TextFile } from '../shared/workspace'
 export const MAX_TEXT_BYTES = 2 * 1024 * 1024
-const HIDDEN = new Set(['.git', 'node_modules', '.next', 'dist', 'out', '__pycache__', '.venv'])
+const HIDDEN = new Set(['.git', '.ventriee', 'node_modules', '.next', 'dist', 'out', '__pycache__', '.venv'])
 export function workspacePath(root: string, path: unknown, allowRoot = false): string {
   if (typeof path !== 'string' || path.length > 2048 || /[\x00-\x1f]/.test(path) || isAbsolute(path) || /^[\\/]/.test(path) || /[:*?"<>|]/.test(path)) throw new Error('Invalid workspace path')
   const segments = path.replace(/\\/g, '/').split('/')

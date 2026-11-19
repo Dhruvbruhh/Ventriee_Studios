@@ -7,6 +7,9 @@ const api: VentrieeApi = {
   filesFind: (id, query) => ipcRenderer.invoke(IPC.filesFind, id, query),
   filesSearch: (id, query, caseSensitive) => ipcRenderer.invoke(IPC.filesSearch, id, query, caseSensitive),
   codeAsk: (id, input) => ipcRenderer.invoke(IPC.codeAsk, id, input),
+  runsList: (id) => ipcRenderer.invoke(IPC.runsList, id),
+  runChanges: (id, jobId) => ipcRenderer.invoke(IPC.runChanges, id, jobId),
+  runUndo: (id, jobId) => ipcRenderer.invoke(IPC.runUndo, id, jobId),
   filesRead: (id, path) => ipcRenderer.invoke(IPC.filesRead, id, path),
   filesSave: (id, file) => ipcRenderer.invoke(IPC.filesSave, id, file),
   filesCreate: (id, path, directory) => ipcRenderer.invoke(IPC.filesCreate, id, path, directory),
@@ -91,6 +94,8 @@ const api: VentrieeApi = {
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
   revealFile: (path) => ipcRenderer.invoke(IPC.revealFile, path),
   chatSend: (input) => ipcRenderer.invoke(IPC.chatSend, input),
+  chatSessionNew: (projectId) => ipcRenderer.invoke(IPC.chatSessionNew, projectId),
+  chatSessionSelect: (projectId, conversationId) => ipcRenderer.invoke(IPC.chatSessionSelect, projectId, conversationId),
   onChatChunk: (cb) => {
     const listener = (_e: unknown, payload: { projectId: string; messageId: string; chunk: string }) => cb(payload)
     ipcRenderer.on(IPC.chatChunk, listener)
