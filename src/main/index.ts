@@ -22,7 +22,7 @@ import { TerminalService } from './terminal'
 import { DebugSession } from './debugger'
 import { DapSession, type Debugger } from './dap'
 import { debuggerFor, launchConfigs, substitute } from './launch'
-import { LspService } from './lsp'
+import { LspService, findExecutable } from './lsp'
 import { ExtensionService } from './extensions'
 import { TestService, detectRunners } from './testrunner'
 import { listTasks } from './tasks'
@@ -316,6 +316,17 @@ function registerIpc() {
   handle(IPC.codeChange, (event, id: string, input: CodeChangeInput) => { projectRoot(event, id); return changeFiles(store.project(id)!, input, store.settings(), creds, files) })
   handle(IPC.codeAsk,(event, id: string, input: CodeAskInput) => { projectRoot(event, id); return askCode(store.project(id)!, input, store.settings(), creds) })
   handle(IPC.filesRead, (event, id: string, path: string) => files.read(projectRoot(event, id), path))
+  handle(IPC.filesReadLarge, (event, id: string, path: string) => files.readLarge(projectRoot(event, id), path))
+  handle(IPC.toolsDetect, () => {
+    const c = catalog()
+    const os = process.platform
+    const install = (spec: { command?: unknown; url?: string } | undefined) => { const cmd = spec?.command as string | Record<string, string> | undefined; return (typeof cmd === 'string' ? cmd : cmd?.[os] ?? cmd?.default) ?? spec?.url }
+    return {
+      tools: ['node', 'npm', 'git', 'gh', 'python', 'go', 'cargo', 'java', 'dotnet', 'ollama'].map((name) => ({ name, found: Boolean(findExecutable(name)) })),
+      languages: c.languages.map((l) => ({ id: l.id, name: l.name, server: l.servers.find((s) => findExecutable(s.command))?.name ?? null, install: install(l.install) })),
+      debuggers: c.debuggers.map((d) => ({ id: d.id, name: d.name, found: Boolean(findExecutable(d.command)), install: install(d.install) }))
+    }
+  })
   const history = new HistoryService(join(app.getPath('userData'), 'history'))
   handle(IPC.filesSave, async (event, id: string, file: TextFile) => {
     const root = projectRoot(event, id)

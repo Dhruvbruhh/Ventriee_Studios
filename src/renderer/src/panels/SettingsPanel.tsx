@@ -8,6 +8,7 @@ import { IconClose, IconCheck, IconPlus, IconRefresh, IconTrash } from '../icons
 import { ModelPicker, resolveModel } from '../components/ModelPicker'
 import { AddProviderDialog } from '../components/AddProviderDialog'
 import { TerminalView } from '../components/Terminal'
+import { Toolchains } from '../components/Toolchains'
 import { installUpdate, useUpdateState } from '../components/UpdateNotice'
 import type { CredentialInfo } from '../../../shared/ipc'
 
@@ -655,6 +656,9 @@ function RunPolicy() {
           onAddProvider={() => useStore.getState().notify('Add local models under Engines, or start Ollama and reopen Settings.', 'info')} />
         {settings.completionModel ? <button className="btn tiny" onClick={() => void update({ completionModel: '' })}>Turn off</button> : null}
       </div>
+
+      <div className="section-label" style={{ marginTop: 14 }}>Languages and tools</div>
+      <Toolchains />
 
       <SyncAndReports />
 

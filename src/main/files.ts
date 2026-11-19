@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync, readSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { TextDecoder } from 'node:util'
 import { isInside } from './paths'
@@ -81,6 +81,19 @@ export class FileService {
     let text: string
     try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes) } catch { throw new Error('Only UTF-8 text files are supported') }
     return { path, text, version: digest(bytes), bom: bytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])) }
+  }
+  /** A file over the edit limit, for read-only viewing: up to 10 MB of it, invalid UTF-8 replaced. */
+  readLarge(root: string, path: string): { text: string; size: number; truncated: boolean } {
+    const target = workspacePath(root, path)
+    const size = statSync(target).size
+    const max = 10 * 1024 * 1024
+    const fd = openSync(target, 'r')
+    try {
+      const bytes = Buffer.alloc(Math.min(size, max))
+      readSync(fd, bytes, 0, bytes.length, 0)
+      if (bytes.subarray(0, 8000).includes(0)) throw new Error('Binary files cannot be shown as text')
+      return { text: new TextDecoder('utf-8').decode(bytes), size, truncated: size > max }
+    } finally { closeSync(fd) }
   }
   save(root: string, file: TextFile): TextFile {
     if (!file || typeof file.text !== 'string' || typeof file.version !== 'string' || typeof file.bom !== 'boolean') throw new Error('Invalid file contents')

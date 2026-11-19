@@ -23,7 +23,7 @@ import type { CodeChangeResult, ProjectTask, TestResult, DebugBreakpoint, DebugF
 import type { Catalog } from '../../../shared/catalog'
 import type { Project } from '../../../shared/types'
 
-interface Tab { file: TextFile; model: monaco.editor.ITextModel; saved: string; subscription: monaco.IDisposable; view?: monaco.editor.ICodeEditorViewState | null }
+interface Tab { file: TextFile; model: monaco.editor.ITextModel; saved: string; subscription: monaco.IDisposable; view?: monaco.editor.ICodeEditorViewState | null; readOnly?: boolean }
 type Change = CodeChangeResult['changes'][number]
 interface Diff { path: string; original: string; modified: string; staged: boolean; label?: string; proposal?: boolean; change?: Change; restore?: string }
 interface Proposal { path: string; range: monaco.IRange; versionId: number; replacement: string }
@@ -190,6 +190,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     if (old) old.view = editor.current?.saveViewState()
     selected.current = path; setActive(path); setDiff(null)
     editor.current?.setModel(tab.model)
+    editor.current?.updateOptions({ readOnly: Boolean(tab.readOnly) })
     if (tab.view) editor.current?.restoreViewState(tab.view)
     editor.current?.focus()
   }
@@ -210,7 +211,17 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       }
       if (focus && request === opening.current) activate(path)
       changed()
-    } catch (error) { useStore.getState().notify(String(error), 'error') }
+    } catch (error) {
+      // Over the edit limit: show it read-only instead of refusing (logs, data dumps, generated files).
+      const large = /editor limit/.test(String(error)) ? await window.ventriee.filesReadLarge(project.id, path).catch(() => null) : null
+      if (large && mounted.current && !tabs.current.has(path)) {
+        const model = monaco.editor.createModel(large.text, languageFor(path), fileUri(project.id, path))
+        tabs.current.set(path, { file: { path, text: '', version: '', bom: false }, model, saved: model.getValue(), subscription: { dispose() {} }, readOnly: true })
+        if (focus && request === opening.current) activate(path)
+        changed()
+        useStore.getState().notify(`${path} is ${(large.size / 1048576).toFixed(1)} MB, so it opened read-only${large.truncated ? ' (first 10 MB)' : ''}.`, 'info')
+      } else useStore.getState().notify(String(error), 'error')
+    }
     finally { if (mounted.current && request === opening.current) setLoading(false) }
   }
   // Language servers for the languages in the catalog (Python, Go, Rust, C/C++, …), when installed.
@@ -364,6 +375,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     try {
       const targets = all ? [...tabs.current.values()] : active && tabs.current.has(active) ? [tabs.current.get(active)!] : []
       for (const tab of targets) {
+        if (tab.readOnly) continue
         const text = tab.model.getValue()
         if (text === tab.saved) continue
         current = tab.file.path

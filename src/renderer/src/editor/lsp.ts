@@ -69,7 +69,8 @@ export async function startLsp(project: { id: string; path: string }, hooks: {
     send(doc.language, 'textDocument/didChange', { textDocument: { uri: doc.url, version: ++doc.version }, contentChanges: [{ text: model.getValue() }] })
   }
   const attach = async (model: monaco.editor.ITextModel) => {
-    if (!ours(model) || docs.has(model.uri.toString())) return
+    // Huge files (read-only views of logs and dumps) are not sent to language servers.
+    if (!ours(model) || docs.has(model.uri.toString()) || model.getValueLength() > 2_000_000) return
     const language = model.getLanguageId()
     const status = await ensure(language)
     if (status.state !== 'ready' || model.isDisposed() || docs.has(model.uri.toString()) || disposed) return

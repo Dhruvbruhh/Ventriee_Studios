@@ -1480,3 +1480,8 @@
 .seg button { padding: 2px 8px; font-size: 11px; } .seg button.on { background: var(--surface-2, #1a1d23); color: var(--text, #fff); }
 .code-sidebar-tabs { flex-wrap: wrap; }
 .code-sidebar-tabs button { flex: 1 0 auto; padding: 8px 7px; }
+
+/* Toolchains */
+.toolchains .kv-row-sub { display: flex; flex-wrap: wrap; gap: 6px; }
+.tool-chip { padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line, #2a2f38); font-size: 11px; color: var(--muted); }
+.tool-chip.on { color: var(--text); border-color: #79dcb4; }

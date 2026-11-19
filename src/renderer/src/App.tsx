@@ -17,6 +17,7 @@ import { RunsPanel } from './panels/RunsPanel'
 import { IconSidebar, IconSpark } from './icons'
 import { Sidebar } from './components/Sidebar'
 import { UpdateNotice } from './components/UpdateNotice'
+import { Toolchains } from './components/Toolchains'
 const CodeWorkspace = lazy(() => import('./editor/CodeWorkspace'))
 
 export function App() {
@@ -221,6 +222,8 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
           <div className="kv-row-sub">Add a provider and API key in Settings → Providers (OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, Mistral, local Ollama/LM Studio).</div>
         </div>
       </div>
+      <div className="section-label" style={{ marginTop: 14 }}>Your coding tools</div>
+      <Toolchains />
       <div className="flex gap-8" style={{ marginTop: 14 }}>
         <button className="btn primary" onClick={onClose}>I'll set it up</button>
         <button className="btn" onClick={() => void guard(() => window.ventriee.openExternal('https://github.com/Euforia-dhruv/Ventriee_Studios#engines'))}>

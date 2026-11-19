@@ -77,6 +77,8 @@ const api: VentrieeApi = {
     return () => ipcRenderer.removeListener(IPC.testsEvent, listener)
   },
   tasksList: (id) => ipcRenderer.invoke(IPC.tasksList, id),
+  filesReadLarge: (id, path) => ipcRenderer.invoke(IPC.filesReadLarge, id, path),
+  toolsDetect: () => ipcRenderer.invoke(IPC.toolsDetect),
   errorReport: (message, stack) => ipcRenderer.invoke(IPC.errorReport, message, stack),
   errorLog: () => ipcRenderer.invoke(IPC.errorLog),
   errorClear: () => ipcRenderer.invoke(IPC.errorClear),
