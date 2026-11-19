@@ -129,8 +129,8 @@ export class PreviewService {
             status: profile.kind === 'unknown' ? 'off' : profile.entry ? 'ready' : 'manual',
             revision: state.revision + 1
           })
-          if (profile.kind === 'web' && profile.runCommand && !this.running.has(project.id)) {
-            void this.start(project)
+          if (profile.kind === 'web' && profile.runCommand && !this.running.has(project.id) && this.isAutoApproved(project.id)) {
+            void this.start(project).catch(() => this.autoStarted.delete(project.id))
             return
           }
         } else {
@@ -199,15 +199,20 @@ export class PreviewService {
           return
         }
         const target = resolve(project.path, `.${normalize(relativePath === '/' ? '/index.html' : relativePath)}`)
-        if (!isInside(project.path, target) || !existsSync(target)) {
+        if (!isInside(project.path, target) || !existsSync(target) || !statSync(target).isFile()) {
           res.writeHead(404, { 'content-type': 'text/plain' })
           res.end('Not found')
           return
         }
         res.writeHead(200, { 'content-type': mimeFor(target), 'cache-control': 'no-store' })
-        createReadStream(target).pipe(res)
+        const stream = createReadStream(target)
+        stream.on('error', () => res.destroy())
+        stream.pipe(res)
       })
-      await new Promise<void>((done) => server.listen(port, '127.0.0.1', done))
+      await new Promise<void>((done, reject) => {
+        server.once('error', reject)
+        server.listen(port, '127.0.0.1', done)
+      })
       this.running.set(project.id, { child: null, command: 'static server', url: `http://127.0.0.1:${port}`, server })
       const next: PreviewState = {
         ...base,
@@ -298,6 +303,7 @@ export class PreviewService {
     child.stdout?.on('data', push)
     child.stderr?.on('data', push)
     child.on('error', (error) => {
+      if (this.running.get(project.id) !== entry) return
       const current = this.state.get(project.id)
       if (!current) return
       this.state.set(project.id, { ...current, status: 'error', detail: error.message, logs: [...current.logs, error.message].slice(-300) })
@@ -305,6 +311,7 @@ export class PreviewService {
       this.onChange()
     })
     child.on('close', (code) => {
+      if (this.running.get(project.id) !== entry) return
       this.running.delete(project.id)
       const current = this.state.get(project.id)
       if (!current) return
@@ -312,7 +319,7 @@ export class PreviewService {
       this.state.set(project.id, {
         ...current,
         status: crashed ? 'error' : 'manual',
-        url: crashed ? null : current.url,
+        url: null,
         detail: crashed ? `Preview stopped (exit ${code ?? 'killed'}). Check the log.` : 'Preview stopped.',
         logs: [...current.logs, `[process exited with code ${code ?? 'null'}]`].slice(-300)
       })
@@ -367,6 +374,7 @@ export class PreviewService {
       })
       child.on('close', done)
     })
+    this.installing.delete(project.id)
 
     // A fresh install changes what is on disk, so the classification is stale.
     this.profiles.delete(project.id)
@@ -428,7 +436,14 @@ export class PreviewService {
     }
     child.stdout?.on('data', push)
     child.stderr?.on('data', push)
+    child.on('error', (error) => {
+      if (this.running.get(project.id) !== running) return
+      this.running.delete(project.id)
+      this.state.set(project.id, { ...this.get(project.id), status: 'error', detail: error.message })
+      this.onChange()
+    })
     child.on('close', (code) => {
+      if (this.running.get(project.id) !== running) return
       this.running.delete(project.id)
       const current = this.state.get(project.id)
       if (!current) return
@@ -461,6 +476,8 @@ export class PreviewService {
                   : ext === '.html' || ext === '.htm' ? 'text/html'
                     : 'text/plain'
     try {
+      if (!statSync(target).isFile()) return { ok: false, error: 'Artifact is not a file' }
+      if (statSync(target).size > 8 * 1024 * 1024) return { ok: false, error: 'Artifact is larger than 8 MB' }
       const buffer = readFileSync(target)
       if (buffer.length > 8 * 1024 * 1024) return { ok: false, error: 'Artifact is larger than 8 MB' }
       return { ok: true, data: buffer.toString('base64'), mime }

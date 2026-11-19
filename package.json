@@ -29,9 +29,15 @@
     "vitest": "^5.1.0"
   },
   "dependencies": {
+    "dompurify": "3.4.18",
+    "monaco-editor": "0.55.1",
     "pixi.js": "^8.22.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "zustand": "^5.0.16"
+  },
+  "overrides": {
+    "dompurify": "3.4.18",
+    "minimatch@>=7.0.0 <11.0.1": "^11.0.1"
   }
 }

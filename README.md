@@ -4,8 +4,9 @@
 
 Talk an idea through with an AI planner, turn the conversation into a development prompt,
 enhance it, assign it to a team of real CLI agents, and watch them build — in a live office
-floor with an always-visible preview of whatever they produce. It runs entirely on your
-machine. No cloud, no telemetry, no fake workers.
+floor with an always-visible preview of whatever they produce. Project orchestration runs
+on your machine. Supabase handles account sign-in; your chosen AI providers may use network
+services. No application telemetry or fake workers.
 
 ![Office](artifacts/final-app.png)
 
@@ -88,10 +89,23 @@ npm run build      # production bundle into out/
 npm run dist       # package installers (Windows: nsis + portable; Linux: AppImage + deb)
 ```
 
+Supabase sign-in is required. Copy `.env.example` to `.env`, set your project URL
+and public publishable/anon key, and enable Email authentication using
+[the authentication setup guide](docs/supabase-authentication.md).
+The app stays locked until configured. Service-role keys never belong in a desktop app.
+Sign-in requires a connection to Supabase; project data remains local.
+
 ## Getting started (5 minutes)
 
-1. **Create a project** — give it a name and a folder. The folder *is* the sandbox:
-   agents cannot read or write outside it.
+The **Code** workspace adds a Monaco editor with file tabs, Explorer, quick file
+navigation, conflict-aware saves, and Source Control for Git diffs, staging,
+commits, branches, and remotes. See [Code workspace](docs/code-workspace.md) for
+supported features and current validation limits. Language runtimes and advanced
+language servers must be installed separately.
+
+1. **Create a project** - give it a name and a folder. The folder is the working
+   directory. App file access is checked against project roots; external CLI agents
+   require their own sandbox or OS isolation to restrict access outside the project.
 2. **Talk it through** — the project opens on the chat stage. Describe the idea; the
    planner asks what it needs. Nothing is queued during this stage.
 3. **Create Prompt** — turn the approved conversation into a structured development prompt.

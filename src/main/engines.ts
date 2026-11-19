@@ -298,7 +298,9 @@ export async function runEngine(input: EngineRunInput, creds: Credentials): Prom
     }
   }
 
-  return runApiEngine({ ...input, model }, creds)
+  const timeout = AbortSignal.timeout(Math.max(1, input.timeoutMs))
+  const signal = input.signal ? AbortSignal.any([input.signal, timeout]) : timeout
+  return runApiEngine({ ...input, model, signal }, creds)
 }
 
 async function runApiEngine(input: EngineRunInput & { model: string }, creds: Credentials): Promise<EngineRunOutput> {
@@ -308,25 +310,31 @@ async function runApiEngine(input: EngineRunInput & { model: string }, creds: Cr
   return openaiCompatible(input, creds, endpoint)
 }
 
-async function readSse(
+export async function readSse(
   body: ReadableStream<Uint8Array>,
   onEvent: (payload: string) => void
 ) {
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-  for (;;) {
+  const dispatch = (part: string) => {
+    const data = part.split(/\r?\n/).filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).replace(/^ /, '')).join('\n')
+    if (data) onEvent(data)
+  }
+  try { for (;;) {
     const { done, value } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
-    const parts = buffer.split('\n\n')
+    const parts = buffer.split(/\r?\n\r?\n/)
     buffer = parts.pop() ?? ''
     for (const part of parts) {
-      for (const line of part.split('\n')) {
-        if (line.startsWith('data:')) onEvent(line.slice(5).trim())
-      }
+      dispatch(part)
     }
   }
+  buffer += decoder.decode()
+  if (buffer.trim()) dispatch(buffer)
+  } finally { reader.releaseLock() }
 }
 
 /**

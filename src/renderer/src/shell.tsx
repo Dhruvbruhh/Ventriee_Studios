@@ -113,6 +113,7 @@ export function ProjectSwitcher({ onOpen }: { onOpen: () => void }) {
                 <button
                   className="popover-item"
                   onClick={() => {
+                    if (p.id !== snapshot.activeProjectId && useStore.getState().editorDirty && !window.confirm('Discard unsaved code edits and switch projects?')) return
                     setOpen(false)
                     void guard(() => window.ventriee.selectProject(p.id))
                   }}
@@ -172,6 +173,7 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
 
   const submit = async () => {
     if (!name.trim() || !path.trim() || busy) return
+    if (useStore.getState().editorDirty && !window.confirm('Discard unsaved code edits and create a project?')) return
     setBusy(true)
     const project = await guard(
       () => window.ventriee.createProject({ name, path, description }),

@@ -47,8 +47,8 @@ export function ProjectPanel({ onClose }: { onClose: () => void }) {
         <button
           className="btn primary"
           onClick={async () => {
-            await guard(() => window.ventriee.updateProject(project.id, { name: name.trim(), description }), 'Project saved')
-            onClose()
+            const saved = await guard(() => window.ventriee.updateProject(project.id, { name: name.trim(), description }), 'Project saved')
+            if (saved !== null) onClose()
           }}
         >
           Save project
@@ -57,9 +57,10 @@ export function ProjectPanel({ onClose }: { onClose: () => void }) {
           className="btn danger"
           style={{ marginLeft: 'auto' }}
           onClick={async () => {
-            if (!window.confirm(`Delete "${project.name}" from the studio? The workspace folder and files are not touched; memory is archived.`)) return
+            const unsaved = useStore.getState().editorDirty ? ' Unsaved code edits will be discarded.' : ''
+            if (!window.confirm(`Delete "${project.name}" from the studio? The workspace folder and files are not touched; memory is archived.${unsaved}`)) return
             const ok = await guard(() => window.ventriee.deleteProject(project.id), 'Project removed from studio')
-            if (ok === undefined) return
+            if (ok === null) return
             onClose()
           }}
         >

@@ -3,6 +3,22 @@ import { IPC, type VentrieeApi, type CredentialInfo } from '../shared/ipc'
 import type { ChatMessage, EngineKind, ModelOption, ModelPrefs, PromptDoc, ProviderConfig, Snapshot } from '../shared/types'
 
 const api: VentrieeApi = {
+  filesList: (id, path) => ipcRenderer.invoke(IPC.filesList, id, path),
+  filesFind: (id, query) => ipcRenderer.invoke(IPC.filesFind, id, query),
+  filesRead: (id, path) => ipcRenderer.invoke(IPC.filesRead, id, path),
+  filesSave: (id, file) => ipcRenderer.invoke(IPC.filesSave, id, file),
+  filesCreate: (id, path, directory) => ipcRenderer.invoke(IPC.filesCreate, id, path, directory),
+  gitStatus: (id) => ipcRenderer.invoke(IPC.gitStatus, id),
+  gitDiff: (id, path, staged) => ipcRenderer.invoke(IPC.gitDiff, id, path, staged),
+  gitAction: (id, action, path, value) => ipcRenderer.invoke(IPC.gitAction, id, action, path, value),
+  authStatus: () => ipcRenderer.invoke(IPC.authStatus),
+  authSignIn: (input, signup) => ipcRenderer.invoke(IPC.authSignIn, input, signup),
+  authClear: () => ipcRenderer.invoke(IPC.authClear),
+  onAuthLocked: (cb) => {
+    const listener = () => cb()
+    ipcRenderer.on(IPC.authLocked, listener)
+    return () => ipcRenderer.removeListener(IPC.authLocked, listener)
+  },
   snapshot: () => ipcRenderer.invoke(IPC.snapshot),
   onPatch: (cb) => {
     const listener = (_e: unknown, patch: Snapshot) => cb(patch)

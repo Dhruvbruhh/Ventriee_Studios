@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { guard, useStore } from './store'
 import { Modal, NewProjectDialog, ProjectSwitcher, Toast } from './shell'
 import { Floor } from './components/Floor'
@@ -13,6 +13,8 @@ import { MemoryPanel } from './panels/MemoryPanel'
 import { AutomationsPanel, SkillsPanel } from './panels/SkillsPanel'
 import { ProjectPanel } from './panels/ProjectPanel'
 import { IconMemory, IconClock, IconSettings, IconSkill, IconSpark } from './icons'
+import { AccountButton } from './auth'
+const CodeWorkspace = lazy(() => import('./editor/CodeWorkspace'))
 
 export function App() {
   const snapshot = useStore((s) => s.snapshot)
@@ -27,11 +29,13 @@ export function App() {
   const selectedAgentId = useStore((s) => s.selectedAgentId)
   const [newProject, setNewProject] = useState(false)
   const [showAdvisor, setShowAdvisor] = useState(false)
+  const [codeOpened, setCodeOpened] = useState(false)
+  useEffect(() => { if (workspace === 'code') setCodeOpened(true) }, [workspace])
 
   useEffect(() => {
     let mounted = true
-    void window.ventriee.snapshot().then((snap) => {
-      if (mounted) setSnapshot(snap)
+    void guard(() => window.ventriee.snapshot()).then((snap) => {
+      if (mounted && snap) setSnapshot(snap)
     })
     const offPatch = window.ventriee.onPatch((snap) => setSnapshot(snap))
     const offOutput = window.ventriee.onOutput((payload) => appendOutput(payload.agentId, payload.chunk))
@@ -96,7 +100,13 @@ export function App() {
         <div className="tb-divider" />
         <ProjectSwitcher onOpen={() => setNewProject(true)} />
         <div className="tb-divider" />
-        <div className="ws-toggle" role="tablist" aria-label="Workspace">
+        <div className="ws-toggle" role="tablist" aria-label="Workspace" onKeyDown={(event) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+          const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+          const current = buttons.indexOf(document.activeElement as HTMLButtonElement)
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
+          event.preventDefault(); buttons[next]?.focus(); buttons[next]?.click()
+        }}>
           <button
             className={`ws-tab${workspace === 'plan' ? ' on' : ''}`}
             onClick={() => setWorkspace('plan')}
@@ -106,6 +116,7 @@ export function App() {
           >
             Plan
           </button>
+          <button className={`ws-tab${workspace === 'code' ? ' on' : ''}`} role="tab" aria-selected={workspace === 'code'} onClick={() => setWorkspace('code')} title="Edit project files and manage Git">Code</button>
           <button
             className={`ws-tab${workspace === 'office' ? ' on' : ''}`}
             onClick={() => setWorkspace('office')}
@@ -118,6 +129,7 @@ export function App() {
           </button>
         </div>
         <div className="tb-spacer" />
+        <AccountButton />
         <div className="health" title={`${configured} of ${snapshot.providers.length} engines ready`}>
           <span className={`health-dot${working > 0 ? ' on' : configured > 0 ? ' warn' : ''}`} />
           <span className="health-label">
@@ -144,7 +156,7 @@ export function App() {
 
       {workspace === 'plan' ? (
         <Workspace />
-      ) : (
+      ) : workspace === 'office' ? (
         <>
           <div className="main">
             <div className="floor-wrap">
@@ -158,7 +170,10 @@ export function App() {
           </div>
           <CommandBar />
         </>
-      )}
+      ) : null}
+      {codeOpened && project ? <Suspense fallback={workspace === 'code' ? <div className="code-empty">Loading code workspace…</div> : null}>
+        <CodeWorkspace key={project.id} project={project} visible={workspace === 'code'} />
+      </Suspense> : workspace === 'code' && !project ? <div className="code-empty"><p>Create a project to open its files.</p><button className="btn primary" onClick={() => setNewProject(true)}>Create project</button></div> : null}
 
       {newProject ? <NewProjectDialog onClose={() => setNewProject(false)} /> : null}
       {panel === 'settings' ? <SettingsPanel onClose={() => setPanel('none')} /> : null}
