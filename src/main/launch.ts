@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { basename, dirname, extname, join } from 'node:path'
+import { basename, dirname, extname, join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { parseJsonc } from './typeindex'
 import { findExecutable } from './lsp'
 import type { Catalog, DebuggerSpec } from '../shared/catalog'
@@ -37,7 +38,7 @@ export function substitute<T>(value: T, root: string, file: string | null): T {
 }
 
 /** VS Code `type` names for the debuggers in the catalog. */
-const TYPES: Record<string, string> = { python: 'debugpy', debugpy: 'debugpy', go: 'delve', lldb: 'lldb', 'lldb-dap': 'lldb', codelldb: 'lldb', cppdbg: 'lldb' }
+const TYPES: Record<string, string> = { python: 'debugpy', debugpy: 'debugpy', go: 'delve', lldb: 'lldb', 'lldb-dap': 'lldb', codelldb: 'lldb', cppdbg: 'lldb', java: 'java' }
 
 /** Which debugger runs a configuration (or the current file of a language): 'node' for the built-in Node.js one. */
 export function debuggerFor(catalog: Catalog, config: LaunchConfig | null, language: string): string | null {
@@ -47,6 +48,19 @@ export function debuggerFor(catalog: Catalog, config: LaunchConfig | null, langu
   }
   if (['javascript', 'typescript'].includes(language)) return 'node'
   return catalog.debuggers.find((d) => d.languages.includes(language))?.id ?? null
+}
+
+/** Java: the language server (with java-debug loaded) finds the file's main class and classpath, and runs the adapter. */
+export async function javaLaunch(spec: DebuggerSpec, ask: (command: string, args?: unknown[]) => Promise<unknown>, root: string, file: string, config: Record<string, unknown> | null) {
+  const abs = join(root, file)
+  const mains = ((await ask('vscode.java.resolveMainClass', [pathToFileURL(abs).href])) ?? []) as Array<{ mainClass: string; projectName: string; filePath?: string }>
+  const main = config?.mainClass ? mains.find((m) => m.mainClass === config.mainClass) ?? { mainClass: String(config.mainClass), projectName: String(config.projectName ?? '') }
+    : mains.find((m) => m.filePath && resolve(m.filePath).toLowerCase() === resolve(abs).toLowerCase())
+  if (!main) throw new Error('This file has no main method to run. Open the file with `public static void main`, or pick a launch configuration.')
+  const [modulePaths, classPaths] = ((await ask('vscode.java.resolveClasspath', [main.mainClass, main.projectName])) ?? [[], []]) as [string[], string[]]
+  const port = Number(await ask(spec.languageServerCommand!))
+  if (!port) throw new Error('The Java language server did not start the debugger')
+  return { port, args: { ...(config ?? substitute(spec.launch, root, file)), mainClass: main.mainClass, projectName: main.projectName, modulePaths, classPaths } }
 }
 
 /** Launch arguments for "debug the current file": builds it first when the debugger needs a compiled program. */

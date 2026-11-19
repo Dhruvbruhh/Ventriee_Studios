@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol } from 'electron'
 import { join, relative, sep } from 'node:path'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
 import { StudioAuth } from './auth'
 import { FileService, workspacePath } from './files'
@@ -18,10 +18,10 @@ import { PlanningService } from './planning'
 import { isInside } from './paths'
 import { detectProviders, testEngine, defaultEndpoint, runEngine } from './engines'
 import { IPC } from '../shared/ipc'
-import { TerminalService } from './terminal'
+import { TerminalService, shells } from './terminal'
 import { DebugSession } from './debugger'
 import { DapSession, type Debugger } from './dap'
-import { debuggerFor, launchConfigs, substitute, currentFileLaunch } from './launch'
+import { debuggerFor, launchConfigs, substitute, currentFileLaunch, javaLaunch } from './launch'
 import { LspService, findExecutable } from './lsp'
 import { ExtensionService } from './extensions'
 import { TestService, detectRunners } from './testrunner'
@@ -29,7 +29,7 @@ import { listTasks } from './tasks'
 import { HistoryService } from './history'
 import { github } from './github'
 import { ErrorLog, issueUrl } from './errorlog'
-import { baseCatalog } from '../shared/catalog'
+import { baseCatalog, type Catalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
 import { projectTypes } from './typeindex'
 import { eslintFile, prettierFormat } from './projecttools'
@@ -67,7 +67,17 @@ const windows = new Map<number, { win: BrowserWindow; projectId: string | null }
 const terminals = new TerminalService()
 /** One debug session per window. */
 const debugSessions = new Map<number, Debugger>()
-const catalog = () => baseCatalog
+/** Plugin jars installed for a debugger (Java's java-debug), which its language server loads at start. */
+const pluginDir = (id: string) => join(app.getPath('userData'), 'debug-plugins', id)
+const pluginJars = (id: string) => { try { return readdirSync(pluginDir(id)).filter((f) => f.endsWith('.jar')).map((f) => join(pluginDir(id), f)) } catch { return [] } }
+const catalog = (): Catalog => ({
+  ...baseCatalog,
+  languages: baseCatalog.languages.map((l) => {
+    const d = baseCatalog.debuggers.find((x) => x.plugin && x.languages.includes(l.id))
+    const jars = d ? pluginJars(d.id) : []
+    return jars.length ? { ...l, servers: l.servers.map((s) => ({ ...s, initializationOptions: { ...(s.initializationOptions as Record<string, unknown> | undefined), bundles: jars } })) } : l
+  })
+})
 const lsp = new LspService(catalog)
 let tests: TestService
 const stopDebug = (owner: number) => { debugSessions.get(owner)?.stop(); debugSessions.delete(owner) }
@@ -362,10 +372,11 @@ function registerIpc() {
   handle(IPC.graphifyStatus, (event, id: string) => graphify.status(projectRoot(event, id)))
   handle(IPC.graphifyBuild, (event, id: string) => graphify.build(projectRoot(event, id)))
   handle(IPC.graphifyQuery, (event, id: string, question: string) => graphify.query(projectRoot(event, id), String(question ?? '')))
-  handle(IPC.termOpen, (event, id: string, cols: number, rows: number) => {
+  handle(IPC.termShells, () => shells().map(({ id, label }) => ({ id, label })))
+  handle(IPC.termOpen, (event, id: string, cols: number, rows: number, shell?: string) => {
     const sender = event.sender
     const send = (channel: string, payload: unknown) => { if (!sender.isDestroyed()) sender.send(channel, payload) }
-    return terminals.open(sender.id, projectRoot(event, id), cols, rows, (term, data) => send(IPC.termData, { id: term, data }), (term, code) => send(IPC.termExit, { id: term, code }))
+    return terminals.open(sender.id, projectRoot(event, id), cols, rows, (term, data) => send(IPC.termData, { id: term, data }), (term, code) => send(IPC.termExit, { id: term, code }), typeof shell === 'string' ? shell : undefined)
   })
   handle(IPC.termWrite, (event, id: string, data: string) => terminals.write(event.sender.id, id, data))
   handle(IPC.termResize, (event, id: string, cols: number, rows: number) => terminals.resize(event.sender.id, id, cols, rows))
@@ -399,6 +410,19 @@ function registerIpc() {
     session = dap
     debugSessions.set(sender.id, session)
     try {
+      if (spec.languageServerCommand) {
+        const language = spec.languages[0]
+        if (spec.plugin && !pluginJars(spec.id).length) {
+          await extensions.pluginJars(spec.plugin.extension, spec.plugin.folder, pluginDir(spec.id))
+          lsp.restart(sender.id, root, language)
+          throw new Error(`${spec.name} is now installed. The ${language} language server is restarting to load it; press Debug again once it shows as ready.`)
+        }
+        const ask = (command: string, args: unknown[] = []) => lsp.request(sender.id, root, language, 'workspace/executeCommand', { command, arguments: args }, 120_000)
+          .catch((e: Error) => { throw new Error(/not running/.test(e.message) ? `Open a ${language} file first so its language server starts` : e.message) })
+        const { port, args } = await javaLaunch(spec, ask, root, input.file, config)
+        await dap.start({ ...args, type: undefined, name: undefined, request: 'launch' }, bps, port)
+        return
+      }
       const args = config ?? await currentFileLaunch(spec, String(input?.language ?? ''), root, input.file)
       await dap.start({ ...args, type: undefined, name: undefined, request: args.request ?? 'launch' }, bps) } catch (error) { stopDebug(sender.id); throw error }
   })
@@ -418,15 +442,15 @@ function registerIpc() {
   // Settings sync: editor preferences and the extension list only; never keys, endpoints or MCP settings.
   handle(IPC.syncPush, async () => {
     const s = store.settings()
-    const payload = { editorTheme: s.editorTheme, vimMode: s.vimMode, keybindings: s.keybindings, extensions: extensions.list().map((e) => e.id), syncedAt: Date.now() }
+    const payload = { editorTheme: s.editorTheme, iconTheme: s.iconTheme, vimMode: s.vimMode, keybindings: s.keybindings, extensions: extensions.list().map((e) => e.id), syncedAt: Date.now() }
     await auth.saveSyncedData({ ventrieeSync: payload })
     return payload.syncedAt
   })
   handle(IPC.syncPull, async () => {
-    const data = (await auth.syncedData()).ventrieeSync as { editorTheme?: unknown; vimMode?: unknown; keybindings?: unknown; extensions?: unknown; syncedAt?: number } | undefined
+    const data = (await auth.syncedData()).ventrieeSync as { editorTheme?: unknown; iconTheme?: unknown; vimMode?: unknown; keybindings?: unknown; extensions?: unknown; syncedAt?: number } | undefined
     if (!data) return null
     const keybindings = Array.isArray(data.keybindings) ? data.keybindings.filter((b): b is { key: string; command: string } => typeof b?.key === 'string' && typeof b?.command === 'string').slice(0, 500) : []
-    store.saveSettings({ ...(typeof data.editorTheme === 'string' ? { editorTheme: data.editorTheme } : {}), vimMode: data.vimMode === true, keybindings })
+    store.saveSettings({ ...(typeof data.editorTheme === 'string' ? { editorTheme: data.editorTheme } : {}), ...(typeof data.iconTheme === 'string' ? { iconTheme: data.iconTheme } : {}), vimMode: data.vimMode === true, keybindings })
     debouncedNotify()
     const have = new Set(extensions.list().map((e) => e.id))
     return { syncedAt: Number(data.syncedAt ?? 0), missingExtensions: (Array.isArray(data.extensions) ? data.extensions : []).filter((x): x is string => typeof x === 'string' && !have.has(x)).slice(0, 100) }
@@ -462,6 +486,7 @@ function registerIpc() {
   handle(IPC.extList, () => extensions.list())
   handle(IPC.extUpdates, () => extensions.updates())
   handle(IPC.extContributions, () => extensions.contributions())
+  handle(IPC.extIconTheme, (_e, id: string) => extensions.iconTheme(String(id)))
   // Language servers are the owner's installed tools (found on PATH), run in the project folder like a terminal.
   handle(IPC.lspEnsure, (event, id: string, language: string) => {
     const sender = event.sender

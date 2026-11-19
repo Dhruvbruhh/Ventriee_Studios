@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
+import { diffRows } from '../../../shared/diffrows'
 import { RichText } from '../components/RichText'
 import { guard, cleanError } from '../store'
 
@@ -16,6 +17,10 @@ export function GitHubPanel({ projectId }: { projectId: string }) {
   const [review, setReview] = useState('')
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState('')
+  const [notes, setNotes] = useState<Array<{ path: string; line: number | null; side?: string; body: string; user?: { login: string } }>>([])
+  const [at, setAt] = useState<{ path: string; line: number; side: 'LEFT' | 'RIGHT' } | null>(null)
+  const [lineBody, setLineBody] = useState('')
+  const loadNotes = (n: number) => void run({ kind: 'lineComments', number: n }).then((list) => setNotes(Array.isArray(list) ? list as typeof notes : []), () => setNotes([]))
   const run = (action: Parameters<typeof window.ventriee.github>[1]) => window.ventriee.github(projectId, action)
   const load = () => {
     setItems(null); setError('')
@@ -23,7 +28,7 @@ export function GitHubPanel({ projectId }: { projectId: string }) {
   }
   useEffect(load, [kind, projectId])
   const show = async (n: number) => {
-    setDiff(''); setReview(''); setBody('')
+    setDiff(''); setReview(''); setBody(''); setAt(null); setNotes([])
     const d = await guard(() => run({ kind: kind === 'prs' ? 'pr' : 'issue', number: n }))
     if (d) setOpen(d as Details)
   }
@@ -47,12 +52,25 @@ export function GitHubPanel({ projectId }: { projectId: string }) {
       {isPr ? <>
         <p className="tree-note">{open.files?.length ?? 0} files changed</p>
         <div className="code-search-row">
-          <button className="btn tiny" onClick={() => void guard(() => run({ kind: 'diff', number: open.number })).then((d) => setDiff(String(d ?? '')))}>View diff</button>
+          <button className="btn tiny" onClick={() => { loadNotes(open.number); void guard(() => run({ kind: 'diff', number: open.number })).then((d) => setDiff(String(d ?? ''))) }}>View diff</button>
           <button className="btn tiny" disabled={busy === 'ai'} onClick={() => { setBusy('ai'); void guard(() => window.ventriee.githubReview(projectId, open.number)).then((r) => { setBusy(''); if (r) setReview(r.answer) }) }}>{busy === 'ai' ? 'Reviewing…' : 'AI review'}</button>
           <button className="btn tiny" disabled={busy === 'checkout'} onClick={() => void act('checkout', () => run({ kind: 'checkout', number: open.number }), `Checked out #${open.number}`)}>Check out</button>
         </div></> : null}
       {review ? <div className="ext-readme" aria-label="AI review"><b>AI review</b><RichText text={review} /></div> : null}
-      {diff ? <pre className="gh-diff" aria-label="Pull request diff">{diff.split('\n').slice(0, 5000).map((l, i) => <span key={i} className={l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : l.startsWith('@@') ? 'hunk' : ''}>{l}{'\n'}</span>)}</pre> : null}
+      {diff ? <div className="gh-diff" aria-label="Pull request diff. Click a line to comment on it.">{diffRows(diff).slice(0, 5000).map((r, i) => {
+        const here = notes.filter((n) => n.path === r.path && n.line === r.line && (n.side ?? 'RIGHT') === r.side)
+        const picked = at && r.line && at.path === r.path && at.line === r.line && at.side === r.side
+        return <Fragment key={i}>
+          {r.line ? <button type="button" className={`gh-line ${r.kind}`} title={`Comment on ${r.path}:${r.line}`} onClick={() => { setAt({ path: r.path!, line: r.line!, side: r.side! }); setLineBody('') }}>{r.text || ' '}</button>
+            : <div className={`gh-line ${r.kind}`}>{r.text || ' '}</div>}
+          {here.map((n, j) => <div key={j} className="gh-comment inline"><b>{n.user?.login}</b><RichText text={n.body} /></div>)}
+          {picked ? <div className="gh-inline-form">
+            <textarea className="textarea" rows={3} autoFocus aria-label={`Comment on ${r.path} line ${r.line}`} value={lineBody} onChange={(e) => setLineBody(e.target.value)} maxLength={65_000} />
+            <div className="code-search-row"><button className="btn tiny primary" disabled={!lineBody.trim() || Boolean(busy)} onClick={() => { setBusy('line'); void guard(() => run({ kind: 'lineComment', number: open.number, path: at.path, line: at.line, side: at.side, body: lineBody }), 'Comment posted').then((ok) => { setBusy(''); if (ok !== null) { setAt(null); loadNotes(open.number) } }) }}>Comment on line {r.line}</button>
+              <button className="btn tiny" onClick={() => setAt(null)}>Cancel</button></div>
+          </div> : null}
+        </Fragment>
+      })}</div> : null}
       {(open.comments ?? []).slice(-20).map((c, i) => <div key={i} className="gh-comment"><b>{c.author.login}</b><RichText text={c.body} /></div>)}
       <textarea className="textarea" rows={4} aria-label="Comment or review" placeholder="Write a comment or review…" value={body} onChange={(e) => setBody(e.target.value)} maxLength={65_000} />
       <div className="code-search-row">

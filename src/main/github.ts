@@ -22,7 +22,7 @@ const number = (n: unknown) => { const v = Number(n); if (!Number.isInteger(v) |
 const text = (s: unknown, max = 65_000) => { if (typeof s !== 'string' || !s.trim() || s.length > max) throw new Error(`Write up to ${max.toLocaleString()} characters`); return s }
 
 export async function github(root: string, action: GithubAction): Promise<unknown> {
-  const json = async (args: string[]) => JSON.parse(await gh(root, args)) as unknown
+  const json = async (args: string[], input?: string) => JSON.parse(await gh(root, args, input)) as unknown
   switch (action.kind) {
     case 'prs': return json(['pr', 'list', '--limit', '50', '--json', 'number,title,author,headRefName,isDraft,updatedAt,url,reviewDecision'])
     case 'issues': return json(['issue', 'list', '--limit', '50', '--json', 'number,title,author,labels,updatedAt,url'])
@@ -33,6 +33,14 @@ export async function github(root: string, action: GithubAction): Promise<unknow
     // Bodies go through stdin (-F -), never the command line.
     case 'review': return gh(root, ['pr', 'review', number(action.number), `--${action.event === 'approve' ? 'approve' : action.event === 'request-changes' ? 'request-changes' : 'comment'}`, '--body-file', '-'], action.event === 'approve' && !action.body?.trim() ? '' : text(action.body))
     case 'comment': return gh(root, [action.issue ? 'issue' : 'pr', 'comment', number(action.number), '--body-file', '-'], text(action.body))
+    // `{owner}/{repo}` is filled in by gh from the project's GitHub remote.
+    case 'lineComments': return json(['api', `repos/{owner}/{repo}/pulls/${number(action.number)}/comments`, '--paginate'])
+    case 'lineComment': {
+      if (typeof action.path !== 'string' || !action.path || action.path.length > 1000 || !Number.isInteger(action.line) || action.line < 1) throw new Error('Pick a line in the diff')
+      const head = (await json(['pr', 'view', number(action.number), '--json', 'headRefOid'])) as { headRefOid: string }
+      return json(['api', `repos/{owner}/{repo}/pulls/${number(action.number)}/comments`, '-X', 'POST', '--input', '-'],
+        JSON.stringify({ body: text(action.body), commit_id: head.headRefOid, path: action.path, line: action.line, side: action.side === 'LEFT' ? 'LEFT' : 'RIGHT' }))
+    }
     case 'merge': return gh(root, ['pr', 'merge', number(action.number), `--${['merge', 'squash', 'rebase'].includes(action.method) ? action.method : 'merge'}`])
     default: throw new Error('Unknown GitHub action')
   }

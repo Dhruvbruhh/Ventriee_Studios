@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { RichText } from '../components/RichText'
 import { guard, useStore } from '../store'
-import { extensionThemes, loadExtensions } from './extensions'
+import { extensionIconThemes, extensionThemes, loadExtensions } from './extensions'
+import { loadIconTheme } from './fileicons'
 import type { ExtensionInfo, ExtensionSearchHit } from '../../../shared/workspace'
 
 type Details = ExtensionSearchHit & { supported: string[]; needsRuntime: boolean; readme: string }
-const LABELS: Record<string, string> = { themes: 'Color themes', snippets: 'Snippets', languages: 'Languages', grammars: 'Syntax highlighting' }
+const LABELS: Record<string, string> = { iconThemes: 'File icons', themes: 'Color themes', snippets: 'Snippets', languages: 'Languages', grammars: 'Syntax highlighting' }
 
 /** Open VSX extensions: search, read what an extension would add, install, enable, update, pick a theme. */
 export function ExtensionsPanel() {
@@ -17,9 +18,11 @@ export function ExtensionsPanel() {
   const [details, setDetails] = useState<Details | null>(null)
   const [busy, setBusy] = useState('')
   const [themes, setThemes] = useState(extensionThemes)
+  const [iconThemes, setIconThemes] = useState(extensionIconThemes)
+  const iconTheme = useStore((s) => s.snapshot?.settings.iconTheme ?? '')
   const refresh = async () => {
     setInstalled(await window.ventriee.extList().catch(() => []))
-    await loadExtensions(theme); setThemes(extensionThemes)
+    await loadExtensions(theme); setThemes(extensionThemes); setIconThemes(extensionIconThemes)
   }
   useEffect(() => { void refresh() }, [])
   const search = async () => {
@@ -57,6 +60,9 @@ export function ExtensionsPanel() {
     <section aria-label="Editor theme"><h4>Editor theme</h4>
       <select aria-label="Editor theme" value={themes.some((t) => t.id === theme) ? theme : 'ventriee'} onChange={(e) => useTheme(e.target.value)}>
         <option value="ventriee">Ventriee (default)</option>{themes.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></section>
+    <section aria-label="File icons"><h4>File icons</h4>
+      <select aria-label="File icon theme" value={iconThemes.some((t) => t.id === iconTheme) ? iconTheme : ''} onChange={(e) => void guard(() => window.ventriee.saveSettings({ iconTheme: e.target.value })).then(() => loadIconTheme(e.target.value))}>
+        <option value="">None (default)</option>{iconThemes.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></section>
     <section aria-label="Installed extensions"><h4>Installed <button className="btn tiny" onClick={() => void guard(() => window.ventriee.extUpdates()).then((u) => { if (u) { setUpdates(u); if (!u.length) useStore.getState().notify('All extensions are up to date') } })}>Check for updates</button></h4>
       {installed.length ? installed.map((e) => { const update = updates.find((u) => u.id === e.id); return <div key={e.id} className="ext-installed">
         <button className="change-path" onClick={() => void guard(() => window.ventriee.extDetails(e.id)).then((d) => d && setDetails(d))}><b>{e.name}</b> <small className="dim">v{e.version}</small></button>

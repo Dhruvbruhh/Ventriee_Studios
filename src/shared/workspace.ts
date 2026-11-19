@@ -23,8 +23,15 @@ export type GitAction = 'init' | 'stage' | 'unstage' | 'commit' | 'checkout' | '
 
 export interface ExtensionSearchHit { id: string; name: string; publisher: string; version: string; description: string; downloads: number; icon: string | null }
 export interface ExtensionInfo { id: string; name: string; publisher: string; version: string; description: string; enabled: boolean; supported: string[]; needsRuntime: boolean }
+/** A file icon theme: icon ids to data URLs, and names, extensions and language ids to icon ids (keys lower-case). */
+export interface FileIconTheme {
+  icons: Record<string, string>
+  file?: string; folder?: string; folderExpanded?: string
+  fileExtensions: Record<string, string>; fileNames: Record<string, string>; folderNames: Record<string, string>; folderNamesExpanded: Record<string, string>; languageIds: Record<string, string>
+}
 export interface ExtensionContributions {
   themes: Array<{ id: string; label: string; dark: boolean; colors: Record<string, string>; tokenColors: unknown[] }>
+  iconThemes: Array<{ id: string; label: string }>
   snippets: Array<{ language: string; snippets: Record<string, { prefix: string | string[]; body: string | string[]; description?: string }> }>
   languages: Array<{ id: string; extensions?: string[]; filenames?: string[]; aliases?: string[]; configuration?: Record<string, unknown> }>
   grammars: Array<{ language?: string; scopeName: string; path: string; content: string }>
@@ -36,4 +43,5 @@ export type GithubAction =
   | { kind: 'prs' } | { kind: 'issues' } | { kind: 'pr'; number: number } | { kind: 'issue'; number: number } | { kind: 'diff'; number: number }
   | { kind: 'checkout'; number: number } | { kind: 'review'; number: number; event: 'approve' | 'request-changes' | 'comment'; body: string }
   | { kind: 'comment'; number: number; body: string; issue?: boolean } | { kind: 'merge'; number: number; method: 'merge' | 'squash' | 'rebase' }
+  | { kind: 'lineComments'; number: number } | { kind: 'lineComment'; number: number; path: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }
 

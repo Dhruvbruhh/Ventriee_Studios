@@ -25,14 +25,14 @@ import type {
   Task
 } from './types'
 import type { Catalog, LspEvent, LspStatus } from './catalog'
-import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, GithubAction, ProjectTask, TestEvent, ExtensionContributions, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
+import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, GithubAction, ProjectTask, TestEvent, ExtensionContributions, FileIconTheme, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
 
 export const IPC = {
   filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', projectTypes: 'files:project-types', toolsFormat: 'tools:format', toolsLint: 'tools:lint', codeAsk: 'code:ask', codeChange: 'code:change', codeComplete: 'code:complete', runsList: 'runs:list', spendToday: 'spend:today', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
   gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action', gitLineChanges: 'git:line-changes', gitBlame: 'git:blame',
-  termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
+  termOpen: 'term:open', termShells: 'term:shells', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
   debugStart: 'debug:start', debugConfigs: 'debug:configs', debugVariables: 'debug:variables', debugThread: 'debug:thread', debugCommand: 'debug:command', debugEvaluate: 'debug:evaluate', debugBreakpoints: 'debug:breakpoints', debugStop: 'debug:stop', debugEvent: 'debug:event',
-  extSearch: 'ext:search', extDetails: 'ext:details', extInstall: 'ext:install', extUninstall: 'ext:uninstall', extSetEnabled: 'ext:enabled', extList: 'ext:list', extUpdates: 'ext:updates', extContributions: 'ext:contributions',
+  extSearch: 'ext:search', extDetails: 'ext:details', extInstall: 'ext:install', extUninstall: 'ext:uninstall', extSetEnabled: 'ext:enabled', extList: 'ext:list', extUpdates: 'ext:updates', extContributions: 'ext:contributions', extIconTheme: 'ext:icon-theme',
   testsRunners: 'tests:runners', testsRun: 'tests:run', testsStop: 'tests:stop', testsEvent: 'tests:event',
   tasksList: 'tasks:list', filesReadLarge: 'files:read-large', toolsDetect: 'tools:detect', errorReport: 'errors:report', errorLog: 'errors:log', errorClear: 'errors:clear', reportProblem: 'errors:issue', syncPush: 'sync:push', syncPull: 'sync:pull', github: 'github:run', githubReview: 'github:review', historyList: 'history:list', historyRead: 'history:read',
   toolCatalog: 'tools:catalog', lspEnsure: 'lsp:ensure', lspRequest: 'lsp:request', lspNotify: 'lsp:notify', lspEvent: 'lsp:event',
@@ -149,7 +149,9 @@ export interface VentrieeApi {
   gitAction(projectId: string, action: GitAction, path?: string, value?: string): Promise<void>
   gitLineChanges(projectId: string, path: string): Promise<LineChange[]>
   gitBlame(projectId: string, path: string, line: number): Promise<BlameLine | null>
-  termOpen(projectId: string, cols: number, rows: number): Promise<string>
+  termOpen(projectId: string, cols: number, rows: number, shell?: string): Promise<string>
+  /** Shells installed on this computer, the default first. */
+  termShells(): Promise<Array<{ id: string; label: string }>>
   termWrite(id: string, data: string): Promise<void>
   termResize(id: string, cols: number, rows: number): Promise<void>
   termClose(id: string): Promise<void>
@@ -172,6 +174,7 @@ export interface VentrieeApi {
   extList(): Promise<ExtensionInfo[]>
   extUpdates(): Promise<Array<{ id: string; version: string }>>
   extContributions(): Promise<ExtensionContributions>
+  extIconTheme(id: string): Promise<FileIconTheme | null>
   testsRunners(projectId: string): Promise<Array<{ id: string; name: string }>>
   testsRun(projectId: string, runnerId: string, target: { file?: string; name?: string }): Promise<void>
   testsStop(): Promise<void>

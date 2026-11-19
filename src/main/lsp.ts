@@ -197,8 +197,11 @@ export class LspService {
     return entry.server
   }
 
-  request(owner: number, root: string, languageId: string, method: string, params: unknown) { return this.get(owner, root, languageId).request(method, params) }
+  request(owner: number, root: string, languageId: string, method: string, params: unknown, timeout?: number) { return this.get(owner, root, languageId).request(method, params, timeout) }
   notify(owner: number, root: string, languageId: string, method: string, params: unknown) { this.get(owner, root, languageId).notify(method, params) }
+
+  /** Stops one language's server; the editor starts it again (with the current catalog, e.g. a new plugin). */
+  restart(owner: number, root: string, languageId: string) { try { void this.get(owner, root, languageId).stop() } catch { /* not running */ } }
 
   closeOwner(owner: number) { for (const [key, e] of this.servers) if (e.owner === owner) { this.servers.delete(key); void e.server.stop() } }
   closeAll() { for (const e of this.servers.values()) void e.server.stop(); this.servers.clear() }
