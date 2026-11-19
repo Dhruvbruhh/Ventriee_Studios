@@ -12,6 +12,8 @@ import { fileUrl } from '../src/shared/fileurl'
 import type { DebugEvent } from '../src/shared/workspace'
 
 // Real toolchains only: each block runs where its tools are installed.
+// Installed and able to start: rustup's stub and an lldb-dap missing its DLLs both exist but fail.
+const runs = (tool: string, arg: string) => { const file = findExecutable(tool); if (!file) return false; try { execFileSync(file, [arg], { stdio: 'ignore', timeout: 30_000 }); return true } catch { return false } }
 const project = (files: Record<string, string>) => {
   const root = mkdtempSync(join(tmpdir(), 'ventriee-lang-'))
   for (const [path, text] of Object.entries(files)) { mkdirSync(join(root, path, '..'), { recursive: true }); writeFileSync(join(root, path), text) }
@@ -70,13 +72,13 @@ describe.skipIf(!findExecutable('dlv') || !findExecutable('go'))('Go: Delve', { 
 })
 
 const rust = { 'Cargo.toml': '[package]\nname = "demo"\nversion = "0.1.0"\nedition = "2021"\n', 'src/main.rs': 'fn total(xs: &[i32]) -> i32 {\n    let s: i32 = xs.iter().sum();\n    s * 2\n}\n\nfn main() {\n    let n = total(&[20, 1]);\n    println!("{}", n);\n}\n' }
-describe.skipIf(!findExecutable('rust-analyzer') || !findExecutable('cargo'))('Rust: rust-analyzer', { timeout: 180_000 }, () => {
+describe.skipIf(!runs('rust-analyzer', '--version') || !findExecutable('cargo'))('Rust: rust-analyzer', { timeout: 180_000 }, () => {
   it('hovers and reports errors', async () => {
     const root = project({ ...rust, 'src/main.rs': rust['src/main.rs'] + 'fn bad() -> i32 { "x" }\n' })
     await hoverAndErrors('rust', root, 'src/main.rs', rust['src/main.rs'] + 'fn bad() -> i32 { "x" }\n', { line: 6, character: 13 }, 'total')
   })
 })
-describe.skipIf(!findExecutable('lldb-dap') || !findExecutable('cargo'))('Rust: LLDB', { timeout: 180_000 }, () => {
+describe.skipIf(!runs('lldb-dap', '--help') || !findExecutable('cargo'))('Rust: LLDB', { timeout: 180_000 }, () => {
   it('stops at a breakpoint and shows variables', async () => { await debugTo('lldb', 'rust', project(rust), 'src/main.rs', 3, 's', '21') })
 })
 
@@ -87,7 +89,7 @@ describe.skipIf(!findExecutable('clangd'))('C: clangd', { timeout: 120_000 }, ()
     await hoverAndErrors('c', root, 'main.c', c['main.c'] + 'int bad(void) { return undefined_thing; }\n', { line: 8, character: 22 }, 'total')
   })
 })
-describe.skipIf(!findExecutable('lldb-dap') || !findExecutable('gcc'))('C: LLDB', { timeout: 120_000 }, () => {
+describe.skipIf(!runs('lldb-dap', '--help') || !findExecutable('gcc'))('C: LLDB', { timeout: 120_000 }, () => {
   it('stops at a breakpoint and shows variables', async () => { await debugTo('lldb', 'c', project(c), 'main.c', 5, 's', '21') })
 })
 
