@@ -1,8 +1,11 @@
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 
 export type Row = Record<string, unknown>
+
+/** Thrown when the data on disk is newer than this app; startup shows it instead of touching the data. */
+export class NewerDataError extends Error {}
 
 /**
  * Ordered schema migrations. `user_version` records how many have run, so a new
@@ -129,7 +132,7 @@ const MIGRATIONS: string[] = [
 export class Db {
   private db: DatabaseSync
 
-  constructor(file: string) {
+  constructor(private file: string) {
     mkdirSync(dirname(file), { recursive: true })
     this.db = new DatabaseSync(file)
     this.db.exec('PRAGMA journal_mode = WAL')
@@ -151,6 +154,13 @@ export class Db {
    */
   private migrate() {
     const from = this.schemaVersion
+    // Data written by a newer app has columns this version does not know; running on it could lose them.
+    if (from > MIGRATIONS.length) {
+      this.db.close()
+      throw new NewerDataError(`Your studio data was saved by a newer version of Ventriee Studios (data version ${from}, this app understands ${MIGRATIONS.length}). Install the latest version to open it; your data has not been changed.`)
+    }
+    // An update that changes the schema first keeps a copy of the data as it was.
+    if (from > 0 && from < MIGRATIONS.length) this.backup(from)
     for (let version = from; version < MIGRATIONS.length; version += 1) {
       this.db.exec('BEGIN')
       try {
@@ -162,6 +172,18 @@ export class Db {
         throw new Error(`Database migration ${version + 1} failed: ${(error as Error).message}`)
       }
     }
+  }
+
+  /** A consistent copy (VACUUM INTO works with WAL), named by schema version; the newest three are kept. */
+  private backup(version: number) {
+    const target = `${this.file}.v${version}.bak`
+    if (existsSync(target)) rmSync(target)
+    this.db.exec(`VACUUM INTO '${target.replace(/'/g, "''")}'`)
+    const dir = dirname(this.file)
+    const prefix = `${basename(this.file)}.v`
+    const old = readdirSync(dir).filter((f) => f.startsWith(prefix) && f.endsWith('.bak'))
+      .sort((a, b) => Number(b.slice(prefix.length, -4)) - Number(a.slice(prefix.length, -4))).slice(3)
+    for (const name of old) rmSync(join(dir, name), { force: true })
   }
 
   get<T = Row>(sql: string, ...params: unknown[]): T | undefined {

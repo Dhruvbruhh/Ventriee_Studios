@@ -6,6 +6,7 @@ import { IconClose, IconCheck, IconPlus, IconRefresh, IconTrash } from '../icons
 import { ModelPicker, resolveModel } from '../components/ModelPicker'
 import { AddProviderDialog } from '../components/AddProviderDialog'
 import { TerminalView } from '../components/Terminal'
+import { installUpdate, useUpdateState } from '../components/UpdateNotice'
 import type { CredentialInfo } from '../../../shared/ipc'
 
 type Tab = 'subscriptions' | 'engines' | 'workers' | 'run' | 'tools' | 'data'
@@ -655,9 +656,33 @@ function RunPolicy() {
 function DataTab() {
   const snapshot = useStore((s) => s.snapshot)!
   const project = snapshot.projects.find((p) => p.id === snapshot.activeProjectId)
+  const update = useUpdateState()
+  const [checking, setChecking] = useState(false)
+  const statusText: Record<string, string> = {
+    unsupported: update?.message ?? 'Updates are checked in the installed app.',
+    idle: 'Checks automatically a few seconds after start and every six hours.',
+    checking: 'Checking…',
+    current: 'You have the latest version.',
+    downloading: `Downloading ${update?.version ?? ''} (${update?.percent ?? 0}%).`,
+    ready: `Version ${update?.version ?? ''} is downloaded. It installs when you restart or close the app.`,
+    manual: `Version ${update?.version ?? ''} is available. This portable copy cannot update itself; download the new one.`,
+    error: `Could not check for updates: ${update?.message ?? 'unknown error'}. The app keeps working; it tries again later.`
+  }
   return (
     <>
-      <div className="section-label">Current project</div>
+      <div className="section-label">Updates</div>
+      <div className="kv-row">
+        <div className="kv-row-main">
+          <div className="kv-row-title">Ventriee Studios {update?.current ?? ''}</div>
+          <div className="kv-row-sub" role="status">{update ? statusText[update.status] : 'Loading…'} Updating never touches your projects, settings or sign-in; the studio database is backed up before a new version changes it.</div>
+        </div>
+        {update?.status === 'ready' ? <button className="btn primary" onClick={() => void installUpdate()}>Restart to update</button>
+          : update?.status === 'manual' && update.url ? <a className="btn" href={update.url} target="_blank" rel="noreferrer">Download</a>
+          : <button className="btn" disabled={checking || !update || ['unsupported', 'checking', 'downloading'].includes(update.status)}
+              onClick={async () => { setChecking(true); await guard(() => window.ventriee.updateCheck()); setChecking(false) }}>{checking ? 'Checking…' : 'Check now'}</button>}
+      </div>
+
+      <div className="section-label" style={{ marginTop: 14 }}>Current project</div>
       <dl>
         <div className="kv"><dt>Name</dt><dd>{project?.name ?? '—'}</dd></div>
         <div className="kv"><dt>Workspace</dt><dd className="mono">{project?.path ?? '—'}</dd></div>

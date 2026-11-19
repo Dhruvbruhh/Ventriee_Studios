@@ -10,6 +10,14 @@ const api: VentrieeApi = {
   runsList: (id) => ipcRenderer.invoke(IPC.runsList, id),
   runChanges: (id, jobId) => ipcRenderer.invoke(IPC.runChanges, id, jobId),
   runUndo: (id, jobId) => ipcRenderer.invoke(IPC.runUndo, id, jobId),
+  updateState: () => ipcRenderer.invoke(IPC.updateState),
+  updateCheck: () => ipcRenderer.invoke(IPC.updateCheck),
+  updateInstall: () => ipcRenderer.invoke(IPC.updateInstall),
+  onUpdate: (cb) => {
+    const listener = (_e: unknown, state: Parameters<typeof cb>[0]) => cb(state)
+    ipcRenderer.on(IPC.updateChanged, listener)
+    return () => ipcRenderer.removeListener(IPC.updateChanged, listener)
+  },
   filesRead: (id, path) => ipcRenderer.invoke(IPC.filesRead, id, path),
   filesSave: (id, file) => ipcRenderer.invoke(IPC.filesSave, id, file),
   filesCreate: (id, path, directory) => ipcRenderer.invoke(IPC.filesCreate, id, path, directory),

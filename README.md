@@ -153,6 +153,16 @@ Keys live in the OS credential store, never in project files, logs or the render
 | `node scripts/workflow-check.mjs` | End-to-end gate: chat → prompt → enhance → assign → real sessions → office → providers → persistence |
 | `npm run dist` | Build + package installers |
 
+### Publishing an update
+
+Installed copies update from this repository's GitHub Releases.
+
+1. Raise `version` in `package.json` (installed apps only take a higher version).
+2. `npm run dist`. This writes `dist/Ventriee-Studios-<version>-setup.exe`, its `.blockmap`, and `dist/latest.yml`.
+3. Publish a release tagged `v<version>` with all three files attached (the updater reads `latest.yml`), for example:
+   `gh release create v0.2.0 dist/Ventriee-Studios-0.2.0-setup.exe dist/Ventriee-Studios-0.2.0-setup.exe.blockmap dist/latest.yml dist/Ventriee-Studios-0.2.0-portable.exe --prerelease`
+4. Never edit or delete a migration that has shipped; add a new one. The app backs up the database before running new migrations and refuses data from a newer version.
+
 ## Credits
 
 - The pixel office engine under `src/renderer/src/office/` — MIT, from

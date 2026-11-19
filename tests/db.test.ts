@@ -1,9 +1,9 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
-import { Db } from '../src/main/db'
+import { Db, NewerDataError } from '../src/main/db'
 
 const profile = () => join(mkdtempSync(join(tmpdir(), 'ventriee-db-')), 'ventriee.db')
 
@@ -40,5 +40,37 @@ describe('schema migrations', () => {
     const second = new Db(file)
     expect(second.schemaVersion).toBe(version)
     second.close()
+  })
+
+  it('backs up the data before an update changes the schema, keeping the newest three', () => {
+    const file = profile()
+    const current = new Db(file)
+    const latest = current.schemaVersion
+    current.close()
+    for (const from of [latest - 4, latest - 3, latest - 2, latest - 1]) {
+      const raw = new DatabaseSync(file)
+      raw.exec(`PRAGMA user_version = ${from}`)
+      raw.exec(`INSERT OR REPLACE INTO kv(key, value) VALUES('marker', 'before v${from}')`)
+      raw.close()
+      try { new Db(file).close() } catch { /* re-running an ALTER on an already-upgraded table fails; the backup is what we check */ }
+    }
+    const dir = dirname(file)
+    const backups = readdirSync(dir).filter((f) => f.endsWith('.bak')).sort()
+    expect(backups).toEqual([`ventriee.db.v${latest - 3}.bak`, `ventriee.db.v${latest - 2}.bak`, `ventriee.db.v${latest - 1}.bak`])
+    const copy = new DatabaseSync(join(dir, `ventriee.db.v${latest - 1}.bak`))
+    expect(copy.prepare("SELECT value FROM kv WHERE key = 'marker'").get()).toEqual({ value: `before v${latest - 1}` })
+    copy.close()
+  })
+
+  it('refuses data from a newer version instead of running on it', () => {
+    const file = profile()
+    new Db(file).close()
+    const raw = new DatabaseSync(file)
+    raw.exec('PRAGMA user_version = 999')
+    raw.close()
+    expect(() => new Db(file)).toThrow(NewerDataError)
+    const after = new DatabaseSync(file)
+    expect(after.prepare('PRAGMA user_version').get()).toEqual({ user_version: 999 })
+    after.close()
   })
 })
