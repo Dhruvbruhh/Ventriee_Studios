@@ -1407,3 +1407,17 @@
   .editor-conflict.merge { border-color: var(--warn); }
   .status-blame { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
 }
+
+@layer components {
+  .bp-dot { background: var(--err); border-radius: 99px; width: 9px !important; height: 9px !important; margin: 5px 0 0 5px; }
+  .debug-arrow { border-left: 7px solid var(--warn); border-top: 5px solid transparent; border-bottom: 5px solid transparent; margin: 4px 0 0 6px; height: 0 !important; width: 0 !important; }
+  .debug-current-line { background: color-mix(in srgb, var(--warn) 16%, transparent); }
+  .code-debug { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; }
+  .debug-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--line-soft); }
+  .debug-columns { display: grid; grid-template-columns: 1fr 1fr 1.2fr; min-height: 0; }
+  .debug-columns > section { min-height: 0; overflow: auto; padding: 6px 10px; border-right: 1px solid var(--line-soft); font-size: 12px; }
+  .debug-columns h4 { margin: 0 0 4px; font-size: 11px; color: var(--muted); font-weight: 600; }
+  .debug-columns section > button { display: block; width: 100%; text-align: left; padding: 2px 0; font: 12px var(--mono); }
+  .debug-var { display: flex; gap: 8px; font: 12px var(--mono); padding: 1px 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .debug-output { margin: 0; font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+}

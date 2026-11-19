@@ -9,7 +9,7 @@ import { Preview } from '../components/Preview'
 import { TerminalView } from '../components/Terminal'
 import { Modal } from '../shell'
 import { guard, useStore } from '../store'
-import type { CodeChangeResult, FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
+import type { CodeChangeResult, DebugFrame, DebugVariable, FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
 import type { Project } from '../../../shared/types'
 
 interface Tab { file: TextFile; model: monaco.editor.ITextModel; saved: string; subscription: monaco.IDisposable; view?: monaco.editor.ICodeEditorViewState | null }
@@ -68,7 +68,12 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [revision, setRevision] = useState(0)
   const [, setRender] = useState(0)
   const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'agents'>('files')
-  const [panel, setPanel] = useState<'terminal' | 'problems' | null>(null)
+  const [panel, setPanel] = useState<'terminal' | 'problems' | 'debug' | null>(null)
+  const [breakpoints, setBreakpoints] = useState<Record<string, number[]>>({})
+  const [debug, setDebug] = useState<{ status: 'idle' | 'starting' | 'running' | 'paused' | 'exited'; frames: DebugFrame[]; variables: DebugVariable[]; output: string; code?: number; error?: string }>({ status: 'idle', frames: [], variables: [], output: '' })
+  const [evalText, setEvalText] = useState('')
+  const [evalResult, setEvalResult] = useState('')
+  const toggleBreakpoint = useRef((_path: string, _line: number) => {})
   const [problems, setProblems] = useState<Problem[]>([])
   const [palette, setPalette] = useState(false)
   const [command, setCommand] = useState('')
@@ -123,12 +128,16 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   useEffect(() => {
     mounted.current = true
     const instance = monaco.editor.create(host.current!, { theme: 'ventriee', automaticLayout: true, fontFamily: 'Cascadia Code, Consolas, monospace', fontSize: 13,
-      minimap: { enabled: true }, padding: { top: 12 }, scrollBeyondLastLine: false, tabSize: 2, model: null })
+      minimap: { enabled: true }, padding: { top: 12 }, scrollBeyondLastLine: false, tabSize: 2, model: null, glyphMargin: true })
     editor.current = instance
     const position = instance.onDidChangeCursorPosition((event: { position: { lineNumber: number; column: number } }) => setCursor(event.position))
-    const selected = instance.onDidChangeCursorSelection(({ selection: s }) => setSelection(s.isEmpty() ? null : [s.startLineNumber, s.endLineNumber]))
+    const selectionSub = instance.onDidChangeCursorSelection(({ selection: s }) => setSelection(s.isEmpty() ? null : [s.startLineNumber, s.endLineNumber]))
+    // Clicking the margin left of the line numbers toggles a breakpoint.
+    const margin = instance.onMouseDown((e) => {
+      if (e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN && e.target.position && selected.current) toggleBreakpoint.current(selected.current, e.target.position.lineNumber)
+    })
     return () => {
-      mounted.current = false; position.dispose(); selected.dispose(); instance.dispose()
+      mounted.current = false; position.dispose(); selectionSub.dispose(); margin.dispose(); instance.dispose()
       for (const tab of tabs.current.values()) { tab.subscription.dispose(); if (!background.current.has(tab.model)) tab.model.dispose() }
       for (const model of background.current) if (!model.isDisposed()) model.dispose()
       background.current.clear(); clearProjectTypes()
@@ -346,6 +355,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   useEffect(() => {
     if (!visible) return
     const keys = (event: KeyboardEvent) => {
+      // F5: continue when paused, otherwise start debugging the open file.
+      if (event.key === 'F5' && !event.ctrlKey && !event.metaKey) { event.preventDefault(); if (debug.status === 'paused') debugCommand('continue'); else if (!debugLive) void startDebug(); return }
       if (!(event.ctrlKey || event.metaKey)) return
       const key = event.key.toLowerCase()
       if (key === 's') { event.preventDefault(); void save(event.shiftKey) }
@@ -448,6 +459,48 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     }, 500)
     return () => { alive = false; clearTimeout(timer) }
   }, [active, cursor.lineNumber, revision, project.id])
+  // ---------- debugger ----------
+  const debugLive = debug.status === 'running' || debug.status === 'paused' || debug.status === 'starting'
+  toggleBreakpoint.current = (path, line) => {
+    setBreakpoints((all) => {
+      const lines = all[path] ?? []
+      const next = lines.includes(line) ? lines.filter((l) => l !== line) : [...lines, line].sort((a, b) => a - b)
+      if (debugLive) void window.ventriee.debugBreakpoints(path, next).catch(() => {})
+      return { ...all, [path]: next }
+    })
+  }
+  useEffect(() => window.ventriee.onDebug((e) => {
+    if (!mounted.current) return
+    if (e.type === 'output') setDebug((d) => ({ ...d, output: (d.output + e.text).slice(-40_000) }))
+    else if (e.type === 'running') setDebug((d) => ({ ...d, status: 'running', frames: [], variables: [] }))
+    else if (e.type === 'exited') setDebug((d) => ({ ...d, status: 'exited', code: e.code, frames: [], variables: [] }))
+    else if (e.type === 'paused') {
+      setDebug((d) => ({ ...d, status: 'paused', frames: e.frames, variables: e.variables }))
+      setEvalResult('')
+      const top = e.frames.find((f) => !f.internal)
+      if (top) void openAt(top.path, top.line, top.column)
+    }
+  }), [])
+  const startDebug = async () => {
+    if (!active) return
+    setPanel('debug'); setEvalResult('')
+    setDebug({ status: 'starting', frames: [], variables: [], output: '' })
+    try { await window.ventriee.debugStart(project.id, active, breakpoints) } catch (error) {
+      if (mounted.current) setDebug({ status: 'idle', frames: [], variables: [], output: '', error: String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '') })
+    }
+  }
+  const debugCommand = (action: 'continue' | 'over' | 'into' | 'out' | 'pause') => void window.ventriee.debugCommand(action).catch(() => {})
+  // Breakpoint dots in the margin and the line the program is paused on.
+  const debugMarks = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
+  useEffect(() => {
+    if (!editor.current || !active) return
+    const paused = debug.status === 'paused' ? debug.frames.find((f) => !f.internal && f.path === active) : undefined
+    debugMarks.current?.clear()
+    debugMarks.current = editor.current.createDecorationsCollection([
+      ...(breakpoints[active] ?? []).map((line) => ({ range: new monaco.Range(line, 1, line, 1), options: { glyphMarginClassName: 'bp-dot', glyphMarginHoverMessage: { value: 'Breakpoint (click to remove)' } } })),
+      ...(paused ? [{ range: new monaco.Range(paused.line, 1, paused.line, 1), options: { isWholeLine: true, className: 'debug-current-line', glyphMarginClassName: 'debug-arrow' } }] : [])
+    ])
+  }, [breakpoints, active, debug])
   const tab = active ? tabs.current.get(active) : null
   // The merge conflict under the cursor, if any, with one-click resolutions.
   const conflictHere = tab && !diff ? findConflicts(tab.model.getValue()).find((c) => cursor.lineNumber >= c.start && cursor.lineNumber <= c.end) : undefined
@@ -479,6 +532,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     { label: 'Agent: Ask about this code', run: () => { setAsk(true); setPreview(false); setTimeout(() => document.querySelector<HTMLTextAreaElement>('[aria-label="Question for the agent"]')?.focus()) }, disabled: !tab },
     { label: 'Editor: Find in file', keys: 'Ctrl+F', run: () => { editor.current?.focus(); void editor.current?.getAction('actions.find')?.run() }, disabled: !tab },
     { label: 'Editor: Reload project types', run: () => void loadTypes() },
+    { label: 'Debug: Start debugging this file', keys: 'F5', run: () => void startDebug(), disabled: !active },
     { label: 'Editor: Format document', run: () => { void editor.current?.getAction('editor.action.formatDocument')?.run() }, disabled: !tab },
     ...(onNavigate ? [{ label: 'Studio: Go to Plan', run: () => onNavigate('plan') }, { label: 'Studio: Go to Office', run: () => onNavigate('office') }] : [])
   ]
@@ -522,8 +576,30 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       {panel ? <section className="code-panel" aria-label="Panel">
         <div className="code-panel-tabs" role="tablist"><button role="tab" aria-selected={panel === 'terminal'} className={panel === 'terminal' ? 'on' : ''} onClick={() => setPanel('terminal')}>Terminal</button>
           <button role="tab" aria-selected={panel === 'problems'} className={panel === 'problems' ? 'on' : ''} onClick={() => setPanel('problems')}>Problems <span className="badge">{problems.length}</span></button>
+          <button role="tab" aria-selected={panel === 'debug'} className={panel === 'debug' ? 'on' : ''} onClick={() => setPanel('debug')}>Debug{debugLive ? <span className="badge">{debug.status}</span> : null}</button>
           <span className="grow" /><button className="tab-close" aria-label="Close panel" onClick={() => setPanel(null)}><IconClose width={12} height={12} aria-hidden /></button></div>
         {panel === 'terminal' ? <TerminalView projectId={project.id} slot="panel" label="Terminal" />
+          : panel === 'debug' ? <div className="code-debug">
+            <div className="debug-bar">
+              {debugLive ? <button className="btn tiny" onClick={() => void window.ventriee.debugStop()}>Stop</button>
+                : <button className="btn tiny primary" disabled={!active || !/\.(m|c)?(j|t)s$/.test(active)} onClick={() => void startDebug()} title="Run the open file with Node.js under the debugger">Debug {active?.split('/').pop() ?? 'file'}</button>}
+              <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('continue')}>Continue</button>
+              <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('over')}>Step over</button>
+              <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('into')}>Step into</button>
+              <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('out')}>Step out</button>
+              <button className="btn tiny" disabled={debug.status !== 'running'} onClick={() => debugCommand('pause')}>Pause</button>
+              <span className="tree-note" role="status">{debug.error ? '' : debug.status === 'exited' ? `Exited with code ${debug.code}` : debug.status === 'idle' ? 'Click the margin left of a line number to set a breakpoint, then Debug. Runs JavaScript and TypeScript with your Node.js.' : debug.status === 'paused' ? 'Paused' : debug.status === 'starting' ? 'Starting…' : 'Running'}</span>
+            </div>
+            {debug.error ? <p className="editor-error" role="alert">{debug.error}</p> : null}
+            <div className="debug-columns">
+              <section aria-label="Call stack"><h4>Call stack</h4>{debug.frames.filter((f) => !f.internal).map((f, i) => <button key={i} onClick={() => void openAt(f.path, f.line, f.column)}><b>{f.name}</b> <span className="dim">{f.path}:{f.line}</span></button>)}</section>
+              <section aria-label="Variables"><h4>Variables</h4>{debug.variables.map((v) => <div key={`${v.scope}:${v.name}`} className="debug-var"><b>{v.name}</b> <span title={v.value}>{v.value}</span></div>)}
+                {debug.status === 'paused' ? <form onSubmit={(e) => { e.preventDefault(); void window.ventriee.debugEvaluate(evalText).then(setEvalResult, (err) => setEvalResult(String(err))) }}>
+                  <input className="input mono" aria-label="Expression to evaluate" placeholder="Evaluate an expression" value={evalText} onChange={(e) => setEvalText(e.target.value)} />
+                  {evalResult ? <div className="debug-var"><b>=</b> <span>{evalResult}</span></div> : null}</form> : null}</section>
+              <section aria-label="Program output"><h4>Output</h4><pre className="debug-output">{debug.output || ' '}</pre></section>
+            </div>
+          </div>
           : <div className="code-problems">{problems.length ? problems.map((p, i) => <button key={i} onClick={() => void openAt(p.path, p.line, p.column)}>
             <b className={p.severity === monaco.MarkerSeverity.Error ? 'problem-error' : 'problem-warn'}>{p.severity === monaco.MarkerSeverity.Error ? 'Error' : p.severity === monaco.MarkerSeverity.Warning ? 'Warning' : 'Info'}</b>
             <span>{p.message}</span><span className="dim">{p.path}:{p.line}</span></button>) : <p className="code-empty">No problems in open files. Diagnostics come from Monaco's built-in TypeScript, JavaScript, JSON, CSS and HTML support.</p>}</div>}

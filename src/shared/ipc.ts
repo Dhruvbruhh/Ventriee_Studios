@@ -24,12 +24,13 @@ import type {
   UpdateState,
   Task
 } from './types'
-import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
+import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, DebugEvent, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
 
 export const IPC = {
   filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', projectTypes: 'files:project-types', codeAsk: 'code:ask', codeChange: 'code:change', codeComplete: 'code:complete', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
   gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action', gitLineChanges: 'git:line-changes', gitBlame: 'git:blame',
   termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
+  debugStart: 'debug:start', debugCommand: 'debug:command', debugEvaluate: 'debug:evaluate', debugBreakpoints: 'debug:breakpoints', debugStop: 'debug:stop', debugEvent: 'debug:event',
   authStatus: 'auth:status',
   authSignIn: 'auth:signIn',
   authClear: 'auth:clear',
@@ -139,6 +140,12 @@ export interface VentrieeApi {
   termClose(id: string): Promise<void>
   onTermData(cb: (payload: { id: string; data: string }) => void): () => void
   onTermExit(cb: (payload: { id: string; code: number }) => void): () => void
+  debugStart(projectId: string, file: string, breakpoints: Record<string, number[]>): Promise<void>
+  debugCommand(action: 'continue' | 'over' | 'into' | 'out' | 'pause'): Promise<void>
+  debugEvaluate(expression: string): Promise<string>
+  debugBreakpoints(path: string, lines: number[]): Promise<void>
+  debugStop(): Promise<void>
+  onDebug(cb: (event: DebugEvent) => void): () => void
   authStatus(): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number } | null>
   authSignIn(input: { email: string; password: string }, signup?: boolean): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number } | null; message: string }>
   authClear(): Promise<void>

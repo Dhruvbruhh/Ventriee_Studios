@@ -8,6 +8,9 @@ export interface SearchHit { path: string; line: number; column: number; preview
 export interface SearchResult { hits: SearchHit[]; filesSearched: number; truncated: boolean }
 export interface TextFile { path: string; text: string; version: string; bom: boolean }
 export interface ProjectTypes { sources: Array<{ path: string; text: string }>; libs: Array<{ path: string; text: string }>; compilerOptions: Record<string, unknown>; truncated: boolean }
+export interface DebugFrame { name: string; path: string; line: number; column: number; internal: boolean }
+export interface DebugVariable { name: string; value: string; scope: string }
+export type DebugEvent = { type: 'running' } | { type: 'paused'; reason: string; frames: DebugFrame[]; variables: DebugVariable[] } | { type: 'output'; text: string } | { type: 'exited'; code: number }
 export interface LineChange { kind: 'added' | 'modified' | 'deleted'; start: number; end: number }
 export interface BlameLine { hash: string; author: string; time: number; summary: string }
 export interface GitChange { path: string; originalPath?: string; index: string; working: string }
