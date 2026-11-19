@@ -2,8 +2,20 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { realpathSync } from 'node:fs'
 import { workspacePath, FileService, MAX_TEXT_BYTES } from './files'
-import type { GitAction, GitChange, GitState } from '../shared/workspace'
+import type { BlameLine, GitAction, GitChange, GitState, LineChange } from '../shared/workspace'
 const execute = promisify(execFile)
+/** Hunk headers of `git diff -U0` as line ranges of the new file, for gutter markers. */
+export function parseLineChanges(raw: string): LineChange[] {
+  const out: LineChange[] = []
+  for (const m of raw.matchAll(/^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)) {
+    const oldCount = m[1] === undefined ? 1 : Number(m[1])
+    const start = Number(m[2])
+    const newCount = m[3] === undefined ? 1 : Number(m[3])
+    if (newCount === 0) out.push({ kind: 'deleted', start: Math.max(start, 1), end: Math.max(start, 1) })
+    else out.push({ kind: oldCount === 0 ? 'added' : 'modified', start, end: start + newCount - 1 })
+  }
+  return out
+}
 export function parseGitChanges(raw: string): GitChange[] {
   const changes: GitChange[] = []
   const entries = raw.split('\0').filter(Boolean)
@@ -82,6 +94,26 @@ export class GitService {
       }
     }
     return { original, modified, path }
+  }
+  /** How the saved file differs from the last commit, line by line. A file not in the last commit is all added. */
+  async lineChanges(root: string, path: string): Promise<LineChange[]> {
+    await this.requireRoot(root); workspacePath(root, path)
+    const inHead = await this.command(root, ['cat-file', '-e', `HEAD:${path}`]).then(() => true, () => false)
+    if (!inHead) {
+      try { return [{ kind: 'added', start: 1, end: new FileService().read(root, path).text.replace(/\r?\n$/, '').split('\n').length }] } catch { return [] }
+    }
+    return parseLineChanges(await this.command(root, ['diff', '--no-color', '--no-ext-diff', '-U0', 'HEAD', '--', path]))
+  }
+  /** Who last changed one line of the saved file, and in which commit. */
+  async blame(root: string, path: string, line: number): Promise<BlameLine | null> {
+    await this.requireRoot(root); workspacePath(root, path)
+    if (!Number.isInteger(line) || line < 1) return null
+    const raw = await this.command(root, ['blame', '--porcelain', '-L', `${line},${line}`, '--', path]).catch(() => '')
+    const hash = raw.slice(0, 40)
+    if (!/^[0-9a-f]{40}$/.test(hash)) return null
+    if (/^0+$/.test(hash)) return { hash: '', author: 'You', time: 0, summary: 'Not committed yet' }
+    const field = (name: string) => new RegExp(`^${name} (.*)$`, 'm').exec(raw)?.[1] ?? ''
+    return { hash: hash.slice(0, 8), author: field('author'), time: Number(field('author-time')) * 1000, summary: field('summary') }
   }
   async action(root: string, action: GitAction, path?: string, value?: string) {
     const key = realpathSync(root)

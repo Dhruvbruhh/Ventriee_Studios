@@ -24,11 +24,11 @@ import type {
   UpdateState,
   Task
 } from './types'
-import type { FileEntry, TextFile, GitState, GitAction, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
+import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
 
 export const IPC = {
   filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', codeAsk: 'code:ask', codeChange: 'code:change', codeComplete: 'code:complete', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
-  gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action',
+  gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action', gitLineChanges: 'git:line-changes', gitBlame: 'git:blame',
   termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
   authStatus: 'auth:status',
   authSignIn: 'auth:signIn',
@@ -130,6 +130,8 @@ export interface VentrieeApi {
   gitStatus(projectId: string): Promise<GitState>
   gitDiff(projectId: string, path: string, staged: boolean): Promise<{ original: string; modified: string; path: string }>
   gitAction(projectId: string, action: GitAction, path?: string, value?: string): Promise<void>
+  gitLineChanges(projectId: string, path: string): Promise<LineChange[]>
+  gitBlame(projectId: string, path: string, line: number): Promise<BlameLine | null>
   termOpen(projectId: string, cols: number, rows: number): Promise<string>
   termWrite(id: string, data: string): Promise<void>
   termResize(id: string, cols: number, rows: number): Promise<void>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { IconChevron, IconClose, IconEdit, IconTrash } from '../icons'
 import { monaco, languageFor, editorLanguages } from './monaco'
 import { SourceControl } from './SourceControl'
+import { findConflicts, resolveConflict } from './conflicts'
 import { AgentChanges } from './AgentChanges'
 import { Preview } from '../components/Preview'
 import { TerminalView } from '../components/Terminal'
@@ -394,7 +395,48 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     const result = await guard(() => window.ventriee.gitDiff(project.id, path, staged))
     if (result && mounted.current && request === comparing.current) setDiff({ ...result, staged })
   }
+  // Gutter marks: how the saved file differs from the last commit. Refreshed with the explorer tick and on save.
+  const gutter = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
+  useEffect(() => {
+    if (!active || !editor.current) return
+    let alive = true
+    void window.ventriee.gitLineChanges(project.id, active).then((ranges) => {
+      if (!alive || selected.current !== active || !editor.current) return
+      gutter.current?.clear()
+      gutter.current = editor.current.createDecorationsCollection(ranges.map((r) => ({
+        range: new monaco.Range(r.start, 1, r.end, 1),
+        options: { isWholeLine: true, linesDecorationsClassName: `gutter-${r.kind}`, overviewRuler: { color: r.kind === 'added' ? '#79dcb4' : r.kind === 'deleted' ? '#f4796b' : '#8ab4f8', position: monaco.editor.OverviewRulerLane.Left } }
+      })))
+    }).catch(() => { gutter.current?.clear() })
+    return () => { alive = false }
+  }, [active, revision, project.id])
+  // Blame for the line the cursor rests on; only for a saved buffer, where line numbers match the commit.
+  const [blame, setBlame] = useState('')
+  useEffect(() => {
+    setBlame('')
+    const current = active ? tabs.current.get(active) : null
+    if (!active || !current || current.model.getValue() !== current.saved) return
+    let alive = true
+    const timer = setTimeout(() => {
+      void window.ventriee.gitBlame(project.id, active, cursor.lineNumber).then((b) => {
+        if (!alive || !b) return
+        const days = b.time ? Math.round((Date.now() - b.time) / 86_400_000) : -1
+        setBlame(`${b.author}${days >= 0 ? `, ${days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`}` : ''} · ${b.summary}`)
+      }).catch(() => {})
+    }, 500)
+    return () => { alive = false; clearTimeout(timer) }
+  }, [active, cursor.lineNumber, revision, project.id])
   const tab = active ? tabs.current.get(active) : null
+  // The merge conflict under the cursor, if any, with one-click resolutions.
+  const conflictHere = tab && !diff ? findConflicts(tab.model.getValue()).find((c) => cursor.lineNumber >= c.start && cursor.lineNumber <= c.end) : undefined
+  const resolveHere = (choice: 'current' | 'incoming' | 'both') => {
+    if (!tab || !conflictHere) return
+    const text = resolveConflict(tab.model.getValue(), conflictHere, choice)
+    tab.model.pushStackElement()
+    tab.model.pushEditOperations([], [{ range: new monaco.Range(conflictHere.start, 1, conflictHere.end, tab.model.getLineMaxColumn(conflictHere.end)), text }], () => null)
+    tab.model.pushStackElement()
+    changed()
+  }
   const errors = problems.filter((p) => p.severity === monaco.MarkerSeverity.Error).length
   const commands: Command[] = [
     { label: 'File: Save', keys: 'Ctrl+S', run: () => void save(), disabled: !tab },
@@ -447,7 +489,9 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
           : diff ? <button className="btn tiny" onClick={() => setDiff(null)}>Back to editor</button> : <><button className="btn tiny" disabled={!tab || busy} onClick={() => void reload()}>Reload</button><button className="btn tiny" disabled={!tab || busy} onClick={() => { setNewPath(''); setCreate('copy') }}>Save copy</button><button className="btn tiny primary" disabled={!tab || busy || tab.saved === tab.model.getValue()} onClick={() => void save()}>Save</button></>}
         <button className="btn tiny" aria-pressed={ask} onClick={() => { setAsk(!ask); setPreview(false) }}>Ask agent</button>
         <button className="btn tiny" aria-pressed={preview} onClick={() => { setPreview(!preview); setAsk(false) }}>{preview ? 'Hide preview' : 'Show preview'}</button></div>
-      <div className="code-editor-body">{conflict && conflict === active && !diff ? <div className="editor-conflict" role="alert"><span>{conflict} changed on disk after you opened it. Your edits are kept here and were not saved.</span>
+      <div className="code-editor-body">{conflictHere ? <div className="editor-conflict merge" role="region" aria-label="Merge conflict"><span>Merge conflict at lines {conflictHere.start}–{conflictHere.end}. Keep which side?</span>
+        <button className="btn tiny" onClick={() => resolveHere('current')}>Accept current</button><button className="btn tiny" onClick={() => resolveHere('incoming')}>Accept incoming</button><button className="btn tiny" onClick={() => resolveHere('both')}>Accept both</button></div> : null}
+        {conflict && conflict === active && !diff ? <div className="editor-conflict" role="alert"><span>{conflict} changed on disk after you opened it. Your edits are kept here and were not saved.</span>
         <button className="btn tiny" onClick={() => void compareWithDisk()}>Compare with disk</button><button className="btn tiny" onClick={() => void reload()}>Reload from disk</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('copy') }}>Save a copy</button></div> : null}
         <div ref={host} className="monaco-surface" style={{ visibility: active && !diff ? 'visible' : 'hidden' }} />
         {diff ? <DiffView diff={diff} /> : !active ? <div className="code-welcome"><span className="code-welcome-symbol">{'{ }'}</span><h2>Your code, in one place</h2><p>Open a file in Explorer or press Ctrl+P.</p><p>Ctrl+S to save · Ctrl+F to find · Ctrl+H to replace</p><p>UTF-8 text files up to 2 MB. Language runtimes are installed separately.</p></div> : null}
@@ -464,7 +508,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <footer className="code-status"><span>{busy ? 'Saving…' : tab && tab.saved !== tab.model.getValue() ? 'Unsaved changes' : 'Saved'}</span>
         <button className="status-btn" onClick={() => setPanel((open) => open === 'problems' ? null : 'problems')} aria-label={`${problems.length} problems`}>{errors} errors · {problems.length - errors} warnings</button>
         <button className="status-btn" onClick={() => setPanel((open) => open === 'terminal' ? null : 'terminal')}>Terminal</button>
-        <button className="status-btn" onClick={() => { setCommand(''); setPalette(true) }} title="Command palette (Ctrl+Shift+P)">Commands</button><span className="grow" /><span>Ln {cursor.lineNumber}, Col {cursor.column}</span><span>UTF-8{tab?.file.bom ? ' BOM' : ''}</span>
+        <button className="status-btn" onClick={() => { setCommand(''); setPalette(true) }} title="Command palette (Ctrl+Shift+P)">Commands</button><span className="grow" />{blame ? <span className="status-blame" title={blame}>{blame}</span> : null}<span>Ln {cursor.lineNumber}, Col {cursor.column}</span><span>UTF-8{tab?.file.bom ? ' BOM' : ''}</span>
         <select aria-label="Editor language" value={tab?.model.getLanguageId() ?? 'plaintext'} disabled={!tab || Boolean(diff)} onChange={(e) => { if (tab) { monaco.editor.setModelLanguage(tab.model, e.target.value); changed() } }}>
           {editorLanguages().sort((a, b) => a.id.localeCompare(b.id)).map((lang) => <option value={lang.id} key={lang.id}>{lang.aliases?.[0] ?? lang.id}</option>)}
         </select></footer>

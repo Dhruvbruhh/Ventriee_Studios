@@ -1398,3 +1398,12 @@
   .change-path { flex: 1; min-width: 0; text-align: left; font: 11.5px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .change-path:hover { text-decoration: underline; }
 }
+
+@layer components {
+  /* Gutter marks against the last commit, like VS Code's. */
+  .gutter-added, .gutter-modified { border-left: 3px solid var(--ok); margin-left: 3px; }
+  .gutter-modified { border-left-color: var(--info); }
+  .gutter-deleted { border-left: 3px solid var(--err); margin-left: 3px; height: 4px !important; }
+  .editor-conflict.merge { border-color: var(--warn); }
+  .status-blame { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
+}

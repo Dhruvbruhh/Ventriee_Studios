@@ -296,6 +296,8 @@ function registerIpc() {
   handle(IPC.filesTrash, (event, id: string, path: string) => shell.trashItem(workspacePath(projectRoot(event, id), path)))
   handle(IPC.gitStatus, (event, id: string) => git.status(projectRoot(event, id)))
   handle(IPC.gitDiff, (event, id: string, path: string, staged: boolean) => git.diff(projectRoot(event, id), path, staged === true))
+  handle(IPC.gitLineChanges, (event, id: string, path: string) => git.lineChanges(projectRoot(event, id), path))
+  handle(IPC.gitBlame, (event, id: string, path: string, line: number) => git.blame(projectRoot(event, id), path, Number(line)))
   handle(IPC.gitAction, (event, id: string, action: GitAction, path?: string, value?: string) => git.action(projectRoot(event, id), action, path, value))
   handle(IPC.termOpen, (event, id: string, cols: number, rows: number) => {
     const sender = event.sender
