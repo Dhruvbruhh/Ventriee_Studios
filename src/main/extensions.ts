@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join, normalize, sep } from 'node:path'
+import { dirname, extname, join, normalize, sep } from 'node:path'
 import { unzipSync } from 'fflate'
 import { parseJsonc } from './typeindex'
-import type { ExtensionContributions, ExtensionInfo, ExtensionSearchHit } from '../shared/workspace'
+import type { ExtensionContributions, ExtensionInfo, ExtensionSearchHit, FileIconTheme } from '../shared/workspace'
 
 const REGISTRY = 'https://open-vsx.org/api'
 const MAX_DOWNLOAD = 60 * 1024 * 1024
@@ -12,7 +12,29 @@ const MAX_ENTRIES = 20_000
 const ID = /^[\w-]+(\.[\w-]+)?$/
 
 /** What we can use without running the extension's code: everything here is data. */
-const SUPPORTED = ['themes', 'snippets', 'languages', 'grammars'] as const
+const SUPPORTED = ['themes', 'iconThemes', 'snippets', 'languages', 'grammars'] as const
+
+const ICON_TYPES: Record<string, string> = { '.svg': 'image/svg+xml', '.png': 'image/png' }
+
+/**
+ * A VS Code file icon theme as a lookup table with its icons inlined as data URLs.
+ * Font-glyph icons (fontCharacter) are skipped; svg/png only, up to 64 KB each and 8 MB in all.
+ */
+export function parseIconTheme(json: unknown, readIcon: (path: string) => Buffer | null): FileIconTheme {
+  const t = (json ?? {}) as Record<string, unknown>
+  const defs = (t.iconDefinitions ?? {}) as Record<string, { iconPath?: string }>
+  const icons: Record<string, string> = {}
+  let total = 0
+  for (const [id, def] of Object.entries(defs)) {
+    const type = typeof def?.iconPath === 'string' ? ICON_TYPES[extname(def.iconPath).toLowerCase()] : undefined
+    const data = type ? readIcon(def.iconPath!) : null
+    if (!data || data.length > 64 * 1024 || (total += data.length) > 8 * 1024 * 1024) continue
+    icons[id] = `data:${type};base64,${data.toString('base64')}`
+  }
+  const map = (v: unknown) => Object.fromEntries(Object.entries((v ?? {}) as Record<string, unknown>).filter(([, id]) => typeof id === 'string' && icons[id as string]).map(([k, id]) => [k.toLowerCase(), id as string]))
+  const one = (v: unknown) => (typeof v === 'string' && icons[v] ? v : undefined)
+  return { icons, file: one(t.file), folder: one(t.folder), folderExpanded: one(t.folderExpanded), fileExtensions: map(t.fileExtensions), fileNames: map(t.fileNames), folderNames: map(t.folderNames), folderNamesExpanded: map(t.folderNamesExpanded), languageIds: map(t.languageIds) }
+}
 type Manifest = { name: string; publisher: string; displayName?: string; description?: string; version: string; main?: string; browser?: string; contributes?: Record<string, unknown> }
 
 export function supportOf(manifest: Manifest): { supported: string[]; needsRuntime: boolean } {
@@ -132,9 +154,23 @@ export class ExtensionService {
     return out
   }
 
+  /** One installed file icon theme (`<extension id>/<theme id>`), resolved for the file tree. */
+  iconTheme(id: string): FileIconTheme | null {
+    const ext = this.list().find((e) => e.enabled && typeof id === 'string' && id.startsWith(`${e.id}/`))
+    const entry = ext ? ((this.manifest(ext.id)?.contributes?.iconThemes as Array<{ id: string; path: string }> | undefined) ?? []).find((t) => `${ext.id}/${t.id}` === id) : null
+    if (!ext || !entry) return null
+    const base = normalize(join(this.dir, ext.id) + sep)
+    const inside = (rel: string) => { const file = normalize(join(base, rel)); return file.startsWith(base) ? file : null }
+    const json = inside(entry.path)
+    if (!json) return null
+    try {
+      return parseIconTheme(parseJsonc(readFileSync(json, 'utf8')), (rel) => { const file = inside(join(dirname(entry.path), rel)); try { return file ? readFileSync(file) : null } catch { return null } })
+    } catch { return null }
+  }
+
   /** Every enabled extension's data contributions, files read and resolved, ready for the editor. */
   contributions(): ExtensionContributions {
-    const out: ExtensionContributions = { themes: [], snippets: [], languages: [], grammars: [] }
+    const out: ExtensionContributions = { themes: [], iconThemes: [], snippets: [], languages: [], grammars: [] }
     for (const ext of this.list().filter((e) => e.enabled)) {
       const base = join(this.dir, ext.id)
       const m = this.manifest(ext.id)!
@@ -158,6 +194,7 @@ export class ExtensionService {
         const theme = readTheme(t.path)
         if (theme) out.themes.push({ id: `${ext.id}/${t.id ?? t.label ?? t.path}`, label: t.label ?? t.id ?? ext.name, dark: t.uiTheme !== 'vs' && t.uiTheme !== 'hc-light', ...theme })
       }
+      for (const t of (c.iconThemes as Array<{ id: string; label?: string; path: string }> | undefined) ?? []) if (typeof t?.id === 'string') out.iconThemes.push({ id: `${ext.id}/${t.id}`, label: t.label ?? t.id })
       for (const s of (c.snippets as Array<{ language: string; path: string }> | undefined) ?? []) {
         const text = read(s.path)
         if (text) out.snippets.push({ language: s.language, snippets: parseJsonc(text) as Record<string, { prefix: string | string[]; body: string | string[]; description?: string }> })

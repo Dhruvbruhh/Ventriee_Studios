@@ -54,11 +54,13 @@ class TokenState implements monaco.languages.IState {
 
 let applied: monaco.IDisposable[] = []
 export let extensionThemes: Array<{ id: string; label: string }> = []
+export let extensionIconThemes: Array<{ id: string; label: string }> = []
 
 export async function applyContributions(c: ExtensionContributions) {
   for (const d of applied) d.dispose()
   applied = []
   extensionThemes = c.themes.map((t) => ({ id: t.id, label: t.label }))
+  extensionIconThemes = c.iconThemes ?? []
   for (const t of c.themes) { try { monaco.editor.defineTheme(themeName(t.id), toMonacoTheme(t)) } catch { /* a malformed theme is skipped */ } }
 
   const known = new Set(monaco.languages.getLanguages().map((l) => l.id))

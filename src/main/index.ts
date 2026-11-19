@@ -418,15 +418,15 @@ function registerIpc() {
   // Settings sync: editor preferences and the extension list only; never keys, endpoints or MCP settings.
   handle(IPC.syncPush, async () => {
     const s = store.settings()
-    const payload = { editorTheme: s.editorTheme, vimMode: s.vimMode, keybindings: s.keybindings, extensions: extensions.list().map((e) => e.id), syncedAt: Date.now() }
+    const payload = { editorTheme: s.editorTheme, iconTheme: s.iconTheme, vimMode: s.vimMode, keybindings: s.keybindings, extensions: extensions.list().map((e) => e.id), syncedAt: Date.now() }
     await auth.saveSyncedData({ ventrieeSync: payload })
     return payload.syncedAt
   })
   handle(IPC.syncPull, async () => {
-    const data = (await auth.syncedData()).ventrieeSync as { editorTheme?: unknown; vimMode?: unknown; keybindings?: unknown; extensions?: unknown; syncedAt?: number } | undefined
+    const data = (await auth.syncedData()).ventrieeSync as { editorTheme?: unknown; iconTheme?: unknown; vimMode?: unknown; keybindings?: unknown; extensions?: unknown; syncedAt?: number } | undefined
     if (!data) return null
     const keybindings = Array.isArray(data.keybindings) ? data.keybindings.filter((b): b is { key: string; command: string } => typeof b?.key === 'string' && typeof b?.command === 'string').slice(0, 500) : []
-    store.saveSettings({ ...(typeof data.editorTheme === 'string' ? { editorTheme: data.editorTheme } : {}), vimMode: data.vimMode === true, keybindings })
+    store.saveSettings({ ...(typeof data.editorTheme === 'string' ? { editorTheme: data.editorTheme } : {}), ...(typeof data.iconTheme === 'string' ? { iconTheme: data.iconTheme } : {}), vimMode: data.vimMode === true, keybindings })
     debouncedNotify()
     const have = new Set(extensions.list().map((e) => e.id))
     return { syncedAt: Number(data.syncedAt ?? 0), missingExtensions: (Array.isArray(data.extensions) ? data.extensions : []).filter((x): x is string => typeof x === 'string' && !have.has(x)).slice(0, 100) }
@@ -462,6 +462,7 @@ function registerIpc() {
   handle(IPC.extList, () => extensions.list())
   handle(IPC.extUpdates, () => extensions.updates())
   handle(IPC.extContributions, () => extensions.contributions())
+  handle(IPC.extIconTheme, (_e, id: string) => extensions.iconTheme(String(id)))
   // Language servers are the owner's installed tools (found on PATH), run in the project folder like a terminal.
   handle(IPC.lspEnsure, (event, id: string, language: string) => {
     const sender = event.sender

@@ -69,6 +69,7 @@ const api: VentrieeApi = {
   extList: () => ipcRenderer.invoke(IPC.extList),
   extUpdates: () => ipcRenderer.invoke(IPC.extUpdates),
   extContributions: () => ipcRenderer.invoke(IPC.extContributions),
+  extIconTheme: (id) => ipcRenderer.invoke(IPC.extIconTheme, id),
   testsRunners: (id) => ipcRenderer.invoke(IPC.testsRunners, id),
   testsRun: (id, runnerId, target) => ipcRenderer.invoke(IPC.testsRun, id, runnerId, target),
   testsStop: () => ipcRenderer.invoke(IPC.testsStop),

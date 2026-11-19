@@ -405,6 +405,8 @@ export interface AppSettings {
   keybindings: Array<{ key: string; command: string }>
   /** Opt-in: keep a local log of crashes and errors for "Report a problem". */
   errorReports: boolean
+  /** File icon theme from an installed extension (`<extension>/<theme>`); '' is the built-in look. */
+  iconTheme: string
   /** Spending caps per day, across all projects and per project, in USD; 0 is off. */
   dailyBudgetUsd: number
   projectBudgetUsd: number

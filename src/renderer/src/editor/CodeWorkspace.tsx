@@ -15,6 +15,7 @@ import { KeybindingsModal } from './KeybindingsModal'
 import { applyKeybindings, chordOf } from './keybindings'
 import { TestsPanel, testAt, useTests } from './TestsPanel'
 import { loadExtensions } from './extensions'
+import { iconFor, loadIconTheme, useIconTheme } from './fileicons'
 import type { LspStatus } from '../../../shared/catalog'
 import { Preview } from '../components/Preview'
 import { TerminalView, terminalOutput } from '../components/Terminal'
@@ -38,6 +39,7 @@ function Directory({ projectId, path, depth, revision, onOpen, onRename, onDelet
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const icons = useIconTheme()
   useEffect(() => {
     let alive = true
     void window.ventriee.filesList(projectId, path).then((files) => { if (alive) { setEntries(files); setError(''); setLoading(false) } })
@@ -53,7 +55,7 @@ function Directory({ projectId, path, depth, revision, onOpen, onRename, onDelet
       onClick={() => {
         if (!entry.directory) { onOpen(entry.path); return }
         setExpanded((old) => { const next = new Set(old); if (next.has(entry.path)) next.delete(entry.path); else next.add(entry.path); return next })
-      }}><span className="file-glyph">{entry.directory ? <IconChevron width={12} height={12} aria-hidden style={{ transform: expanded.has(entry.path) ? undefined : 'rotate(-90deg)' }} /> : null}</span><span>{entry.name}</span></button>
+      }}><span className="file-glyph">{entry.directory ? <IconChevron width={12} height={12} aria-hidden style={{ transform: expanded.has(entry.path) ? undefined : 'rotate(-90deg)' }} /> : null}</span>{iconFor(icons, entry.name, entry.directory, expanded.has(entry.path)) ? <img className="file-icon" src={iconFor(icons, entry.name, entry.directory, expanded.has(entry.path))} alt="" /> : null}<span>{entry.name}</span></button>
       <span className="file-tree-actions"><button className="tab-close" aria-label={`Rename or move ${entry.path}`} title="Rename or move" onClick={() => onRename(entry)}><IconEdit width={12} height={12} aria-hidden /></button>
         <button className="tab-close" aria-label={`Delete ${entry.path}`} title="Move to Recycle Bin" onClick={() => onDelete(entry)}><IconTrash width={12} height={12} aria-hidden /></button></span></div>
     {entry.directory && expanded.has(entry.path) ? <Directory {...{ projectId, revision, onOpen, onRename, onDelete }} path={entry.path} depth={depth + 1} /> : null}
@@ -492,6 +494,9 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     return () => { alive = false; vim?.dispose(); if (vimStatus.current) vimStatus.current.textContent = '' }
   }, [vimMode])
   useEffect(() => { void loadExtensions(editorTheme) }, [editorTheme])
+  const iconThemeId = useStore((s) => s.snapshot?.settings.iconTheme ?? '')
+  useEffect(() => { void loadIconTheme(iconThemeId) }, [iconThemeId])
+  const icons = useIconTheme()
   useEffect(() => {
     if (!completionModel) return
     // Ghost-text completions (Tab accepts). Waits for a pause in typing; a newer keystroke cancels the request.
@@ -819,7 +824,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     </aside>
     <section className={`code-main${panel ? ' with-panel' : ''}`} aria-label="Code editor">
       <div className="code-tabs" role="tablist" aria-label="Open files">{[...tabs.current].map(([path, value]) => <div className={`code-tab${path === active && !diff ? ' on' : ''}`} key={path}>
-        <button role="tab" aria-selected={path === active && !diff} title={path} onClick={() => activate(path)}>{path.split('/').at(-1)}{value.saved !== value.model.getValue() ? <span aria-label="Unsaved"> ●</span> : null}</button><button className="tab-close" onClick={() => close(path)} aria-label={`Close ${path}`}><IconClose width={12} height={12} aria-hidden /></button></div>)}</div>
+        <button role="tab" aria-selected={path === active && !diff} title={path} onClick={() => activate(path)}>{iconFor(icons, path.split('/').at(-1)!, false) ? <img className="file-icon" src={iconFor(icons, path.split('/').at(-1)!, false)} alt="" /> : null}{path.split('/').at(-1)}{value.saved !== value.model.getValue() ? <span aria-label="Unsaved"> ●</span> : null}</button><button className="tab-close" onClick={() => close(path)} aria-label={`Close ${path}`}><IconClose width={12} height={12} aria-hidden /></button></div>)}</div>
       <div className="code-toolbar"><span className="code-breadcrumb" title={diff?.path ?? active ?? project.path}>{diff ? `${diff.label ?? (diff.staged ? 'Staged' : 'Working tree')} / ${diff.path}` : active ? [active.split('/').join(' › '), ...crumbs.map((c) => c.name)].join(' › ') : 'Open a file to begin'}</span>
         {diff?.change ? <><button className="btn tiny" onClick={() => dropChange(diff.change!)}>Reject</button><button className="btn tiny primary" onClick={() => void acceptChange(diff.change!)}>Accept into editor</button></>
           : diff?.proposal && proposal ? <><button className="btn tiny" onClick={() => { setProposal(null); setDiff(null) }}>Reject</button><button className="btn tiny primary" onClick={acceptProposal}>Accept into editor</button></>
