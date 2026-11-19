@@ -225,6 +225,10 @@ function createWindow(projectId?: string) {
     return { action: 'deny' }
   })
   // Project previews must never navigate the privileged studio document.
+  // A reload starts a new renderer that cannot reach the old shells; end them so they don't pile up to the limit.
+  win.webContents.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) terminals.closeOwner(windowId)
+  })
   win.webContents.on('will-navigate', (event, url) => {
     if (originOf(url) !== rendererOrigin) event.preventDefault()
   })

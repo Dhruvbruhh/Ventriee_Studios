@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { IconChevron, IconClose } from '../icons'
 import { monaco, languageFor, editorLanguages } from './monaco'
 import { SourceControl } from './SourceControl'
 import { AgentChanges } from './AgentChanges'
@@ -35,7 +36,7 @@ function Directory({ projectId, path, depth, revision, onOpen }: { projectId: st
       onClick={() => {
         if (!entry.directory) { onOpen(entry.path); return }
         setExpanded((old) => { const next = new Set(old); if (next.has(entry.path)) next.delete(entry.path); else next.add(entry.path); return next })
-      }}><span className="file-glyph">{entry.directory ? expanded.has(entry.path) ? '▾' : '▸' : '·'}</span><span>{entry.name}</span></button>
+      }}><span className="file-glyph">{entry.directory ? <IconChevron width={12} height={12} aria-hidden style={{ transform: expanded.has(entry.path) ? undefined : 'rotate(-90deg)' }} /> : null}</span><span>{entry.name}</span></button>
     {entry.directory && expanded.has(entry.path) ? <Directory {...{ projectId, revision, onOpen }} path={entry.path} depth={depth + 1} /> : null}
   </div>)}</div>
 }
@@ -351,7 +352,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     </aside>
     <section className={`code-main${panel ? ' with-panel' : ''}`} aria-label="Code editor">
       <div className="code-tabs" role="tablist" aria-label="Open files">{[...tabs.current].map(([path, value]) => <div className={`code-tab${path === active && !diff ? ' on' : ''}`} key={path}>
-        <button role="tab" aria-selected={path === active && !diff} title={path} onClick={() => activate(path)}>{path.split('/').at(-1)}{value.saved !== value.model.getValue() ? <span aria-label="Unsaved"> ●</span> : null}</button><button className="tab-close" onClick={() => close(path)} aria-label={`Close ${path}`}>×</button></div>)}</div>
+        <button role="tab" aria-selected={path === active && !diff} title={path} onClick={() => activate(path)}>{path.split('/').at(-1)}{value.saved !== value.model.getValue() ? <span aria-label="Unsaved"> ●</span> : null}</button><button className="tab-close" onClick={() => close(path)} aria-label={`Close ${path}`}><IconClose width={12} height={12} aria-hidden /></button></div>)}</div>
       <div className="code-toolbar"><span className="code-breadcrumb" title={diff?.path ?? active ?? project.path}>{diff ? `${diff.label ?? (diff.staged ? 'Staged' : 'Working tree')} / ${diff.path}` : active ?? 'Open a file to begin'}</span>
         {diff?.proposal && proposal ? <><button className="btn tiny" onClick={() => { setProposal(null); setDiff(null) }}>Reject</button><button className="btn tiny primary" onClick={acceptProposal}>Accept into editor</button></>
           : diff ? <button className="btn tiny" onClick={() => setDiff(null)}>Back to editor</button> : <><button className="btn tiny" disabled={!tab || busy} onClick={() => void reload()}>Reload</button><button className="btn tiny" disabled={!tab || busy} onClick={() => { setNewPath(''); setCreate('copy') }}>Save copy</button><button className="btn tiny primary" disabled={!tab || busy || tab.saved === tab.model.getValue()} onClick={() => void save()}>Save</button></>}
@@ -365,7 +366,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       {panel ? <section className="code-panel" aria-label="Panel">
         <div className="code-panel-tabs" role="tablist"><button role="tab" aria-selected={panel === 'terminal'} className={panel === 'terminal' ? 'on' : ''} onClick={() => setPanel('terminal')}>Terminal</button>
           <button role="tab" aria-selected={panel === 'problems'} className={panel === 'problems' ? 'on' : ''} onClick={() => setPanel('problems')}>Problems <span className="badge">{problems.length}</span></button>
-          <span className="grow" /><button className="tab-close" aria-label="Close panel" onClick={() => setPanel(null)}>×</button></div>
+          <span className="grow" /><button className="tab-close" aria-label="Close panel" onClick={() => setPanel(null)}><IconClose width={12} height={12} aria-hidden /></button></div>
         {panel === 'terminal' ? <TerminalView projectId={project.id} slot="panel" label="Terminal" />
           : <div className="code-problems">{problems.length ? problems.map((p, i) => <button key={i} onClick={() => void openAt(p.path, p.line, p.column)}>
             <b className={p.severity === monaco.MarkerSeverity.Error ? 'problem-error' : 'problem-warn'}>{p.severity === monaco.MarkerSeverity.Error ? 'Error' : p.severity === monaco.MarkerSeverity.Warning ? 'Warning' : 'Info'}</b>
@@ -380,7 +381,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         </select></footer>
     </section>
     {ask ? <aside className="code-ask" aria-label="Ask agent">
-      <div className="code-section-head"><strong>ASK AGENT</strong><button className="tab-close" aria-label="Close Ask agent" onClick={() => setAsk(false)}>×</button></div>
+      <div className="code-section-head"><strong>ASK AGENT</strong><button className="tab-close" aria-label="Close Ask agent" onClick={() => setAsk(false)}><IconClose width={12} height={12} aria-hidden /></button></div>
       <p className="tree-note">{tab && active ? `About ${selection ? `lines ${selection[0]}–${selection[1]} of` : 'all of'} ${active}. Select code to narrow it.` : 'Open a file first.'} Answers come from the planner model in Settings; nothing is saved until you save.</p>
       <textarea className="textarea" aria-label="Question for the agent" rows={4} maxLength={4000} placeholder="Explain this, find the bug, add error handling…" value={question} onChange={(e) => setQuestion(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void askAgent('ask') } }} />

@@ -81,7 +81,7 @@ function Plan({ tasks, agents, onSelect }: { tasks: Task[]; agents: Agent[]; onS
               {agent ? (
                 <button
                   className="ghost-link"
-                  style={{ fontSize: 9.5 }}
+                  style={{ fontSize: 11 }}
                   onClick={(e) => {
                     e.stopPropagation()
                     onSelect(agent.id)
@@ -173,7 +173,7 @@ function Activity({ snapshot, onSelect }: { snapshot: NonNullable<ReturnType<typ
               {agent ? (
                 <button
                   className="ghost-link"
-                  style={{ fontSize: 10.5, color: 'var(--text-dim)', fontWeight: 550 }}
+                  style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 550 }}
                   onClick={() => onSelect(agent.id)}
                 >
                   {agent.name}
@@ -240,7 +240,7 @@ function Mail() {
           <div key={m.id} className="mail">
             <div className="mail-head">
               <span className={`mail-type ${m.type}`}>{m.type}</span>
-              <button className="ghost-link" style={{ fontSize: 10 }} onClick={() => m.sender !== 'owner' && m.sender !== 'orchestrator' && select(m.sender)}>
+              <button className="ghost-link" style={{ fontSize: 11 }} onClick={() => m.sender !== 'owner' && m.sender !== 'orchestrator' && select(m.sender)}>
                 {name(m.sender)}
               </button>
               <span>→ {name(m.recipient)}</span>

@@ -49,7 +49,8 @@ function liveActivity(agent: Agent, state: Snapshot, output: Record<string, stri
   if (task) return task.title
   const tail = (output[agent.id] ?? '').trim().split('\n').filter(Boolean).pop() ?? ''
   if (tail) return tail.replace(/^[>#*\s-]+/, '').slice(0, 64)
-  if (agent.lastError) return agent.lastError.slice(0, 64)
+  // Errors stay in the inspector: several failed workers share the waiting spot,
+  // and their full messages stacked into an unreadable pile of bubbles.
   return ''
 }
 
@@ -194,7 +195,8 @@ export function OfficeFloor({ onSelect }: { onSelect: (id: string) => void }) {
             character.setStatusGlyph('blocked')
             character.sitAtDesk(false)
             character.walkToTile(runtime.waitTile)
-            character.showThought(activity || agent.lastError || 'Needs the owner')
+            // The red status mark and the task list already say it; one bubble per failed worker became a wall.
+            character.hideThought()
             break
           case 'offline':
             character.setStatusGlyph('none')

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { IconExternal } from '../icons'
 import type { GitAction, GitChange, GitState } from '../../../shared/workspace'
 import { guard, useStore } from '../store'
 
@@ -37,7 +38,7 @@ export function SourceControl({ projectId, onDiff, onOpen, refreshKey }: {
         <b className={`git-${staged ? change.index : change.working}`}>{staged ? change.index : change.working}</b><span>{change.path}</span>
       </button>
       <button className="sc-action" disabled={busy} onClick={() => void run(staged ? 'unstage' : 'stage', change.path)} aria-label={`${staged ? 'Unstage' : 'Stage'} ${change.path}`} title={staged ? 'Unstage' : 'Stage'}>{staged ? '−' : '+'}</button>
-      {change.working !== 'D' && change.index !== 'D' ? <button className="sc-action" onClick={() => onOpen(change.path)} aria-label={`Edit ${change.path}`} title="Open file">↗</button> : null}
+      {change.working !== 'D' && change.index !== 'D' ? <button className="sc-action" onClick={() => onOpen(change.path)} aria-label={`Edit ${change.path}`} title="Open file"><IconExternal width={13} height={13} aria-hidden /></button> : null}
     </div>)}
   </section>
   return <div className="source-control"><div className="code-section-head"><strong>SOURCE CONTROL</strong><button className="btn tiny" onClick={() => void refresh()} disabled={busy}>Refresh</button></div>

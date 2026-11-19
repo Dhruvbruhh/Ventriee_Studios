@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { IconExternal, IconRefresh } from '../icons'
 import { useStore } from '../store'
 
 /** Files each worker task changed, from its recorded evidence, with Git diff and restore. */
@@ -35,8 +36,8 @@ export function AgentChanges({ projectId, onDiff, onOpen }: { projectId: string;
         {task.changedFiles!.map((file) => <div className="sc-file" key={file.path}>
           <button className="sc-path" title={file.path} onClick={() => repository ? onDiff(file.path) : file.removed ? undefined : onOpen(file.path)}>
             <b className={file.removed ? 'git-D' : 'git-M'}>{file.removed ? 'D' : 'M'}</b><span>{file.path}</span></button>
-          {!file.removed ? <button className="sc-action" onClick={() => onOpen(file.path)} aria-label={`Open ${file.path}`} title="Open file">↗</button> : null}
-          {repository ? <button className="sc-action" disabled={Boolean(busy)} onClick={() => void restore(file.path)} aria-label={`Restore ${file.path} from the last commit`} title="Restore from last commit">↺</button> : null}
+          {!file.removed ? <button className="sc-action" onClick={() => onOpen(file.path)} aria-label={`Open ${file.path}`} title="Open file"><IconExternal width={13} height={13} aria-hidden /></button> : null}
+          {repository ? <button className="sc-action" disabled={Boolean(busy)} onClick={() => void restore(file.path)} aria-label={`Restore ${file.path} from the last commit`} title="Restore from last commit"><IconRefresh width={13} height={13} aria-hidden /></button> : null}
         </div>)}
       </section>
     })}

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { IconCheck } from '../icons'
 import { Modal } from '../shell'
 import { guard, useStore } from '../store'
 import { ModelPicker, resolveModel, type ResolvedModel } from './ModelPicker'
@@ -126,7 +127,7 @@ export function AssignDialog({
             return (
               <div key={agent.id} className={`assign-row${on ? ' on' : ''}`}>
                 <button className="assign-check" onClick={() => toggle(agent.id)} aria-pressed={on} aria-label={`${on ? 'Deselect' : 'Select'} ${agent.name}`}>
-                  <span className={`check-box${on ? ' on' : ''}`}>{on ? '✓' : ''}</span>
+                  <span className={`check-box${on ? ' on' : ''}`}>{on ? <IconCheck width={12} height={12} aria-hidden /> : null}</span>
                 </button>
                 <span className="avatar tiny" style={{ background: agent.color }}>{agent.name.slice(0, 1)}</span>
                 <button className="assign-who" onClick={() => toggle(agent.id)}>

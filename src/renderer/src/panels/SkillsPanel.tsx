@@ -86,7 +86,7 @@ export function SkillsPanel({ onClose }: { onClose: () => void }) {
                   <span className="mem-title" style={{ fontSize: 12 }}>{f.id} · {f.title}</span>
                   <span className="badge danger">{f.severity}</span>
                 </div>
-                <div className="faint mono" style={{ fontSize: 10.5 }}>{f.location}</div>
+                <div className="faint mono" style={{ fontSize: 11 }}>{f.location}</div>
                 <div className="dim" style={{ fontSize: 11.5, marginTop: 4 }}>{f.detail}</div>
               </div>
             ))
@@ -164,7 +164,7 @@ export function SkillsPanel({ onClose }: { onClose: () => void }) {
             >
               <IconExternal width={10} height={10} /> Folder
             </button>
-            <span className="faint" style={{ fontSize: 9.5, marginLeft: 'auto', alignSelf: 'center' }}>
+            <span className="faint" style={{ fontSize: 11, marginLeft: 'auto', alignSelf: 'center' }}>
               used {skill.uses}x - {skill.uses ? Math.round((skill.successes / skill.uses) * 100) : 0}% pass
             </span>
           </div>
