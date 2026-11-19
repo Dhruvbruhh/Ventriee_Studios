@@ -16,6 +16,7 @@ import { applyKeybindings, chordOf } from './keybindings'
 import { TestsPanel, testAt, useTests } from './TestsPanel'
 import { loadExtensions } from './extensions'
 import { iconFor, loadIconTheme, useIconTheme } from './fileicons'
+import { NotebookView } from './NotebookView'
 import type { LspStatus } from '../../../shared/catalog'
 import { Preview } from '../components/Preview'
 import { TerminalView, terminalOutput } from '../components/Terminal'
@@ -114,6 +115,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [panel, setPanel] = useState<'terminal' | 'problems' | 'debug' | 'run' | null>(null)
   /** A command shown running in the Run panel (installs, tasks, tests); a new key starts a fresh shell. */
   const [run, setRun] = useState<{ label: string; command: string; key: number } | null>(null)
+  /** A Jupyter notebook opens in the notebook view instead of as JSON. */
+  const notebookTab = active?.toLowerCase().endsWith('.ipynb') ? tabs.current.get(active) ?? null : null
   const runInPanel = (label: string, command: string) => { setRun({ label, command, key: Date.now() }); setPanel('run') }
   const [breakpoints, setBreakpoints] = useState<Record<string, DebugBreakpoint[]>>({})
   const [debug, setDebug] = useState<{ status: 'idle' | 'starting' | 'running' | 'paused' | 'exited'; frames: DebugFrame[]; variables: DebugVariable[]; output: string; code?: number; error?: string; threads?: Array<{ id: number; name: string }>; threadId?: number }>({ status: 'idle', frames: [], variables: [], output: '' })
@@ -848,7 +851,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         <button className="btn tiny" onClick={() => resolveHere('current')}>Accept current</button><button className="btn tiny" onClick={() => resolveHere('incoming')}>Accept incoming</button><button className="btn tiny" onClick={() => resolveHere('both')}>Accept both</button></div> : null}
         {conflict && conflict === active && !diff ? <div className="editor-conflict" role="alert"><span>{conflict} changed on disk after you opened it. Your edits are kept here and were not saved.</span>
         <button className="btn tiny" onClick={() => void compareWithDisk()}>Compare with disk</button><button className="btn tiny" onClick={() => void reload()}>Reload from disk</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('copy') }}>Save a copy</button></div> : null}
-        <div ref={host} className={`monaco-surface${splitPath && !diff ? ' split-left' : ''}`} style={{ visibility: active && !diff ? 'visible' : 'hidden' }} {...tabDrop((path) => activate(path))} />
+        <div ref={host} className={`monaco-surface${splitPath && !diff ? ' split-left' : ''}`} style={{ visibility: active && !diff && !notebookTab ? 'visible' : 'hidden' }} {...tabDrop((path) => activate(path))} />
+        {notebookTab && active && !diff ? <div className="notebook-host"><NotebookView key={active} projectId={project.id} path={active} model={notebookTab.model} onInstall={(command) => runInPanel('Install Jupyter', command)} /></div> : null}
         {!splitPath && active && !diff ? <div className="split-drop" aria-hidden {...tabDrop((path) => setSplitPath(path))}>Drop here to split</div> : null}
         {splitPath && !diff ? <div className="split-pane" {...tabDrop((path) => setSplitPath(path))}><div className="split-head"><select aria-label="File in the split editor" value={splitPath} onChange={(e) => setSplitPath(e.target.value)}>{[...tabs.current.keys()].map((p) => <option key={p} value={p}>{p}</option>)}</select>
           <button className="tab-close" aria-label="Close split editor" onClick={() => setSplitPath(null)}><IconClose width={12} height={12} aria-hidden /></button></div><div ref={splitHost} className="split-surface" key={splitPath} /></div> : null}

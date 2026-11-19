@@ -25,7 +25,7 @@ import type {
   Task
 } from './types'
 import type { Catalog, LspEvent, LspStatus } from './catalog'
-import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, GithubAction, ProjectTask, TestEvent, ExtensionContributions, FileIconTheme, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
+import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, GithubAction, ProjectTask, TestEvent, ExtensionContributions, FileIconTheme, NotebookEvent, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
 
 export const IPC = {
   filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', projectTypes: 'files:project-types', toolsFormat: 'tools:format', toolsLint: 'tools:lint', codeAsk: 'code:ask', codeChange: 'code:change', codeComplete: 'code:complete', runsList: 'runs:list', spendToday: 'spend:today', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
@@ -35,6 +35,7 @@ export const IPC = {
   extSearch: 'ext:search', extDetails: 'ext:details', extInstall: 'ext:install', extUninstall: 'ext:uninstall', extSetEnabled: 'ext:enabled', extList: 'ext:list', extUpdates: 'ext:updates', extContributions: 'ext:contributions', extIconTheme: 'ext:icon-theme',
   testsRunners: 'tests:runners', testsRun: 'tests:run', testsStop: 'tests:stop', testsEvent: 'tests:event',
   tasksList: 'tasks:list', filesReadLarge: 'files:read-large', toolsDetect: 'tools:detect', errorReport: 'errors:report', errorLog: 'errors:log', errorClear: 'errors:clear', reportProblem: 'errors:issue', syncPush: 'sync:push', syncPull: 'sync:pull', github: 'github:run', githubReview: 'github:review', historyList: 'history:list', historyRead: 'history:read',
+  notebookStart: 'notebook:start', notebookExecute: 'notebook:execute', notebookInterrupt: 'notebook:interrupt', notebookRestart: 'notebook:restart', notebookShutdown: 'notebook:shutdown', notebookEvent: 'notebook:event',
   toolCatalog: 'tools:catalog', lspEnsure: 'lsp:ensure', lspRequest: 'lsp:request', lspNotify: 'lsp:notify', lspEvent: 'lsp:event',
   authStatus: 'auth:status',
   authSignIn: 'auth:signIn',
@@ -197,6 +198,13 @@ export interface VentrieeApi {
   lspRequest(projectId: string, languageId: string, method: string, params: unknown): Promise<unknown>
   lspNotify(projectId: string, languageId: string, method: string, params: unknown): Promise<void>
   onLsp(cb: (event: LspEvent) => void): () => void
+  /** Jupyter: one kernel per open notebook (project-relative path). */
+  notebookStart(projectId: string, path: string): Promise<void>
+  notebookExecute(projectId: string, path: string, cellId: string, code: string): Promise<void>
+  notebookInterrupt(projectId: string, path: string): Promise<void>
+  notebookRestart(projectId: string, path: string): Promise<void>
+  notebookShutdown(projectId: string, path: string): Promise<void>
+  onNotebook(cb: (event: NotebookEvent) => void): () => void
   authStatus(): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number } | null>
   authSignIn(input: { email: string; password: string }, signup?: boolean): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number } | null; message: string }>
   authClear(): Promise<void>

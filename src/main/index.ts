@@ -42,6 +42,7 @@ import { Updater } from './updater'
 import { spendBlock, startOfToday } from './spend'
 import { attachmentPaths, recentScreenshots, saveAttachment } from './attachments'
 import { transcribe } from './transcribe'
+import { NotebookService } from './notebook'
 import type { GithubAction, CodeAskInput, CodeChangeInput, CodeCompleteInput, DebugBreakpoint, DebugEvent, DebugStartInput } from '../shared/workspace'
 import type {
   Agent,
@@ -79,6 +80,7 @@ const catalog = (): Catalog => ({
   })
 })
 const lsp = new LspService(catalog)
+const notebooks = new NotebookService(() => join(app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources'), 'kernel_bridge.py'))
 let tests: TestService
 const stopDebug = (owner: number) => { debugSessions.get(owner)?.stop(); debugSessions.delete(owner) }
 let tray: Tray | null = null
@@ -254,6 +256,7 @@ function createWindow(projectId?: string) {
     terminals.closeOwner(windowId)
     stopDebug(windowId)
     lsp.closeOwner(windowId)
+    notebooks.closeOwner(windowId)
     tests?.stop(windowId)
     auth.clear(windowId)
     windows.delete(windowId)
@@ -271,7 +274,7 @@ function createWindow(projectId?: string) {
   // Project previews must never navigate the privileged studio document.
   // A reload starts a new renderer that cannot reach the old shells; end them so they don't pile up to the limit.
   win.webContents.on('did-start-navigation', (details) => {
-    if (details.isMainFrame && !details.isSameDocument) { terminals.closeOwner(windowId); stopDebug(windowId); lsp.closeOwner(windowId) }
+    if (details.isMainFrame && !details.isSameDocument) { terminals.closeOwner(windowId); stopDebug(windowId); lsp.closeOwner(windowId); notebooks.closeOwner(windowId) }
   })
   win.webContents.on('will-navigate', (event, url) => {
     if (originOf(url) !== rendererOrigin) event.preventDefault()
@@ -492,6 +495,16 @@ function registerIpc() {
     const sender = event.sender
     return lsp.ensure(sender.id, projectRoot(event, id), String(language), (e) => { if (!sender.isDestroyed()) sender.send(IPC.lspEvent, e) })
   })
+  handle(IPC.notebookStart, (event, id: string, path: string) => {
+    const sender = event.sender
+    return notebooks.start(sender.id, projectRoot(event, id), String(path), (e) => { if (!sender.isDestroyed()) sender.send(IPC.notebookEvent, e) })
+  })
+  handle(IPC.notebookExecute, (event, id: string, path: string, cell: string, code: string) => notebooks.execute(event.sender.id, projectRoot(event, id), String(path), String(cell), code))
+  handle(IPC.notebookInterrupt, (event, id: string, path: string) => notebooks.interrupt(event.sender.id, projectRoot(event, id), String(path)))
+  handle(IPC.notebookRestart, (event, id: string, path: string) => notebooks.restart(event.sender.id, projectRoot(event, id), String(path)))
+  handle(IPC.notebookShutdown, (event, id: string, path: string) => {
+    notebooks.shutdown(event.sender.id, projectRoot(event, id), String(path))
+  })
   handle(IPC.lspRequest, (event, id: string, language: string, method: string, params: unknown) => lsp.request(event.sender.id, projectRoot(event, id), String(language), String(method), params))
   handle(IPC.lspNotify, (event, id: string, language: string, method: string, params: unknown) => lsp.notify(event.sender.id, projectRoot(event, id), String(language), String(method), params))
   handle(IPC.authStatus, async (event) => {
@@ -509,6 +522,7 @@ function registerIpc() {
     terminals.closeAll()
     for (const owner of [...debugSessions.keys()]) stopDebug(owner)
     lsp.closeAll()
+    notebooks.closeAll()
     for (const project of store.projects()) {
       orchestrator.stopRun(project.id)
       preview.stop(project.id)
@@ -1230,6 +1244,7 @@ app.on('before-quit', () => {
   terminals.closeAll()
   for (const owner of [...debugSessions.keys()]) stopDebug(owner)
   lsp.closeAll()
+  notebooks.closeAll()
   tests?.stopAll()
   if (scheduler) clearInterval(scheduler)
   tray?.destroy()

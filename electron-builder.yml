@@ -14,6 +14,9 @@ files:
 extraResources:
   - from: resources/skills
     to: skills
+  # Runs Jupyter kernels for notebooks (with the owner's Python and jupyter_client).
+  - from: resources/kernel_bridge.py
+    to: kernel_bridge.py
   # The running window reads this; the exe and shortcuts get the .ico.
   - from: build/icon.png
     to: icon.png
