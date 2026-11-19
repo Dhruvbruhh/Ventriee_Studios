@@ -13,12 +13,14 @@ describe('terminal service', () => {
     let output = ''
     const id = service.open(1, dir, 80, 24, (_id, data) => { output += data }, () => {})
     const marker = process.platform === 'win32' ? 'echo "T_$((6*7))"; (Get-Location).Path\r' : 'echo T_$((6*7)); pwd\r'
-    await new Promise((r) => setTimeout(r, 1500))
+    // Wait for the prompt (keys typed while the shell starts can be lost), then for the answer; slow CI shells take seconds.
+    const until = async (ok: () => boolean) => { for (let i = 0; i < 150 && !ok(); i++) await new Promise((r) => setTimeout(r, 100)) }
+    await until(() => /[>$#]\s*$/.test(output.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').trimEnd()))
     service.write(1, id, marker)
-    await new Promise((r) => setTimeout(r, 2500))
+    await until(() => output.includes('T_42'))
     expect(output).toContain('T_42')
     expect(output.toLowerCase()).toContain(dir.toLowerCase().split(/[\\/]/).pop()!)
-  }, 15_000)
+  }, 40_000)
 
   it('keeps terminals private to the window that opened them', () => {
     const id = service.open(1, dir, 80, 24, () => {}, () => {})

@@ -21,7 +21,7 @@ import { IPC } from '../shared/ipc'
 import { TerminalService } from './terminal'
 import { DebugSession } from './debugger'
 import { DapSession, type Debugger } from './dap'
-import { debuggerFor, launchConfigs, substitute } from './launch'
+import { debuggerFor, launchConfigs, substitute, currentFileLaunch } from './launch'
 import { LspService, findExecutable } from './lsp'
 import { ExtensionService } from './extensions'
 import { TestService, detectRunners } from './testrunner'
@@ -388,8 +388,9 @@ function registerIpc() {
     const dap = new DapSession(root, spec, emit)
     session = dap
     debugSessions.set(sender.id, session)
-    const args = config ?? substitute(spec.launch, root, input.file)
-    try { await dap.start({ ...args, type: undefined, name: undefined, request: args.request ?? 'launch' }, bps) } catch (error) { stopDebug(sender.id); throw error }
+    try {
+      const args = config ?? await currentFileLaunch(spec, String(input?.language ?? ''), root, input.file)
+      await dap.start({ ...args, type: undefined, name: undefined, request: args.request ?? 'launch' }, bps) } catch (error) { stopDebug(sender.id); throw error }
   })
   handle(IPC.debugVariables, (event, ref: number) => debugOf(event.sender.id).variables?.(Number(ref)) ?? [])
   handle(IPC.debugThread, (event, threadId: number) => debugOf(event.sender.id).selectThread?.(Number(threadId)))
