@@ -22,6 +22,7 @@ import { TerminalService } from './terminal'
 import { DebugSession } from './debugger'
 import { askCode, changeFiles, completeCode } from './code-agent'
 import { projectTypes } from './typeindex'
+import { eslintFile, prettierFormat } from './projecttools'
 import { CheckpointService } from './checkpoint'
 import { summarizeRuns } from './runs'
 import { validMcpServers, writeMcpConfig } from './mcp'
@@ -272,6 +273,8 @@ function registerIpc() {
   }
   handle(IPC.filesList, (event, id: string, path = '') => files.list(projectRoot(event, id), path))
   handle(IPC.filesFind, (event, id: string, query: string) => files.find(projectRoot(event, id), query))
+  handle(IPC.toolsFormat, (event, id: string, path: string, text: string) => prettierFormat(projectRoot(event, id), path, String(text)))
+  handle(IPC.toolsLint, (event, id: string, path: string, text: string) => eslintFile(projectRoot(event, id), path, String(text)))
   handle(IPC.projectTypes, (event, id: string) => projectTypes(projectRoot(event, id), files))
   handle(IPC.filesSearch, (event, id: string, query: string, caseSensitive: boolean) => files.search(projectRoot(event, id), query, caseSensitive === true))
   handle(IPC.updateState, () => updater.state)

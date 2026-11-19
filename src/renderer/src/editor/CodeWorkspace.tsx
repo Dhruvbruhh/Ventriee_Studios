@@ -501,6 +501,36 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       ...(paused ? [{ range: new monaco.Range(paused.line, 1, paused.line, 1), options: { isWholeLine: true, className: 'debug-current-line', glyphMarginClassName: 'debug-arrow' } }] : [])
     ])
   }, [breakpoints, active, debug])
+  /** The project's Prettier (with its config) when installed, otherwise Monaco's own formatter. One undoable edit. */
+  const formatDocument = async () => {
+    const current = active ? tabs.current.get(active) : null
+    if (!active || !current || !editor.current) return
+    const text = current.model.getValue()
+    let formatted: string | null
+    try { formatted = await window.ventriee.toolsFormat(project.id, active, text) } catch (error) {
+      // Prettier's own message (usually a syntax error in the file), not a silent fallback.
+      useStore.getState().notify(String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, ''), 'error'); return
+    }
+    if (formatted === null) { void editor.current?.getAction('editor.action.formatDocument')?.run(); return }
+    if (current.model.isDisposed() || current.model.getValue() !== text || formatted === text) return
+    current.model.pushStackElement()
+    current.model.pushEditOperations([], [{ range: current.model.getFullModelRange(), text: formatted }], () => null)
+    current.model.pushStackElement()
+    changed()
+  }
+  // ESLint findings on open and after each save, from the project's own ESLint and config.
+  const activeVersion = active ? tabs.current.get(active)?.file.version : undefined
+  useEffect(() => {
+    const current = active ? tabs.current.get(active) : null
+    if (!active || !current || !/\.(m|c)?(j|t)sx?$|\.vue$/.test(active)) return
+    let alive = true
+    void window.ventriee.toolsLint(project.id, active, current.model.getValue()).then((found) => {
+      if (!alive || current.model.isDisposed()) return
+      monaco.editor.setModelMarkers(current.model, 'eslint', found.map((m) => ({ startLineNumber: m.line, startColumn: m.column, endLineNumber: m.endLine, endColumn: m.endColumn, message: m.message, source: 'eslint',
+        severity: m.severity === 'error' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning })))
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [active, activeVersion, project.id])
   const tab = active ? tabs.current.get(active) : null
   // The merge conflict under the cursor, if any, with one-click resolutions.
   const conflictHere = tab && !diff ? findConflicts(tab.model.getValue()).find((c) => cursor.lineNumber >= c.start && cursor.lineNumber <= c.end) : undefined
@@ -533,7 +563,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     { label: 'Editor: Find in file', keys: 'Ctrl+F', run: () => { editor.current?.focus(); void editor.current?.getAction('actions.find')?.run() }, disabled: !tab },
     { label: 'Editor: Reload project types', run: () => void loadTypes() },
     { label: 'Debug: Start debugging this file', keys: 'F5', run: () => void startDebug(), disabled: !active },
-    { label: 'Editor: Format document', run: () => { void editor.current?.getAction('editor.action.formatDocument')?.run() }, disabled: !tab },
+    { label: 'Editor: Format document', keys: 'Shift+Alt+F', run: () => void formatDocument(), disabled: !tab },
     ...(onNavigate ? [{ label: 'Studio: Go to Plan', run: () => onNavigate('plan') }, { label: 'Studio: Go to Office', run: () => onNavigate('office') }] : [])
   ]
   const shownCommands = commands.filter((c) => !c.disabled && c.label.toLowerCase().includes(command.trim().toLowerCase()))

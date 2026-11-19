@@ -11,6 +11,7 @@ export interface ProjectTypes { sources: Array<{ path: string; text: string }>; 
 export interface DebugFrame { name: string; path: string; line: number; column: number; internal: boolean }
 export interface DebugVariable { name: string; value: string; scope: string }
 export type DebugEvent = { type: 'running' } | { type: 'paused'; reason: string; frames: DebugFrame[]; variables: DebugVariable[] } | { type: 'output'; text: string } | { type: 'exited'; code: number }
+export interface LintMessage { line: number; column: number; endLine: number; endColumn: number; severity: 'error' | 'warning'; message: string }
 export interface LineChange { kind: 'added' | 'modified' | 'deleted'; start: number; end: number }
 export interface BlameLine { hash: string; author: string; time: number; summary: string }
 export interface GitChange { path: string; originalPath?: string; index: string; working: string }
