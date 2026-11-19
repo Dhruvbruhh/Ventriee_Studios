@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { guard, useStore } from '../store'
 import { Modal, Switch } from '../shell'
 import { ENGINE_LABELS, type Agent, type EngineKind } from '../../../shared/types'
-import { IconCheck, IconPlus, IconRefresh, IconTrash } from '../icons'
+import { IconClose, IconCheck, IconPlus, IconRefresh, IconTrash } from '../icons'
 import { ModelPicker, resolveModel } from '../components/ModelPicker'
 import { AddProviderDialog } from '../components/AddProviderDialog'
 import { TerminalView } from '../components/Terminal'
@@ -101,9 +101,9 @@ function Subscriptions() {
       const result = checked[s.engine]
       const isDefault = snapshot.settings.plannerEngine === s.engine && snapshot.settings.orchestratorEngine === s.engine
       return <div key={s.engine} className="provider-line">
-        <span className="prov-name">{s.name}<small className="dim" style={{ display: 'block', fontSize: 10 }}>{s.plan}</small></span>
+        <span className="prov-name">{s.name}<small className="dim" style={{ display: 'block', fontSize: 11 }}>{s.plan}</small></span>
         <span className={`badge ${provider?.available ? 'ok' : 'err'}`}>{provider?.available ? 'installed' : 'not installed'}</span>
-        <span className="prov-detail" title={result?.detail}>{result ? `${result.ok ? '✓ signed in and answering' : `✕ ${result.detail}`}` : isDefault ? 'Default for planner and new workers' : ''}</span>
+        <span className="prov-detail" title={result?.detail}>{result ? <>{result.ok ? <IconCheck width={12} height={12} aria-hidden /> : <IconClose width={12} height={12} aria-hidden />} {result.ok ? 'Signed in and answering' : result.detail}</> : isDefault ? 'Default for planner and new workers' : ''}</span>
         {!provider?.available ? <button className="btn tiny" disabled={!project} onClick={() => setRunning({ engine: s.engine, action: 'install' })}>Install</button> : null}
         <button className="btn tiny" disabled={!project || !provider?.available} onClick={() => setRunning({ engine: s.engine, action: 'login' })}>Sign in</button>
         <button className="btn tiny" disabled={!provider?.available || checking === s.engine} onClick={async () => {
@@ -112,7 +112,7 @@ function Subscriptions() {
           setChecking(null)
           if (r) setChecked((c) => ({ ...c, [s.engine]: r }))
         }}>{checking === s.engine ? 'Checking…' : 'Check'}</button>
-        <button className="btn tiny primary" disabled={!provider?.available || isDefault} onClick={() => void guard(() => window.ventriee.saveSettings({ plannerEngine: s.engine, plannerModel: '', plannerEndpoint: '', orchestratorEngine: s.engine, orchestratorModel: '' }), `${s.name} is now the default`)}>Use everywhere</button>
+        <button className="btn tiny" disabled={!provider?.available || isDefault} onClick={() => void guard(() => window.ventriee.saveSettings({ plannerEngine: s.engine, plannerModel: '', plannerEndpoint: '', orchestratorEngine: s.engine, orchestratorModel: '' }), `${s.name} is now the default`)}>Use everywhere</button>
       </div>
     })}
     {!project ? <p className="hint">Open a project first: the sign-in terminal starts in its folder.</p> : null}
@@ -158,7 +158,7 @@ function Engines() {
               {isCli ? (provider?.available ? 'on PATH' : 'missing') : configured.get(engine) || !keyed ? 'ready' : 'no key'}
             </span>
             <span className="prov-detail" title={status?.detail ?? provider?.detail}>
-              {status ? `${status.ok ? '✓' : '✕'} ${status.detail}` : provider?.detail}
+              {status ? <>{status.ok ? <IconCheck width={12} height={12} aria-hidden /> : <IconClose width={12} height={12} aria-hidden />} {status.detail}</> : provider?.detail}
             </span>
             {!isCli && keyed ? (
               <input
@@ -442,7 +442,7 @@ function AgentForm({ agent }: { agent: Agent }) {
         >
           <IconTrash /> Remove
         </button>
-        <span className="faint" style={{ fontSize: 10.5, marginLeft: 'auto', alignSelf: 'center' }}>
+        <span className="faint" style={{ fontSize: 11, marginLeft: 'auto', alignSelf: 'center' }}>
           {snapshot.settings.requireDeployApproval ? 'Deploys require your approval' : 'Deploys run without approval'}
         </span>
       </div>

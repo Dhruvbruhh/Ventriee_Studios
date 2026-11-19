@@ -88,7 +88,7 @@ export function MemoryPanel({ onClose }: { onClose: () => void }) {
                 >
                   <IconTrash width={10} height={10} />
                 </button>
-                <span className="faint" style={{ fontSize: 9.5, marginLeft: 'auto', alignSelf: 'center' }}>
+                <span className="faint" style={{ fontSize: 11, marginLeft: 'auto', alignSelf: 'center' }}>
                   {doc.source} · {new Date(doc.updatedAt).toLocaleDateString()}
                 </span>
               </div>

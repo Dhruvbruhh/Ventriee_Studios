@@ -337,7 +337,7 @@ function ApiExplorer({ baseUrl, onClose }: { baseUrl: string; onClose: () => voi
             <span className={`badge ${result.ok ? (result.status! >= 400 ? 'warn' : 'ok') : 'err'}`}>
               {result.ok ? `${result.status} ${result.statusText}` : 'error'}
             </span>
-            <span className="faint mono" style={{ fontSize: 10.5 }}>{result.contentType ?? ''}</span>
+            <span className="faint mono" style={{ fontSize: 11 }}>{result.contentType ?? ''}</span>
           </div>
           <pre className="preview-log">{result.error ?? (result.body ?? '(empty response)')}</pre>
         </div>

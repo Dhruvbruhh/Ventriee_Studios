@@ -4,6 +4,7 @@ import { IconCheck, IconCopy, IconRefresh, IconSend, IconSpark } from '../icons'
 import { ModelPicker, resolveModel, type ResolvedModel } from './ModelPicker'
 import { AddProviderDialog } from './AddProviderDialog'
 import { AssignDialog, RecentAssignments } from './AssignDialog'
+import { RichText } from './RichText'
 import type { ChatMessage, PromptDoc } from '../../../shared/types'
 
 /** Six stages, in order. Two of them leave this screen; the rest happen here. */
@@ -176,12 +177,12 @@ function StageStrip({ stage, onGoOffice, onGoReview }: { stage: Stage; onGoOffic
           <li key={`${label}:${current ? 'now' : done ? 'done' : 'next'}`} className={`stage${done ? ' done' : ''}${current ? ' now' : ''}`}>
             {jump ? (
               <button className="stage-btn" onClick={jump} title={`Open ${label.toLowerCase()}`}>
-                <span className="stage-n">{done ? '✓' : n}</span>
+                <span className="stage-n">{done ? <IconCheck width={12} height={12} aria-hidden /> : n}</span>
                 {label}
               </button>
             ) : (
               <span className="stage-btn static">
-                <span className="stage-n">{done ? '✓' : n}</span>
+                <span className="stage-n">{done ? <IconCheck width={12} height={12} aria-hidden /> : n}</span>
                 {label}
               </span>
             )}
@@ -228,7 +229,7 @@ function ChatThread({ chat, stream }: { chat: ChatMessage[]; stream: Record<stri
                 <span className="msg-time">{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
               {text ? (
-                <div className="msg-body">{text}</div>
+                <div className="msg-body"><RichText text={text} /></div>
               ) : m.status === 'streaming' ? (
                 <div className="msg-body typing"><span /><span /><span /></div>
               ) : (
