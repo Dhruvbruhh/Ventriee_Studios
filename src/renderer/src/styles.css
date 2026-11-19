@@ -1454,3 +1454,13 @@
 .test-mark.test-passed { background: #79dcb4; }
 .test-mark.test-failed { background: var(--err, #f4796b); }
 .code-search-row select { background: var(--surface-2, #1a1d23); color: inherit; border: 1px solid var(--line, #2a2f38); border-radius: 6px; padding: 2px 6px; }
+
+/* Split editor and outline */
+.monaco-surface.split-left { right: 50%; }
+.split-pane { position: absolute; top: 0; bottom: 0; left: 50%; right: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line, #2a2f38); }
+.split-head { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-bottom: 1px solid var(--line-soft, #23272f); }
+.split-head select { flex: 1; min-width: 0; background: transparent; color: inherit; border: none; font-size: 11px; }
+.split-surface { flex: 1; min-height: 0; }
+.outline-row { display: block; width: 100%; text-align: left; padding: 2px 6px; border-radius: 4px; font: 12px var(--mono, monospace); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.outline-row:hover, .outline-row.on { background: var(--surface-2, #1a1d23); }
+.outline-kind { display: inline-block; width: 28px; color: var(--muted); font-size: 10px; }

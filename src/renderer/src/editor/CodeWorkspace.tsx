@@ -5,7 +5,8 @@ import { SourceControl } from './SourceControl'
 import { findConflicts, resolveConflict } from './conflicts'
 import { applyProjectTypes, clearProjectTypes, fileUri } from './intellisense'
 import { AgentChanges } from './AgentChanges'
-import { startLsp, type LspSession } from './lsp'
+import { startLsp, type LspSession, type OutlineSymbol } from './lsp'
+import { SYMBOL_KINDS, findSymbols, outlineFor, symbolPath } from './symbols'
 import { ExtensionsPanel } from './ExtensionsPanel'
 import { TestsPanel, testAt, useTests } from './TestsPanel'
 import { loadExtensions } from './extensions'
@@ -66,6 +67,14 @@ function DiffView({ diff }: { diff: Diff }) {
   return <div ref={host} className="monaco-surface" aria-label={`Changes in ${diff.path}`} />
 }
 
+/** The file's symbols as a tree; the one around the cursor is marked. */
+function OutlineTree({ items, current, onOpen, depth = 0 }: { items: OutlineSymbol[]; current?: OutlineSymbol; onOpen: (line: number, column: number) => void; depth?: number }) {
+  return <>{items.map((s, i) => <div key={`${s.name}:${s.line}:${i}`}>
+    <button className={`outline-row${s === current ? ' on' : ''}`} style={{ paddingLeft: depth * 12 + 6 }} onClick={() => onOpen(s.line, s.column)} title={`${SYMBOL_KINDS[s.kind] ?? ''} · line ${s.line}`}>
+      <span className="outline-kind">{(SYMBOL_KINDS[s.kind] ?? '?').slice(0, 3)}</span> {s.name}</button>
+    {s.children.length ? <OutlineTree items={s.children} current={current} onOpen={onOpen} depth={depth + 1} /> : null}</div>)}</>
+}
+
 /** A debugger variable; one with children expands on click. */
 function VariableRow({ v, depth = 0 }: { v: DebugVariable; depth?: number }) {
   const [children, setChildren] = useState<DebugVariable[] | null>(null)
@@ -85,7 +94,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [active, setActive] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
   const [, setRender] = useState(0)
-  const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'agents' | 'extensions' | 'tests'>('files')
+  const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'agents' | 'extensions' | 'tests' | 'outline'>('files')
   const tests = useTests(project.id)
   const [panel, setPanel] = useState<'terminal' | 'problems' | 'debug' | 'run' | null>(null)
   /** A command shown running in the Run panel (installs, tasks, tests); a new key starts a fresh shell. */
@@ -153,7 +162,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   useEffect(() => {
     mounted.current = true
     const instance = monaco.editor.create(host.current!, { automaticLayout: true, fontFamily: 'Cascadia Code, Consolas, monospace', fontSize: 13,
-      minimap: { enabled: true }, padding: { top: 12 }, scrollBeyondLastLine: false, tabSize: 2, model: null, glyphMargin: true })
+      minimap: { enabled: true }, padding: { top: 12 }, scrollBeyondLastLine: false, tabSize: 2, model: null, glyphMargin: true, stickyScroll: { enabled: true } })
     editor.current = instance
     const position = instance.onDidChangeCursorPosition((event: { position: { lineNumber: number; column: number } }) => setCursor(event.position))
     const selectionSub = instance.onDidChangeCursorSelection(({ selection: s }) => setSelection(s.isEmpty() ? null : [s.startLineNumber, s.endLineNumber]))
@@ -411,6 +420,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       if (key === 's') { event.preventDefault(); void save(event.shiftKey) }
       else if (key === 'p' && event.shiftKey) { event.preventDefault(); setCommand(''); setPalette(true) }
       else if (key === 'p') { event.preventDefault(); setQuick(true) }
+      else if (key === 't' && !event.shiftKey) { event.preventDefault(); setSymbolQuery(''); setSymbolPick(true) }
+      else if (event.key === '\\') { event.preventDefault(); setSplitPath((s) => (s ? null : selected.current)) }
       else if (key === 'f' && event.shiftKey) { event.preventDefault(); setSidebar('search') }
       else if (event.code === 'Backquote') { event.preventDefault(); setPanel((open) => open === 'terminal' ? null : 'terminal') }
     }
@@ -647,6 +658,39 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const problems: Problem[] = [...markerProblems, ...taskProblems.filter((p) => !tabs.current.has(p.path)).map((p) => ({ path: p.path, line: p.line, column: p.column, message: p.message, severity: p.severity === 'error' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning }))]
   const openTasks = () => { setTaskQuery(''); void guard(() => window.ventriee.tasksList(project.id)).then((list) => { if (list) setTaskPick(list) }) }
   const shownTasks = (taskPick ?? []).filter((t) => `${t.label} ${t.command}`.toLowerCase().includes(taskQuery.trim().toLowerCase()))
+  // Outline of the open file (language server or TypeScript), refreshed after edits; drives the breadcrumb.
+  const [outline, setOutline] = useState<OutlineSymbol[]>([])
+  useEffect(() => {
+    const model = active ? tabs.current.get(active)?.model : null
+    if (!model) { setOutline([]); return }
+    let alive = true
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const load = () => void outlineFor(model, lspSession.current).then((o) => { if (alive) setOutline(o ?? []) })
+    load()
+    const sub = model.onDidChangeContent(() => { if (timer) clearTimeout(timer); timer = setTimeout(load, 700) })
+    return () => { alive = false; sub.dispose(); if (timer) clearTimeout(timer) }
+  }, [active, lspStatus])
+  const crumbs = symbolPath(outline, cursor.lineNumber)
+  // Workspace symbols (Ctrl+T).
+  const [symbolPick, setSymbolPick] = useState(false)
+  const [symbolQuery, setSymbolQuery] = useState('')
+  const [symbolHits, setSymbolHits] = useState<Awaited<ReturnType<typeof findSymbols>>>([])
+  useEffect(() => {
+    if (!symbolPick) return
+    let alive = true
+    const timer = setTimeout(() => void findSymbols(symbolQuery, lspSession.current, project.id).then((hits) => { if (alive) setSymbolHits(hits) }), 200)
+    return () => { alive = false; clearTimeout(timer) }
+  }, [symbolPick, symbolQuery, project.id])
+  // A second editor beside the first, showing any open tab; both edit the same buffer.
+  const [splitPath, setSplitPath] = useState<string | null>(null)
+  const splitHost = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const model = splitPath ? tabs.current.get(splitPath)?.model : null
+    if (!model || !splitHost.current) return
+    const second = monaco.editor.create(splitHost.current, { model, automaticLayout: true, fontFamily: 'Cascadia Code, Consolas, monospace', fontSize: 13, minimap: { enabled: false }, padding: { top: 12 }, scrollBeyondLastLine: false, tabSize: 2, stickyScroll: { enabled: true } })
+    const gone = model.onWillDispose(() => setSplitPath(null))
+    return () => { gone.dispose(); second.dispose() }
+  }, [splitPath])
   const errors = problems.filter((p) => p.severity === monaco.MarkerSeverity.Error).length
   const commands: Command[] = [
     { label: 'File: Save', keys: 'Ctrl+S', run: () => void save(), disabled: !tab },
@@ -663,6 +707,10 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     { label: 'View: Agent changes', run: () => setSidebar('agents') },
     { label: 'View: Extensions', run: () => setSidebar('extensions') },
     { label: 'View: Tests', run: () => setSidebar('tests') },
+    { label: 'View: Outline', run: () => setSidebar('outline') },
+    { label: 'Go to symbol in workspace', keys: 'Ctrl+T', run: () => { setSymbolQuery(''); setSymbolPick(true) } },
+    { label: 'Go to symbol in file', keys: 'Ctrl+Shift+O', run: () => { editor.current?.focus(); void editor.current?.getAction('editor.action.quickOutline')?.run() }, disabled: !tab },
+    { label: splitPath ? 'View: Close split editor' : 'View: Split editor right', keys: 'Ctrl+\\', run: () => setSplitPath(splitPath ? null : active), disabled: !splitPath && !active },
     { label: 'Tasks: Run task…', run: openTasks },
     { label: 'Test: Run all tests', run: () => { setSidebar('tests'); tests.run() }, disabled: !tests.runner },
     { label: 'Test: Run tests in this file', run: () => { setSidebar('tests'); tests.run({ file: active! }) }, disabled: !tests.runner || !active },
@@ -681,7 +729,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const runCommand = (c: Command) => { setPalette(false); c.run() }
   const grouped = found ? [...found.hits.reduce((map, hit) => map.set(hit.path, [...(map.get(hit.path) ?? []), hit]), new Map<string, SearchResult['hits']>())] : []
   return <div className={`code-workspace${preview || ask ? ' with-preview' : ''}`} style={{ display: visible ? undefined : 'none' }}>
-    <aside className="code-sidebar"><div className="code-sidebar-tabs"><button className={sidebar === 'files' ? 'on' : ''} onClick={() => setSidebar('files')}>Explorer</button><button className={sidebar === 'search' ? 'on' : ''} onClick={() => setSidebar('search')}>Search</button><button className={sidebar === 'git' ? 'on' : ''} onClick={() => setSidebar('git')} aria-label="Source Control" title="Source Control">Git</button><button className={sidebar === 'agents' ? 'on' : ''} onClick={() => setSidebar('agents')} aria-label="Agent changes" title="Files changed by agent tasks">Agents</button><button className={sidebar === 'tests' ? 'on' : ''} onClick={() => setSidebar('tests')} aria-label="Tests" title="Run and see tests">Tests</button><button className={sidebar === 'extensions' ? 'on' : ''} onClick={() => setSidebar('extensions')} aria-label="Extensions" title="Extensions from Open VSX">Ext</button></div>
+    <aside className="code-sidebar"><div className="code-sidebar-tabs"><button className={sidebar === 'files' ? 'on' : ''} onClick={() => setSidebar('files')}>Explorer</button><button className={sidebar === 'search' ? 'on' : ''} onClick={() => setSidebar('search')}>Search</button><button className={sidebar === 'git' ? 'on' : ''} onClick={() => setSidebar('git')} aria-label="Source Control" title="Source Control">Git</button><button className={sidebar === 'agents' ? 'on' : ''} onClick={() => setSidebar('agents')} aria-label="Agent changes" title="Files changed by agent tasks">Agents</button><button className={sidebar === 'outline' ? 'on' : ''} onClick={() => setSidebar('outline')} aria-label="Outline" title="Symbols in this file">Outline</button><button className={sidebar === 'tests' ? 'on' : ''} onClick={() => setSidebar('tests')} aria-label="Tests" title="Run and see tests">Tests</button><button className={sidebar === 'extensions' ? 'on' : ''} onClick={() => setSidebar('extensions')} aria-label="Extensions" title="Extensions from Open VSX">Ext</button></div>
       {sidebar === 'files' ? <><div className="code-section-head"><strong title={project.path}>{project.name}</strong><button className="btn tiny" onClick={() => setRevision((v) => v + 1)}>Refresh</button></div>
         <div className="code-file-actions"><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('file') }}>New file</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('folder') }}>New folder</button><button className="btn tiny" onClick={() => setQuick(true)}>Find file</button></div>
         <div className="file-tree" aria-label="Project files"><Directory projectId={project.id} path="" depth={0} revision={revision} onOpen={(path) => void open(path)} onRename={(entry) => { setNewPath(entry.path); setMoving(entry) }} onDelete={(entry) => void trash(entry)} /></div></>
@@ -696,6 +744,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
             {hits.map((hit) => <button key={`${hit.line}:${hit.column}`} onClick={() => void openAt(hit.path, hit.line, hit.column)} title={`${path}:${hit.line}`}><span className="dim">{hit.line}</span> {hit.preview}</button>)}</section>)}</div>
         </div>
         : sidebar === 'extensions' ? <ExtensionsPanel />
+        : sidebar === 'outline' ? <div className="ext-panel" aria-label="Outline">{outline.length ? <OutlineTree items={outline} current={crumbs.at(-1)} onOpen={(line, column) => { if (active) void openAt(active, line, column) }} />
+          : <p className="tree-note">{active ? 'No symbols in this file. TypeScript and JavaScript work out of the box; other languages need their language server.' : 'Open a file to see its outline.'}</p>}</div>
         : sidebar === 'tests' ? <TestsPanel tests={tests} onOpen={(path, line) => void openAt(path, line, 1)} onFix={(r) => void fixTest(r)} />
         : sidebar === 'agents' ? <AgentChanges projectId={project.id} onDiff={(path) => void openDiff(path, false)} onOpen={(path) => void open(path)} />
         : <SourceControl projectId={project.id} refreshKey={revision} onDiff={(path, staged) => void openDiff(path, staged)} onOpen={(path) => void open(path)} />}
@@ -703,7 +753,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     <section className={`code-main${panel ? ' with-panel' : ''}`} aria-label="Code editor">
       <div className="code-tabs" role="tablist" aria-label="Open files">{[...tabs.current].map(([path, value]) => <div className={`code-tab${path === active && !diff ? ' on' : ''}`} key={path}>
         <button role="tab" aria-selected={path === active && !diff} title={path} onClick={() => activate(path)}>{path.split('/').at(-1)}{value.saved !== value.model.getValue() ? <span aria-label="Unsaved"> ●</span> : null}</button><button className="tab-close" onClick={() => close(path)} aria-label={`Close ${path}`}><IconClose width={12} height={12} aria-hidden /></button></div>)}</div>
-      <div className="code-toolbar"><span className="code-breadcrumb" title={diff?.path ?? active ?? project.path}>{diff ? `${diff.label ?? (diff.staged ? 'Staged' : 'Working tree')} / ${diff.path}` : active ?? 'Open a file to begin'}</span>
+      <div className="code-toolbar"><span className="code-breadcrumb" title={diff?.path ?? active ?? project.path}>{diff ? `${diff.label ?? (diff.staged ? 'Staged' : 'Working tree')} / ${diff.path}` : active ? [active.split('/').join(' › '), ...crumbs.map((c) => c.name)].join(' › ') : 'Open a file to begin'}</span>
         {diff?.change ? <><button className="btn tiny" onClick={() => dropChange(diff.change!)}>Reject</button><button className="btn tiny primary" onClick={() => void acceptChange(diff.change!)}>Accept into editor</button></>
           : diff?.proposal && proposal ? <><button className="btn tiny" onClick={() => { setProposal(null); setDiff(null) }}>Reject</button><button className="btn tiny primary" onClick={acceptProposal}>Accept into editor</button></>
           : diff ? <button className="btn tiny" onClick={() => setDiff(null)}>Back to editor</button> : <><button className="btn tiny" disabled={!tab || busy} onClick={() => void reload()}>Reload</button><button className="btn tiny" disabled={!tab || busy} onClick={() => { setNewPath(''); setCreate('copy') }}>Save copy</button><button className="btn tiny primary" disabled={!tab || busy || tab.saved === tab.model.getValue()} onClick={() => void save()}>Save</button></>}
@@ -713,7 +763,9 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         <button className="btn tiny" onClick={() => resolveHere('current')}>Accept current</button><button className="btn tiny" onClick={() => resolveHere('incoming')}>Accept incoming</button><button className="btn tiny" onClick={() => resolveHere('both')}>Accept both</button></div> : null}
         {conflict && conflict === active && !diff ? <div className="editor-conflict" role="alert"><span>{conflict} changed on disk after you opened it. Your edits are kept here and were not saved.</span>
         <button className="btn tiny" onClick={() => void compareWithDisk()}>Compare with disk</button><button className="btn tiny" onClick={() => void reload()}>Reload from disk</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('copy') }}>Save a copy</button></div> : null}
-        <div ref={host} className="monaco-surface" style={{ visibility: active && !diff ? 'visible' : 'hidden' }} />
+        <div ref={host} className={`monaco-surface${splitPath && !diff ? ' split-left' : ''}`} style={{ visibility: active && !diff ? 'visible' : 'hidden' }} />
+        {splitPath && !diff ? <div className="split-pane"><div className="split-head"><select aria-label="File in the split editor" value={splitPath} onChange={(e) => setSplitPath(e.target.value)}>{[...tabs.current.keys()].map((p) => <option key={p} value={p}>{p}</option>)}</select>
+          <button className="tab-close" aria-label="Close split editor" onClick={() => setSplitPath(null)}><IconClose width={12} height={12} aria-hidden /></button></div><div ref={splitHost} className="split-surface" key={splitPath} /></div> : null}
         {diff ? <DiffView diff={diff} /> : !active ? <div className="code-welcome"><span className="code-welcome-symbol">{'{ }'}</span><h2>Your code, in one place</h2><p>Open a file in Explorer or press Ctrl+P.</p><p>Ctrl+S to save · Ctrl+F to find · Ctrl+H to replace</p><p>UTF-8 text files up to 2 MB. Language runtimes are installed separately.</p></div> : null}
         {loading ? <div className="editor-loading" role="status">Opening file…</div> : null}</div>
       {panel || run ? <section className="code-panel" aria-label="Panel" style={{ display: panel ? undefined : 'none' }}>
@@ -815,6 +867,11 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <input id="move-path" className="input" autoFocus value={newPath} onChange={(e) => setNewPath(e.target.value)} onFocus={(e) => { const name = e.target.value.lastIndexOf('/') + 1; e.target.setSelectionRange(name, e.target.value.length) }} required />
       <p className="hint">Change the name to rename it. Change the folders in the path to move it; the destination folder must exist.</p>
       <button className="btn primary" disabled={busy || !newPath.trim() || newPath.trim() === moving.path}>Rename</button></form></Modal> : null}
+    {symbolPick ? <Modal title="Go to symbol" onClose={() => setSymbolPick(false)} narrow><input className="input" autoFocus aria-label="Find a symbol" placeholder="Class, function, method…" value={symbolQuery} onChange={(e) => setSymbolQuery(e.target.value)}
+      onKeyDown={(e) => { if (e.key === 'Enter' && symbolHits[0]) { e.preventDefault(); void openAt(symbolHits[0].path, symbolHits[0].line, symbolHits[0].column); setSymbolPick(false) } }} />
+      <div className="quick-files">{symbolHits.map((h, i) => <button key={i} onClick={() => { void openAt(h.path, h.line, h.column); setSymbolPick(false) }}><span>{h.name} <small className="dim">{SYMBOL_KINDS[h.kind]}</small></span> <small className="dim">{h.path}:{h.line}</small></button>)}
+        {symbolQuery.trim() && !symbolHits.length ? <p>No matching symbols.</p> : null}</div>
+      <p className="hint">TypeScript and JavaScript project files, plus what running language servers know.</p></Modal> : null}
     {taskPick ? <Modal title="Run a task" onClose={() => setTaskPick(null)} narrow><input className="input" autoFocus aria-label="Find a task" placeholder="Filter tasks…" value={taskQuery} onChange={(e) => setTaskQuery(e.target.value)}
       onKeyDown={(e) => { if (e.key === 'Enter' && shownTasks[0]) { e.preventDefault(); runInPanel(shownTasks[0].label, shownTasks[0].command); setTaskPick(null) } }} />
       <div className="quick-files">{shownTasks.length ? shownTasks.map((t) => <button key={`${t.source}:${t.label}`} title={t.detail ?? t.command} onClick={() => { runInPanel(t.label, t.command); setTaskPick(null) }}><span>{t.label}</span> <small className="dim">{t.source}</small></button>)

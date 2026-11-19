@@ -10,7 +10,7 @@ type Rng = { start: Pos; end: Pos }
 type TextEdit = { range: Rng; newText: string }
 type WorkspaceEdit = { changes?: Record<string, TextEdit[]>; documentChanges?: Array<{ textDocument?: { uri: string }; edits?: TextEdit[] }> }
 type LspSymbol = { name: string; detail?: string; kind: number; range: Rng; selectionRange: Rng; children?: LspSymbol[]; location?: { uri: string; range: Rng }; containerName?: string }
-export interface OutlineSymbol { name: string; detail: string; kind: number; line: number; column: number; children: OutlineSymbol[] }
+export interface OutlineSymbol { name: string; detail: string; kind: number; line: number; column: number; endLine: number; children: OutlineSymbol[] }
 
 const toPos = (p: monaco.IPosition): Pos => ({ line: p.lineNumber - 1, character: p.column - 1 })
 const toRange = (r: Rng) => new monaco.Range(r.start.line + 1, r.start.character + 1, r.end.line + 1, r.end.character + 1)
@@ -122,7 +122,8 @@ export async function startLsp(project: { id: string; path: string }, hooks: {
   }
   const outline = (items: LspSymbol[]): OutlineSymbol[] => items.slice(0, 2000).map((s) => {
     const range = s.selectionRange ?? s.location?.range ?? s.range
-    return { name: s.name, detail: s.detail ?? s.containerName ?? '', kind: s.kind, line: range.start.line + 1, column: range.start.character + 1, children: outline(s.children ?? []) }
+    const full = s.range ?? s.location?.range ?? range
+    return { name: s.name, detail: s.detail ?? s.containerName ?? '', kind: s.kind, line: range.start.line + 1, column: range.start.character + 1, endLine: full.end.line + 1, children: outline(s.children ?? []) }
   })
 
   function register(language: string, capabilities: Record<string, unknown>) {
