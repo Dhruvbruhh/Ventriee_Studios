@@ -34,6 +34,13 @@ interface Problem { path: string; line: number; column: number; message: string;
 interface Command { label: string; keys?: string; run: () => void; disabled?: boolean }
 
 type EntryAction = (entry: FileEntry) => void
+/** Editor tabs drag between the main editor and the split pane. */
+const TAB_DRAG = 'application/x-ventriee-tab'
+const tabDrop = (onDrop: (path: string) => void) => ({
+  onDragOver: (e: React.DragEvent) => { if (e.dataTransfer.types.includes(TAB_DRAG)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } },
+  onDrop: (e: React.DragEvent) => { const path = e.dataTransfer.getData(TAB_DRAG); if (path) { e.preventDefault(); e.stopPropagation(); onDrop(path) } }
+})
+
 function Directory({ projectId, path, depth, revision, onOpen, onRename, onDelete }: { projectId: string; path: string; depth: number; revision: number; onOpen: (path: string) => void; onRename: EntryAction; onDelete: EntryAction }) {
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -776,6 +783,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     { label: 'Go to symbol in workspace', keys: 'Ctrl+T', run: () => { setSymbolQuery(''); setSymbolPick(true) } },
     { label: 'Go to symbol in file', keys: 'Ctrl+Shift+O', run: () => { editor.current?.focus(); void editor.current?.getAction('editor.action.quickOutline')?.run() }, disabled: !tab },
     { label: splitPath ? 'View: Close split editor' : 'View: Split editor right', keys: 'Ctrl+\\', run: () => setSplitPath(splitPath ? null : active), disabled: !splitPath && !active },
+    { label: 'View: Move editor to the split', run: () => setSplitPath(active), disabled: !active || splitPath === active },
+    { label: 'View: Move split file to the main editor', run: () => { if (splitPath) { activate(splitPath); setSplitPath(null) } }, disabled: !splitPath },
     { label: 'Tasks: Run task…', run: openTasks },
     { label: 'Preferences: Keyboard shortcuts', run: () => setKeysOpen(true) },
     { label: `Preferences: ${vimMode ? 'Turn off' : 'Turn on'} Vim mode`, run: () => void guard(() => window.ventriee.saveSettings({ vimMode: !vimMode })) },
@@ -824,7 +833,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     </aside>
     <section className={`code-main${panel ? ' with-panel' : ''}`} aria-label="Code editor">
       <div className="code-tabs" role="tablist" aria-label="Open files">{[...tabs.current].map(([path, value]) => <div className={`code-tab${path === active && !diff ? ' on' : ''}`} key={path}>
-        <button role="tab" aria-selected={path === active && !diff} title={path} onClick={() => activate(path)}>{iconFor(icons, path.split('/').at(-1)!, false) ? <img className="file-icon" src={iconFor(icons, path.split('/').at(-1)!, false)} alt="" /> : null}{path.split('/').at(-1)}{value.saved !== value.model.getValue() ? <span aria-label="Unsaved"> ●</span> : null}</button><button className="tab-close" onClick={() => close(path)} aria-label={`Close ${path}`}><IconClose width={12} height={12} aria-hidden /></button></div>)}</div>
+        <button role="tab" aria-selected={path === active && !diff} title={path} onClick={() => activate(path)} draggable onDragStart={(e) => { e.dataTransfer.setData(TAB_DRAG, path); e.dataTransfer.effectAllowed = 'move'; document.body.classList.add('dragging-tab') }} onDragEnd={() => document.body.classList.remove('dragging-tab')}>{iconFor(icons, path.split('/').at(-1)!, false) ? <img className="file-icon" src={iconFor(icons, path.split('/').at(-1)!, false)} alt="" /> : null}{path.split('/').at(-1)}{value.saved !== value.model.getValue() ? <span aria-label="Unsaved"> ●</span> : null}</button><button className="tab-close" onClick={() => close(path)} aria-label={`Close ${path}`}><IconClose width={12} height={12} aria-hidden /></button></div>)}</div>
       <div className="code-toolbar"><span className="code-breadcrumb" title={diff?.path ?? active ?? project.path}>{diff ? `${diff.label ?? (diff.staged ? 'Staged' : 'Working tree')} / ${diff.path}` : active ? [active.split('/').join(' › '), ...crumbs.map((c) => c.name)].join(' › ') : 'Open a file to begin'}</span>
         {diff?.change ? <><button className="btn tiny" onClick={() => dropChange(diff.change!)}>Reject</button><button className="btn tiny primary" onClick={() => void acceptChange(diff.change!)}>Accept into editor</button></>
           : diff?.proposal && proposal ? <><button className="btn tiny" onClick={() => { setProposal(null); setDiff(null) }}>Reject</button><button className="btn tiny primary" onClick={acceptProposal}>Accept into editor</button></>
@@ -836,8 +845,9 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         <button className="btn tiny" onClick={() => resolveHere('current')}>Accept current</button><button className="btn tiny" onClick={() => resolveHere('incoming')}>Accept incoming</button><button className="btn tiny" onClick={() => resolveHere('both')}>Accept both</button></div> : null}
         {conflict && conflict === active && !diff ? <div className="editor-conflict" role="alert"><span>{conflict} changed on disk after you opened it. Your edits are kept here and were not saved.</span>
         <button className="btn tiny" onClick={() => void compareWithDisk()}>Compare with disk</button><button className="btn tiny" onClick={() => void reload()}>Reload from disk</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('copy') }}>Save a copy</button></div> : null}
-        <div ref={host} className={`monaco-surface${splitPath && !diff ? ' split-left' : ''}`} style={{ visibility: active && !diff ? 'visible' : 'hidden' }} />
-        {splitPath && !diff ? <div className="split-pane"><div className="split-head"><select aria-label="File in the split editor" value={splitPath} onChange={(e) => setSplitPath(e.target.value)}>{[...tabs.current.keys()].map((p) => <option key={p} value={p}>{p}</option>)}</select>
+        <div ref={host} className={`monaco-surface${splitPath && !diff ? ' split-left' : ''}`} style={{ visibility: active && !diff ? 'visible' : 'hidden' }} {...tabDrop((path) => activate(path))} />
+        {!splitPath && active && !diff ? <div className="split-drop" aria-hidden {...tabDrop((path) => setSplitPath(path))}>Drop here to split</div> : null}
+        {splitPath && !diff ? <div className="split-pane" {...tabDrop((path) => setSplitPath(path))}><div className="split-head"><select aria-label="File in the split editor" value={splitPath} onChange={(e) => setSplitPath(e.target.value)}>{[...tabs.current.keys()].map((p) => <option key={p} value={p}>{p}</option>)}</select>
           <button className="tab-close" aria-label="Close split editor" onClick={() => setSplitPath(null)}><IconClose width={12} height={12} aria-hidden /></button></div><div ref={splitHost} className="split-surface" key={splitPath} /></div> : null}
         {diff ? <DiffView diff={diff} /> : !active ? <div className="code-welcome"><span className="code-welcome-symbol">{'{ }'}</span><h2>Your code, in one place</h2><p>Open a file in Explorer or press Ctrl+P.</p><p>Ctrl+S to save · Ctrl+F to find · Ctrl+H to replace</p><p>UTF-8 text files up to 2 MB. Language runtimes are installed separately.</p></div> : null}
         {loading ? <div className="editor-loading" role="status">Opening file…</div> : null}</div>

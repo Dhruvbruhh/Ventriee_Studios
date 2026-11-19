@@ -1498,3 +1498,5 @@
 .attach-remove { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--text); font-size: 12px; line-height: 1; cursor: pointer; padding: 0; }
 .btn.recording { background: var(--danger, #c0392b); color: #fff; }
 .file-icon { width: 16px; height: 16px; flex: none; margin-right: 5px; vertical-align: -3px; }
+.split-drop { position: absolute; top: 0; right: 0; bottom: 0; width: 18%; z-index: 2; display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; pointer-events: none; }
+body.dragging-tab .split-drop { pointer-events: auto; color: var(--muted); background: color-mix(in srgb, var(--accent) 12%, transparent); border-left: 2px dashed var(--accent); }
