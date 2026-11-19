@@ -9,8 +9,10 @@ export function gh(root: string, args: string[], input?: string): Promise<string
   if (!file) return Promise.reject(new Error('The GitHub CLI (gh) is not installed. Install it from https://cli.github.com and run "gh auth login".'))
   return new Promise((resolve, reject) => {
     const child = execFile(file, args, { cwd: root, windowsHide: true, maxBuffer: 32 * 1024 * 1024, timeout: 60_000, env: { ...process.env, GH_PROMPT_DISABLED: '1', NO_COLOR: '1' } }, (error, stdout, stderr) => {
-      if (error) reject(new Error((stderr || error.message).trim().split('\n').slice(0, 3).join(' ')))
-      else resolve(stdout)
+      if (!error) { resolve(stdout); return }
+      const message = (stderr || error.message).trim()
+      reject(new Error(/no git remotes|not a git repository/i.test(message) ? 'This project is not connected to a GitHub repository yet. Publish it from Source Control, or add a GitHub remote.'
+        : /auth login|not logged/i.test(message) ? 'Sign in to GitHub first: run "gh auth login" in a terminal.' : message.split('\n').slice(0, 3).join(' ')))
     })
     if (input !== undefined) child.stdin?.end(input)
   })

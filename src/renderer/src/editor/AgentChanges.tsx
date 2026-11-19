@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { IconExternal, IconRefresh } from '../icons'
-import { useStore } from '../store'
+import { useStore, cleanError } from '../store'
 
 /** Files each worker task changed, from its recorded evidence, with Git diff and restore. */
 export function AgentChanges({ projectId, onDiff, onOpen }: { projectId: string; onDiff: (path: string) => void; onOpen: (path: string) => void }) {
@@ -20,7 +20,7 @@ export function AgentChanges({ projectId, onDiff, onOpen }: { projectId: string;
     try {
       await window.ventriee.gitAction(projectId, 'discard', path)
       useStore.getState().notify(`Restored ${path} from the last commit`, 'info')
-    } catch (reason) { setError(String(reason).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '')) }
+    } catch (reason) { setError(cleanError(reason)) }
     finally { setBusy('') }
   }
   return <div className="agent-changes">

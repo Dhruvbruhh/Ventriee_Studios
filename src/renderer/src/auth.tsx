@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { App } from './App'
-import { guard, resetStudio, useStore } from './store'
+import { guard, resetStudio, useStore, cleanError } from './store'
 import { supabaseUrl, supabaseKey } from '../../shared/auth-config'
 
 function Screen({ children }: { children: ReactNode }) {
@@ -46,7 +46,7 @@ export function AuthRoot() {
     try {
       const result = await window.ventriee.authSignIn({ email, password }, signup)
       setPassword(''); setSignedIn(Boolean(result.session)); if (result.session) setHadSession(true); setMessage(result.message)
-    } catch (reason) { setError(String(reason).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '')) }
+    } catch (reason) { setError(cleanError(reason)) }
     finally { setBusy(false) }
   }
   if (!supabaseUrl || !supabaseKey) return <Screen><h2>Connect Supabase</h2>

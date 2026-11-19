@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { RichText } from '../components/RichText'
-import { guard } from '../store'
+import { guard, cleanError } from '../store'
 
 type Item = { number: number; title: string; author?: { login: string }; headRefName?: string; isDraft?: boolean; updatedAt: string; url: string; reviewDecision?: string; labels?: Array<{ name: string }> }
 type Details = Item & { body: string; baseRefName?: string; state: string; files?: Array<{ path: string; additions: number; deletions: number }>; comments?: Array<{ author: { login: string }; body: string }>
@@ -19,7 +19,7 @@ export function GitHubPanel({ projectId }: { projectId: string }) {
   const run = (action: Parameters<typeof window.ventriee.github>[1]) => window.ventriee.github(projectId, action)
   const load = () => {
     setItems(null); setError('')
-    run({ kind }).then((list) => setItems(list as Item[]), (e) => setError(String(e).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '')))
+    run({ kind }).then((list) => setItems(list as Item[]), (e) => setError(cleanError(e)))
   }
   useEffect(load, [kind, projectId])
   const show = async (n: number) => {

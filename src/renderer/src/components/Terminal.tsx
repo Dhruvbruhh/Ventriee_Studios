@@ -1,3 +1,4 @@
+import { cleanError } from '../store'
 import { useEffect, useRef, useState } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -65,7 +66,7 @@ export function TerminalView({ projectId, slot: name, label, command, closeOnUnm
         // Give the shell a moment to print its prompt before typing the owner-chosen command.
         if (command) setTimeout(() => { if (slot.id === id) void window.ventriee.termWrite(id, `${command}\r`).catch(() => {}) }, 900)
       }
-      catch (reason) { if (alive) setError(String(reason).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '')) }
+      catch (reason) { if (alive) setError(cleanError(reason)) }
     }
     void start()
     const input = term.onData((data) => { if (slot.id) void window.ventriee.termWrite(slot.id, data).catch(() => {}) })

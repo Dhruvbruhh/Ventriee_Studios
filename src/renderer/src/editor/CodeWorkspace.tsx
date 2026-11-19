@@ -18,7 +18,7 @@ import { Preview } from '../components/Preview'
 import { TerminalView, terminalOutput } from '../components/Terminal'
 import { matchProblems, type MatchedProblem } from '../../../shared/problems'
 import { Modal } from '../shell'
-import { guard, useStore } from '../store'
+import { guard, useStore, cleanError } from '../store'
 import type { CodeChangeResult, ProjectTask, TestResult, DebugBreakpoint, DebugFrame, DebugVariable, FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
 import type { Catalog } from '../../../shared/catalog'
 import type { Project } from '../../../shared/types'
@@ -264,7 +264,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       const result = await window.ventriee.filesSearch(project.id, query, matchCase)
       if (mounted.current && run === searchRun.current) setFound(result)
     } catch (error) {
-      if (mounted.current && run === searchRun.current) { setFound(null); setFindError(String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '')) }
+      if (mounted.current && run === searchRun.current) { setFound(null); setFindError(cleanError(error)) }
     } finally { if (mounted.current && run === searchRun.current) setFindBusy(false) }
   }
   /** Open tabs inside a file or folder; refuses when one has unsaved edits, so a move or delete never loses them. */
@@ -321,7 +321,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         setProposal(next); showProposal(next)
       }
     } catch (error) {
-      if (mounted.current) setAskError(String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, ''))
+      if (mounted.current) setAskError(cleanError(error))
     } finally { if (mounted.current) setAsking(null) }
   }
   const acceptProposal = () => {
@@ -346,7 +346,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       setChanges(result.changes)
       if (result.changes[0]) showChange(result.changes[0])
     } catch (error) {
-      if (mounted.current) setAskError(String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, ''))
+      if (mounted.current) setAskError(cleanError(error))
     } finally { if (mounted.current) setAsking(null) }
   }
   const showChange = (c: Change) => setDiff({ path: c.path, original: c.original, modified: c.text, staged: false,
@@ -589,7 +589,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     setPanel('debug'); setEvalResult('')
     setDebug({ status: 'starting', frames: [], variables: [], output: '' })
     try { await window.ventriee.debugStart(project.id, { file: active ?? '', language: activeLanguageId, config: launchConfig || undefined }, breakpoints) } catch (error) {
-      if (mounted.current) setDebug({ status: 'idle', frames: [], variables: [], output: '', error: String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '') })
+      if (mounted.current) setDebug({ status: 'idle', frames: [], variables: [], output: '', error: cleanError(error) })
     }
   }
   const debugCommand = (action: 'continue' | 'over' | 'into' | 'out' | 'pause') => void window.ventriee.debugCommand(action).catch(() => {})
@@ -628,7 +628,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     let formatted: string | null
     try { formatted = await window.ventriee.toolsFormat(project.id, active, text) } catch (error) {
       // Prettier's own message (usually a syntax error in the file), not a silent fallback.
-      useStore.getState().notify(String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, ''), 'error'); return
+      useStore.getState().notify(cleanError(error), 'error'); return
     }
     if (formatted === null) { void editor.current?.getAction('editor.action.formatDocument')?.run(); return }
     if (current.model.isDisposed() || current.model.getValue() !== text || formatted === text) return

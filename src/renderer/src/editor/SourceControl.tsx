@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { IconExternal } from '../icons'
 import type { GitAction, GitChange, GitState } from '../../../shared/workspace'
-import { guard, useStore } from '../store'
+import { guard, useStore, cleanError } from '../store'
 
 export function SourceControl({ projectId, onDiff, onOpen, refreshKey }: {
   projectId: string; onDiff: (path: string, staged: boolean) => void; onOpen: (path: string) => void; refreshKey: number
@@ -14,7 +14,7 @@ export function SourceControl({ projectId, onDiff, onOpen, refreshKey }: {
   const [remote, setRemote] = useState('')
   const refresh = useCallback(async () => {
     try { const next = await window.ventriee.gitStatus(projectId); setState(next); setError('') }
-    catch (reason) { setError(String(reason).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '')) }
+    catch (reason) { setError(cleanError(reason)) }
   }, [projectId])
   useEffect(() => { void refresh(); const timer = setInterval(() => void refresh(), 5000); return () => clearInterval(timer) }, [refresh, refreshKey])
   const run = async (action: GitAction, path?: string, value?: string) => {
@@ -29,7 +29,7 @@ export function SourceControl({ projectId, onDiff, onOpen, refreshKey }: {
       if (action === 'commit') setMessage('')
       if (action === 'branch') setBranch('')
       await refresh()
-    } catch (reason) { setError(String(reason).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '')) }
+    } catch (reason) { setError(cleanError(reason)) }
     finally { setBusy(false) }
   }
   const group = (title: string, changes: GitChange[], staged: boolean) => <section className="sc-group"><h3>{title}<span>{changes.length}</span></h3>

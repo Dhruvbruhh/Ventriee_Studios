@@ -1,3 +1,4 @@
+import { cleanError } from '../store'
 import { monaco } from './monaco'
 import { fileUri } from './intellisense'
 import type { LspStatus } from '../../../shared/catalog'
@@ -55,7 +56,7 @@ export async function startLsp(project: { id: string; path: string }, hooks: {
   const ensure = (language: string) => {
     let p = starting.get(language)
     if (!p) {
-      p = window.ventriee.lspEnsure(project.id, language).catch((error): LspStatus => ({ state: 'missing', language, install: undefined, url: String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '') }))
+      p = window.ventriee.lspEnsure(project.id, language).catch((error): LspStatus => ({ state: 'missing', language, install: undefined, url: cleanError(error) }))
         .then((status) => { statuses.set(language, status); if (!disposed) hooks.onStatus(language, status); if (status.state === 'ready') register(language, status.capabilities); return status })
       starting.set(language, p)
     }
