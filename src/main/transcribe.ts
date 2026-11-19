@@ -29,6 +29,7 @@ export async function transcribe(audio: unknown, creds: Pick<Credentials, 'get'>
       return readFileSync(join(dir, 'speech.txt'), 'utf8').trim()
     } finally { rmSync(dir, { recursive: true, force: true }) }
   }
+  let failed = ''
   for (const t of TRANSCRIBERS) {
     const key = creds.get(t.engine)
     if (!key) continue
@@ -36,8 +37,9 @@ export async function transcribe(audio: unknown, creds: Pick<Credentials, 'get'>
     form.append('file', new Blob([new Uint8Array(audio)], { type: 'audio/webm' }), 'speech.webm')
     form.append('model', t.model)
     const res = await fetcher(`${defaultEndpoint(t.engine)}/audio/transcriptions`, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form })
-    if (!res.ok) throw new Error(`${t.name} could not transcribe the recording (HTTP ${res.status})`)
+    // A rejected key or a bad recording at one provider: try the next before giving up.
+    if (!res.ok) { failed = `${t.name} could not transcribe the recording (HTTP ${res.status}${res.status === 401 ? ': check its API key in Settings' : ''})`; continue }
     return String(((await res.json()) as { text?: string }).text ?? '').trim()
   }
-  throw new Error(NO_TRANSCRIBER)
+  throw new Error(failed || NO_TRANSCRIBER)
 }

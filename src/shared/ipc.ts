@@ -253,7 +253,7 @@ export interface VentrieeApi {
   openPath(path: string): Promise<void>
   openExternal(url: string): Promise<void>
   revealFile(path: string): Promise<void>
-  chatSend(input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string }): Promise<ChatMessage>
+  chatSend(input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string; images?: string[] }): Promise<ChatMessage>
   chatSessionNew(projectId: string): Promise<void>
   chatSessionSelect(projectId: string, conversationId: string): Promise<void>
   onChatChunk(cb: (payload: { projectId: string; messageId: string; chunk: string }) => void): () => void

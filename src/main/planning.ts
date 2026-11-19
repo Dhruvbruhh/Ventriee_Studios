@@ -99,7 +99,8 @@ export class PlanningService {
   async sendChat(
     project: Project,
     text: string,
-    choice: { engine: EngineKind; model: string; endpoint: string }
+    choice: { engine: EngineKind; model: string; endpoint: string },
+    images: string[] = []
   ): Promise<{ owner: ChatMessage; assistant: ChatMessage }> {
     const conversation = this.store.conversation(project.id)
     const owner = this.store.addChatMessage({
@@ -143,6 +144,7 @@ export class PlanningService {
         endpoint: choice.endpoint || defaultEndpoint(choice.engine),
         system: this.systemPrompt(project),
         prompt: `${context}${transcript}\n\nReply to the Owner's last message.`,
+        images,
         cwd: project.path,
         maxTokens: 3000,
         timeoutMs: 6 * 60_000,

@@ -21,4 +21,12 @@ describe.skipIf(Boolean(findExecutable('whisper')))('voice transcription', () =>
     expect(text).toBe('make the button blue')
     expect(calls).toEqual([{ url: 'https://api.mistral.ai/v1/audio/transcriptions', auth: 'Bearer mk', model: 'voxtral-mini-latest' }])
   })
+
+  it('moves on when a key is rejected, and says which one when all fail', async () => {
+    const seen: string[] = []
+    const fetcher = (async (url: string) => { seen.push(url); return new Response('no', { status: url.includes('openai') ? 401 : 200, headers: {} }) }) as unknown as typeof fetch
+    const ok = (async (url: string) => { seen.push(url); return url.includes('openai') ? new Response('no', { status: 401 }) : new Response(JSON.stringify({ text: 'hi' })) }) as unknown as typeof fetch
+    expect(await transcribe(audio, { get: () => 'k' }, ok)).toBe('hi')
+    await expect(transcribe(audio, { get: (e) => (e === 'api-openai' ? 'k' : null) }, fetcher)).rejects.toThrow('OpenAI could not transcribe the recording (HTTP 401: check its API key')
+  })
 })
