@@ -11,10 +11,11 @@ import { TestsPanel, testAt, useTests } from './TestsPanel'
 import { loadExtensions } from './extensions'
 import type { LspStatus } from '../../../shared/catalog'
 import { Preview } from '../components/Preview'
-import { TerminalView } from '../components/Terminal'
+import { TerminalView, terminalOutput } from '../components/Terminal'
+import { matchProblems, type MatchedProblem } from '../../../shared/problems'
 import { Modal } from '../shell'
 import { guard, useStore } from '../store'
-import type { CodeChangeResult, TestResult, DebugBreakpoint, DebugFrame, DebugVariable, FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
+import type { CodeChangeResult, ProjectTask, TestResult, DebugBreakpoint, DebugFrame, DebugVariable, FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
 import type { Catalog } from '../../../shared/catalog'
 import type { Project } from '../../../shared/types'
 
@@ -95,7 +96,10 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [evalText, setEvalText] = useState('')
   const [evalResult, setEvalResult] = useState('')
   const toggleBreakpoint = useRef((_path: string, _line: number) => {})
-  const [problems, setProblems] = useState<Problem[]>([])
+  const [markerProblems, setProblems] = useState<Problem[]>([])
+  const [taskProblems, setTaskProblems] = useState<MatchedProblem[]>([])
+  const [taskPick, setTaskPick] = useState<ProjectTask[] | null>(null)
+  const [taskQuery, setTaskQuery] = useState('')
   const [palette, setPalette] = useState(false)
   const [command, setCommand] = useState('')
   const [findText, setFindText] = useState('')
@@ -619,6 +623,30 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     : status.install ? <button className="status-btn" title={`Runs: ${status.install}`} onClick={() => runInPanel(`Install ${status.language} support`, status.install!)}>Install {status.language} support</button>
     : status.url?.startsWith('http') ? <button className="status-btn" onClick={() => window.open(status.url)}>Get {status.language} support</button>
     : <span title={status.url}>{status.language}: no language server</span>
+  // Compiler and linter output of the running task becomes problems; files not open in a tab are listed too.
+  useEffect(() => {
+    if (!run) { setTaskProblems([]); return }
+    const root = project.path.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase()
+    const toProject = (p: string) => {
+      const path = p.replace(/\\/g, '/').replace(/^\.\//, '')
+      if (!/^([A-Za-z]:)?\//.test(path)) return path.includes('..') ? null : path
+      return path.toLowerCase().startsWith(`${root}/`) ? path.slice(root.length + 1) : null
+    }
+    let last = ''
+    const timer = setInterval(() => {
+      const output = terminalOutput(project.id, `run-${run.key}`)
+      if (output === last) return
+      last = output
+      const found = matchProblems(output, toProject)
+      setTaskProblems(found)
+      for (const [path, t] of tabs.current) monaco.editor.setModelMarkers(t.model, 'task', found.filter((p) => p.path === path).map((p) => ({ startLineNumber: p.line, startColumn: p.column, endLineNumber: p.line, endColumn: p.column + 1, message: p.message,
+        severity: p.severity === 'error' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning, source: run.label })))
+    }, 1500)
+    return () => clearInterval(timer)
+  }, [run, project.id, project.path])
+  const problems: Problem[] = [...markerProblems, ...taskProblems.filter((p) => !tabs.current.has(p.path)).map((p) => ({ path: p.path, line: p.line, column: p.column, message: p.message, severity: p.severity === 'error' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning }))]
+  const openTasks = () => { setTaskQuery(''); void guard(() => window.ventriee.tasksList(project.id)).then((list) => { if (list) setTaskPick(list) }) }
+  const shownTasks = (taskPick ?? []).filter((t) => `${t.label} ${t.command}`.toLowerCase().includes(taskQuery.trim().toLowerCase()))
   const errors = problems.filter((p) => p.severity === monaco.MarkerSeverity.Error).length
   const commands: Command[] = [
     { label: 'File: Save', keys: 'Ctrl+S', run: () => void save(), disabled: !tab },
@@ -635,6 +663,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     { label: 'View: Agent changes', run: () => setSidebar('agents') },
     { label: 'View: Extensions', run: () => setSidebar('extensions') },
     { label: 'View: Tests', run: () => setSidebar('tests') },
+    { label: 'Tasks: Run task…', run: openTasks },
     { label: 'Test: Run all tests', run: () => { setSidebar('tests'); tests.run() }, disabled: !tests.runner },
     { label: 'Test: Run tests in this file', run: () => { setSidebar('tests'); tests.run({ file: active! }) }, disabled: !tests.runner || !active },
     { label: 'Test: Run the test at the cursor', run: () => { const name = tab ? testAt(tab.model.getValue(), cursor.lineNumber) : null; if (name) { setSidebar('tests'); tests.run({ name }) } else useStore.getState().notify('No test found above the cursor', 'info') }, disabled: !tests.runner || !tab },
@@ -733,6 +762,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <footer className="code-status"><span>{busy ? 'Saving…' : tab && tab.saved !== tab.model.getValue() ? 'Unsaved changes' : 'Saved'}</span>
         <button className="status-btn" onClick={() => setPanel((open) => open === 'problems' ? null : 'problems')} aria-label={`${problems.length} problems`}>{errors} errors · {problems.length - errors} warnings</button>
         <button className="status-btn" onClick={() => setPanel((open) => open === 'terminal' ? null : 'terminal')}>Terminal</button>
+        <button className="status-btn" onClick={openTasks} title="Run a task from tasks.json, package.json, Makefile, Go or Cargo">Tasks</button>
         <button className="status-btn" onClick={() => { setCommand(''); setPalette(true) }} title="Command palette (Ctrl+Shift+P)">Commands</button><span className="grow" />{blame ? <span className="status-blame" title={blame}>{blame}</span> : null}{typesInfo ? <span title="Files and installed packages the TypeScript service knows about">{typesInfo}</span> : null}{languageStatus}<span>Ln {cursor.lineNumber}, Col {cursor.column}</span><span>UTF-8{tab?.file.bom ? ' BOM' : ''}</span>
         <select aria-label="Editor language" value={tab?.model.getLanguageId() ?? 'plaintext'} disabled={!tab || Boolean(diff)} onChange={(e) => { if (tab) { monaco.editor.setModelLanguage(tab.model, e.target.value); changed() } }}>
           {editorLanguages().sort((a, b) => a.id.localeCompare(b.id)).map((lang) => <option value={lang.id} key={lang.id}>{lang.aliases?.[0] ?? lang.id}</option>)}
@@ -785,6 +815,11 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <input id="move-path" className="input" autoFocus value={newPath} onChange={(e) => setNewPath(e.target.value)} onFocus={(e) => { const name = e.target.value.lastIndexOf('/') + 1; e.target.setSelectionRange(name, e.target.value.length) }} required />
       <p className="hint">Change the name to rename it. Change the folders in the path to move it; the destination folder must exist.</p>
       <button className="btn primary" disabled={busy || !newPath.trim() || newPath.trim() === moving.path}>Rename</button></form></Modal> : null}
+    {taskPick ? <Modal title="Run a task" onClose={() => setTaskPick(null)} narrow><input className="input" autoFocus aria-label="Find a task" placeholder="Filter tasks…" value={taskQuery} onChange={(e) => setTaskQuery(e.target.value)}
+      onKeyDown={(e) => { if (e.key === 'Enter' && shownTasks[0]) { e.preventDefault(); runInPanel(shownTasks[0].label, shownTasks[0].command); setTaskPick(null) } }} />
+      <div className="quick-files">{shownTasks.length ? shownTasks.map((t) => <button key={`${t.source}:${t.label}`} title={t.detail ?? t.command} onClick={() => { runInPanel(t.label, t.command); setTaskPick(null) }}><span>{t.label}</span> <small className="dim">{t.source}</small></button>)
+        : <p>{taskPick.length ? 'No matching tasks.' : 'This project defines no tasks. Add .vscode/tasks.json, package.json scripts, or a Makefile.'}</p>}</div>
+      <p className="hint">Runs in the Run panel. Errors from tsc, ESLint, gcc/clang, Rust and Go appear in Problems.</p></Modal> : null}
     {quick ? <Modal title="Go to file" onClose={() => setQuick(false)} narrow><input className="input" autoFocus aria-label="Find a file by path" placeholder="Search file paths…" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(event) => {
       if (event.key === 'Enter' && matches[0] && !searching) { event.preventDefault(); void open(matches[0].path); setQuick(false) }
       if (event.key === 'ArrowDown') { event.preventDefault(); document.querySelector<HTMLButtonElement>('.quick-files button')?.focus() }

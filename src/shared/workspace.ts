@@ -31,3 +31,4 @@ export interface ExtensionContributions {
 }
 export interface TestResult { name: string; suite: string; file?: string; line?: number; status: 'passed' | 'failed' | 'skipped'; duration?: number; message?: string }
 export type TestEvent = { type: 'started'; command: string } | { type: 'output'; text: string } | { type: 'done'; code: number; results: TestResult[] }
+export interface ProjectTask { label: string; command: string; source: string; detail?: string }

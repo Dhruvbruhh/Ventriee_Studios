@@ -8,6 +8,8 @@ const SCROLLBACK_CHARS = 200_000
 /** A slot ("office-1", "panel") keeps its shell and scrollback while its view is hidden or remounted. */
 interface Slot { projectId: string; id: string | null; buffer: string; exited: number | null; listeners: Set<(data: string) => void> }
 const slots = new Map<string, Slot>()
+/** Recent output of a terminal slot (for problem matchers); empty when it is gone. */
+export const terminalOutput = (projectId: string, slot: string) => slots.get(`${projectId}:${slot}`)?.buffer ?? ''
 let wired = false
 
 function wire() {

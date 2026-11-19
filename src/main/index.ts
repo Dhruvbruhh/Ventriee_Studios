@@ -25,6 +25,7 @@ import { debuggerFor, launchConfigs, substitute } from './launch'
 import { LspService } from './lsp'
 import { ExtensionService } from './extensions'
 import { TestService, detectRunners } from './testrunner'
+import { listTasks } from './tasks'
 import { baseCatalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
 import { projectTypes } from './typeindex'
@@ -368,6 +369,7 @@ function registerIpc() {
   handle(IPC.debugBreakpoints, (event, path: string, list: DebugBreakpoint[]) => debugSessions.get(event.sender.id)?.setBreakpoints(path, Array.isArray(list) ? list : []))
   handle(IPC.debugStop, (event) => stopDebug(event.sender.id))
   handle(IPC.toolCatalog, () => catalog())
+  handle(IPC.tasksList, (event, id: string) => listTasks(projectRoot(event, id)))
   // Tests run the owner's project code with their permissions, like a terminal, only when they press Run.
   handle(IPC.testsRunners, (event, id: string) => detectRunners(projectRoot(event, id), catalog()).map((r) => ({ id: r.id, name: r.name })))
   handle(IPC.testsRun, (event, id: string, runnerId: string, target: { file?: string; name?: string }) => {
