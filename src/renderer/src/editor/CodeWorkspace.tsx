@@ -59,6 +59,8 @@ function DiffView({ diff }: { diff: Diff }) {
   return <div ref={host} className="monaco-surface" aria-label={`Changes in ${diff.path}`} />
 }
 
+const debuggable = (path: string) => /\.(m|c)?(j|t)s$/.test(path)
+
 export default function CodeWorkspace({ project, visible, onNavigate }: { project: Project; visible: boolean; onNavigate?: (workspace: 'plan' | 'office') => void }) {
   const host = useRef<HTMLDivElement>(null)
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
@@ -483,6 +485,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   }), [])
   const startDebug = async () => {
     if (!active) return
+    if (!debuggable(active)) { useStore.getState().notify('The debugger runs JavaScript and TypeScript files with Node.js', 'info'); return }
     setPanel('debug'); setEvalResult('')
     setDebug({ status: 'starting', frames: [], variables: [], output: '' })
     try { await window.ventriee.debugStart(project.id, active, breakpoints) } catch (error) {
@@ -612,7 +615,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
           : panel === 'debug' ? <div className="code-debug">
             <div className="debug-bar">
               {debugLive ? <button className="btn tiny" onClick={() => void window.ventriee.debugStop()}>Stop</button>
-                : <button className="btn tiny primary" disabled={!active || !/\.(m|c)?(j|t)s$/.test(active)} onClick={() => void startDebug()} title="Run the open file with Node.js under the debugger">Debug {active?.split('/').pop() ?? 'file'}</button>}
+                : <button className="btn tiny primary" disabled={!active || !debuggable(active)} onClick={() => void startDebug()} title="Run the open file with Node.js under the debugger">Debug {active?.split('/').pop() ?? 'file'}</button>}
               <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('continue')}>Continue</button>
               <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('over')}>Step over</button>
               <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('into')}>Step into</button>
