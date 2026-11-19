@@ -485,6 +485,8 @@ export interface Snapshot {
 export interface StartRunInput {
   projectId: string
   instruction: string
+  /** Project-relative paths of attached images (.ventriee/attachments/…). */
+  attachments?: string[]
 }
 
 export interface CreateAgentInput {

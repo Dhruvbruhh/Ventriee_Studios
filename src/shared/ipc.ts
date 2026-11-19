@@ -94,6 +94,7 @@ export const IPC = {
   promptSave: 'prompt:save',
   assignPrompt: 'prompt:assign',
   chatAdvisor: 'chat:advisor',
+  attachmentSave: 'attachment:save',
   modelsDiscover: 'models:discover',
   modelPrefs: 'models:prefs',
   addProvider: 'provider:add',
@@ -259,7 +260,9 @@ export interface VentrieeApi {
   promptSave(input: { projectId: string; promptId: string; body: string; source: 'edited' | 'restored' }): Promise<PromptDoc>
   assignPrompt(input: AssignPromptInput): Promise<{ jobId: string; taskCount: number }>
   /** Advisor side-chat: talk with a model that sees the current project state. */
-  chatAdvisor(input: { projectId: string; text: string; history?: Array<{ role: 'user' | 'assistant'; text: string }> }): Promise<{ reply: string; model: string }>
+  chatAdvisor(input: { projectId: string; text: string; history?: Array<{ role: 'user' | 'assistant'; text: string }>; images?: string[] }): Promise<{ reply: string; model: string }>
+  /** Saves a pasted or dropped image in the project; returns its project-relative path. */
+  attachmentSave(projectId: string, name: string, data: Uint8Array): Promise<string>
   modelsDiscover(projectId: string | null): Promise<ModelOption[]>
   saveModelPrefs(patch: Partial<ModelPrefs>): Promise<ModelPrefs>
   addProvider(input: {

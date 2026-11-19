@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { guard, useStore } from '../store'
+import { useAttachments } from './Attachments'
 import { IconSend, IconStop } from '../icons'
 
 const SUGGESTIONS = [
@@ -18,6 +19,7 @@ export function CommandBar() {
 
   const project = snapshot.projects.find((p) => p.id === snapshot.activeProjectId) ?? null
   const running = snapshot.running
+  const attach = useAttachments(project?.id)
   const configured = snapshot.providers.filter((p) => p.available).length
 
   useEffect(() => {
@@ -30,10 +32,11 @@ export function CommandBar() {
   const submit = async () => {
     if (!project || busy || running || !draft.trim()) return
     setBusy(true)
-    const result = await guard(() => window.ventriee.startRun({ projectId: project.id, instruction: draft.trim() }))
+    const result = await guard(() => window.ventriee.startRun({ projectId: project.id, instruction: draft.trim(), attachments: attach.paths }))
     setBusy(false)
     if (result) {
       setDraft('')
+      attach.clear()
       useStore.getState().setRailTab('plan')
       notify('Brief sent to the orchestrator')
     }
@@ -42,6 +45,7 @@ export function CommandBar() {
   return (
     <div className="command">
       <div className="command-inner">
+        {attach.strip}
         <div className="composer">
           <textarea
             id="owner-input"
@@ -62,7 +66,9 @@ export function CommandBar() {
             }}
             disabled={!project}
             aria-label="Owner instruction"
+            {...attach.handlers}
           />
+          {attach.button}
           {running ? (
             <button className="stop-btn" onClick={() => void guard(() => window.ventriee.stopRun(project!.id), 'Run stopped')}>
               <IconStop /> Stop

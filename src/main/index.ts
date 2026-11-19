@@ -40,6 +40,7 @@ import { GraphifyService } from './graphify'
 import { applyTemplate, type TemplateId } from './templates'
 import { Updater } from './updater'
 import { spendBlock, startOfToday } from './spend'
+import { attachmentPaths, saveAttachment } from './attachments'
 import type { GithubAction, CodeAskInput, CodeChangeInput, CodeCompleteInput, DebugBreakpoint, DebugEvent, DebugStartInput } from '../shared/workspace'
 import type {
   Agent,
@@ -609,11 +610,12 @@ function registerIpc() {
     return copy
   })
 
-  handle(IPC.startRun, async (_e, input: { projectId: string; instruction: string }) => {
+  handle(IPC.attachmentSave, (event, id: string, name: string, data: Uint8Array) => saveAttachment(projectRoot(event, id), name, data))
+  handle(IPC.startRun, async (_e, input: { projectId: string; instruction: string; attachments?: string[] }) => {
     await refreshProviders()
     const project = store.project(input.projectId)
     if (project) preview.rescan(project)
-    const jobId = await orchestrator.startRun(input.projectId, input.instruction)
+    const jobId = await orchestrator.startRun(input.projectId, input.instruction, project ? attachmentPaths(project.path, input.attachments) : [])
     debouncedNotify()
     return { jobId }
   })
@@ -923,7 +925,7 @@ function registerIpc() {
    * Advisor side-chat: answers on the planner engine, with a summary of the
    * current project so it can give concrete improvement advice.
    */
-  handle(IPC.chatAdvisor, async (_e, input: { projectId: string; text: string; history?: Array<{ role: 'user' | 'assistant'; text: string }> }) => {
+  handle(IPC.chatAdvisor, async (_e, input: { projectId: string; text: string; history?: Array<{ role: 'user' | 'assistant'; text: string }>; images?: string[] }) => {
     const project = store.project(input.projectId)
     if (!project) throw new Error('Project not found')
     const tasks = store.tasks(project.id).slice(-12).map((t) => `- [${t.status}] ${t.title} (${t.role}${t.attempts ? `, attempt ${t.attempts}` : ''})`)
@@ -948,7 +950,8 @@ Answer the owner's question directly.`
         cwd: project.path,
         maxTokens: 8000,
         timeoutMs: 120_000,
-        reasoning: 'auto'
+        reasoning: 'auto',
+        images: attachmentPaths(project.path, input.images)
       },
       creds
     )

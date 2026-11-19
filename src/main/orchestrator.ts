@@ -175,6 +175,8 @@ const pathsOverlap = (a: string[], b: string[]) =>
 
 
 export class Orchestrator {
+  // shortcut: a run's images live in memory (one active run per project); a retry after an app restart runs without them.
+  private images = new Map<string, string[]>()
   private runners = new Map<string, Runner>()
   private paused = new Set<string>()
   private stopping = new Set<string>()
@@ -323,6 +325,7 @@ JSON shape:
         endpoint: orchestrator.endpoint,
         system: withRules(orchestrator.instructions, project.path),
         prompt: this.planningPrompt(project, instruction, roster, this.deps.memory.promptBlock(memoryDocs)),
+        images: this.images.get(project.id),
         cwd: project.path,
         maxTokens: 3000,
         timeoutMs: 4 * 60 * 1000,
@@ -344,7 +347,7 @@ JSON shape:
   }
 
   // ------------------------------------------------------------------ run
-  async startRun(projectId: string, instruction: string): Promise<string> {
+  async startRun(projectId: string, instruction: string, images: string[] = []): Promise<string> {
     const project = this.deps.store.project(projectId)
     if (!project) throw new Error('Project not found')
     if (this.deps.store.runningJob(projectId)) throw new Error('A run is already active for this project')
@@ -353,6 +356,7 @@ JSON shape:
     // just after the previous queue drained) must not poison the next run: run #23
     // left the flag set and the following assignment queued work that never started.
     this.stopping.delete(projectId)
+    this.images.set(projectId, images)
 
     const roster = this.ensureRoster(project, this.deps.creds)
     const job: Job = {
@@ -673,6 +677,7 @@ JSON shape:
           mcpConfig: run.engine === 'cli-claude' ? this.deps.mcpConfig?.() || undefined : undefined,
           system: withRules(agent.instructions, project.path),
           prompt: ask,
+          images: this.images.get(project.id),
           cwd: project.path,
           // Room for a thinking model to plan before it writes, and for a
           // file-heavy deliverable to finish. Probes: 8000 produced nothing on a
