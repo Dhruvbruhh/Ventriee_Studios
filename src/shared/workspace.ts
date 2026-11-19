@@ -43,4 +43,5 @@ export type GithubAction =
   | { kind: 'prs' } | { kind: 'issues' } | { kind: 'pr'; number: number } | { kind: 'issue'; number: number } | { kind: 'diff'; number: number }
   | { kind: 'checkout'; number: number } | { kind: 'review'; number: number; event: 'approve' | 'request-changes' | 'comment'; body: string }
   | { kind: 'comment'; number: number; body: string; issue?: boolean } | { kind: 'merge'; number: number; method: 'merge' | 'squash' | 'rebase' }
+  | { kind: 'lineComments'; number: number } | { kind: 'lineComment'; number: number; path: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }
 

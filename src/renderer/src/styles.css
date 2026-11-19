@@ -1500,3 +1500,8 @@
 .file-icon { width: 16px; height: 16px; flex: none; margin-right: 5px; vertical-align: -3px; }
 .split-drop { position: absolute; top: 0; right: 0; bottom: 0; width: 18%; z-index: 2; display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; pointer-events: none; }
 body.dragging-tab .split-drop { pointer-events: auto; color: var(--muted); background: color-mix(in srgb, var(--accent) 12%, transparent); border-left: 2px dashed var(--accent); }
+.gh-line { display: block; width: 100%; text-align: left; white-space: pre; font: inherit; color: inherit; background: none; border: 0; padding: 0 4px; min-height: 1.4em; }
+button.gh-line { cursor: pointer; }
+button.gh-line:hover, button.gh-line:focus-visible { background: color-mix(in srgb, var(--accent) 14%, transparent); outline: none; }
+.gh-line.add { color: #79dcb4; } .gh-line.del { color: var(--err, #f4796b); } .gh-line.hunk { color: #8ab4f8; }
+.gh-comment.inline, .gh-inline-form { margin: 4px 8px 6px 24px; font-family: var(--sans, inherit); white-space: normal; }
