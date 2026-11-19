@@ -461,7 +461,7 @@ function NewWorker({ engineDefault, onDone }: { engineDefault: EngineKind; onDon
     model: '',
     instructions: '',
     autonomy: 'scoped' as Agent['autonomy'],
-    color: '#9aa4b2',
+    color: 'var(--text-dim)',
     budgetUsd: 5
   })
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, nativeTheme, protocol } from 'electron'
 import { join } from 'node:path'
 import { existsSync, mkdirSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
@@ -200,7 +200,10 @@ function createWindow(projectId?: string) {
     minWidth: 1080,
     minHeight: 700,
     show: false,
-    backgroundColor: '#14161a',
+    // Matches --bg of the theme Windows is using, so the first frame does not flash.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#22211f' : '#faf9f5',
+    // Electron's default File/Edit/View/Window bar is not part of the studio; Alt still shows it, and its shortcuts keep working.
+    autoHideMenuBar: true,
     icon: windowIcon,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {

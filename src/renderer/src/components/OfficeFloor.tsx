@@ -73,7 +73,8 @@ export function OfficeFloor({ onSelect }: { onSelect: (id: string) => void }) {
     const boot = async () => {
       const theme = OFFICE_THEME
       await app.init({
-        background: theme.palette.background,
+        // Transparent, so the stage around the floor follows the light/dark theme.
+        backgroundAlpha: 0,
         antialias: false,
         roundPixels: true,
         resolution: Math.max(window.devicePixelRatio || 1, 2),

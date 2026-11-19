@@ -41,8 +41,16 @@ export function TerminalView({ projectId, slot: name, label, command, closeOnUnm
     const slot = slots.get(key) ?? { projectId, id: null, buffer: '', exited: null, listeners: new Set() }
     slots.set(key, slot)
     const styles = getComputedStyle(document.documentElement)
-    const term = new XTerm({ cursorBlink: true, fontFamily: styles.getPropertyValue('--mono').trim() || 'Consolas, monospace', fontSize: 12, scrollback: 5000,
-      theme: { background: '#0b0d10', foreground: '#e9ebee', cursor: '#a78bfa', selectionBackground: '#3b2f5c' } })
+    // xterm draws its own colors, so read the theme tokens and re-read them when Windows switches light/dark.
+    const palette = () => {
+      const css = getComputedStyle(document.documentElement)
+      const token = (name: string) => css.getPropertyValue(name).trim()
+      return { background: token('--bg-deep'), foreground: token('--text'), cursor: token('--accent'), cursorAccent: token('--bg-deep'), selectionBackground: `${token('--accent')}40` }
+    }
+    const term = new XTerm({ cursorBlink: true, fontFamily: styles.getPropertyValue('--mono').trim() || 'Consolas, monospace', fontSize: 12, scrollback: 5000, theme: palette() })
+    const scheme = matchMedia('(prefers-color-scheme: light)')
+    const recolor = () => { term.options.theme = palette() }
+    scheme.addEventListener('change', recolor)
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(host.current!)
@@ -70,7 +78,7 @@ export function TerminalView({ projectId, slot: name, label, command, closeOnUnm
     const observer = new ResizeObserver(() => { fitNow(); if (slot.id) void window.ventriee.termResize(slot.id, term.cols, term.rows).catch(() => {}) })
     observer.observe(host.current!)
     return () => {
-      alive = false; observer.disconnect(); input.dispose(); slot.listeners.delete(listener); term.dispose()
+      alive = false; scheme.removeEventListener('change', recolor); observer.disconnect(); input.dispose(); slot.listeners.delete(listener); term.dispose()
       if (closeOnUnmount) { if (slot.id) void window.ventriee.termClose(slot.id).catch(() => {}); slots.delete(key) }
     }
   }, [projectId, name, generation, command, closeOnUnmount])

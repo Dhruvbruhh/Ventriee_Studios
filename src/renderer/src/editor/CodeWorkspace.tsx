@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { IconChevron, IconClose } from '../icons'
-import { monaco, languageFor, editorLanguages } from './monaco'
+import { monaco, languageFor, editorLanguages, editorTheme } from './monaco'
 import { SourceControl } from './SourceControl'
 import { AgentChanges } from './AgentChanges'
 import { Preview } from '../components/Preview'
@@ -46,7 +46,7 @@ function DiffView({ diff }: { diff: Diff }) {
   useEffect(() => {
     const original = monaco.editor.createModel(diff.original, languageFor(diff.path))
     const modified = monaco.editor.createModel(diff.modified, languageFor(diff.path))
-    const editor = monaco.editor.createDiffEditor(host.current!, { theme: 'ventriee', automaticLayout: true, readOnly: true, originalEditable: false, renderSideBySide: true, minimap: { enabled: false } })
+    const editor = monaco.editor.createDiffEditor(host.current!, { theme: editorTheme(), automaticLayout: true, readOnly: true, originalEditable: false, renderSideBySide: true, minimap: { enabled: false } })
     editor.setModel({ original, modified })
     return () => { editor.dispose(); original.dispose(); modified.dispose() }
   }, [diff])
@@ -101,7 +101,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   }, [])
   useEffect(() => {
     mounted.current = true
-    const instance = monaco.editor.create(host.current!, { theme: 'ventriee', automaticLayout: true, fontFamily: 'Cascadia Code, Consolas, monospace', fontSize: 13,
+    const instance = monaco.editor.create(host.current!, { theme: editorTheme(), automaticLayout: true, fontFamily: 'Cascadia Code, Consolas, monospace', fontSize: 13,
       minimap: { enabled: true }, padding: { top: 12 }, scrollBeyondLastLine: false, tabSize: 2, model: null })
     editor.current = instance
     const position = instance.onDidChangeCursorPosition((event: { position: { lineNumber: number; column: number } }) => setCursor(event.position))

@@ -207,7 +207,7 @@ function Mail() {
         <>
           <div className="section-label">Needs your approval</div>
           {approvals.map((task) => (
-            <div key={task.id} className="mail" style={{ borderColor: '#4a3f28' }}>
+            <div key={task.id} className="mail" style={{ borderColor: 'color-mix(in srgb, var(--warn) 30%, var(--panel))' }}>
               <div className="mail-head">
                 <span className="mail-type owner">approval</span>
                 <span className="truncate">{task.title}</span>
