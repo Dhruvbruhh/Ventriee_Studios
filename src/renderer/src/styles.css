@@ -1496,3 +1496,4 @@
 .attach-strip figure { position: relative; margin: 0; }
 .attach-strip img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); display: block; }
 .attach-remove { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--text); font-size: 12px; line-height: 1; cursor: pointer; padding: 0; }
+.btn.recording { background: var(--danger, #c0392b); color: #fff; }

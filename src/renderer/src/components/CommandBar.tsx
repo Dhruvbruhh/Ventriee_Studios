@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { guard, useStore } from '../store'
-import { useAttachments } from './Attachments'
+import { useAttachments, useVoice } from './Attachments'
 import { IconSend, IconStop } from '../icons'
 
 const SUGGESTIONS = [
@@ -20,6 +20,7 @@ export function CommandBar() {
   const project = snapshot.projects.find((p) => p.id === snapshot.activeProjectId) ?? null
   const running = snapshot.running
   const attach = useAttachments(project?.id)
+  const mic = useVoice((text) => { const d = useStore.getState().draft; setDraft(d ? `${d} ${text}` : text) })
   const configured = snapshot.providers.filter((p) => p.available).length
 
   useEffect(() => {
@@ -68,7 +69,7 @@ export function CommandBar() {
             aria-label="Owner instruction"
             {...attach.handlers}
           />
-          {attach.button}
+          {attach.button}{mic}
           {running ? (
             <button className="stop-btn" onClick={() => void guard(() => window.ventriee.stopRun(project!.id), 'Run stopped')}>
               <IconStop /> Stop

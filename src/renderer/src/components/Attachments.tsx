@@ -3,6 +3,34 @@ import { guard } from '../store'
 
 type Item = { path: string; url: string; name: string }
 
+/** A mic button: records until pressed again, then hands the transcript to `onText`. */
+export function useVoice(onText: (text: string) => void) {
+  const [state, setState] = useState<'idle' | 'recording' | 'transcribing'>('idle')
+  const recorder = useRef<MediaRecorder | null>(null)
+  const toggle = async () => {
+    if (state === 'recording') { recorder.current?.stop(); return }
+    if (state !== 'idle') return
+    const stream = await guard(() => navigator.mediaDevices.getUserMedia({ audio: true }))
+    if (!stream) return
+    const chunks: Blob[] = []
+    const rec = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' })
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data) }
+    rec.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop())
+      setState('transcribing')
+      const text = await guard(async () => window.ventriee.transcribe(new Uint8Array(await new Blob(chunks).arrayBuffer())))
+      setState('idle')
+      if (text) onText(text)
+    }
+    recorder.current = rec
+    rec.start()
+    setState('recording')
+  }
+  return <button type="button" className={`btn tiny${state === 'recording' ? ' recording' : ''}`} disabled={state === 'transcribing'} onClick={() => void toggle()}
+    aria-pressed={state === 'recording'} aria-label={state === 'recording' ? 'Stop recording' : 'Speak instead of typing'} title="Voice input">
+    {state === 'recording' ? 'Stop' : state === 'transcribing' ? 'Writing…' : 'Mic'}</button>
+}
+
 /** Images pasted, dropped or picked into a composer. They are saved in the project so agents can open them. */
 export function useAttachments(projectId: string | undefined) {
   const [items, setItems] = useState<Item[]>([])

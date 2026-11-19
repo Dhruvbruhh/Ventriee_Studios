@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { RichText } from './RichText'
 import { guard, useStore } from '../store'
-import { useAttachments } from './Attachments'
+import { useAttachments, useVoice } from './Attachments'
 import { IconSend } from '../icons'
 
 interface AdvisorMsg {
@@ -21,6 +21,7 @@ export function SideChat({ onClose }: { onClose: () => void }) {
   const [msgs, setMsgs] = useState<AdvisorMsg[]>([])
   const [draft, setDraft] = useState('')
   const attach = useAttachments(project?.id)
+  const mic = useVoice((text) => setDraft((d) => (d ? `${d} ${text}` : text)))
   const [busy, setBusy] = useState(false)
   const end = useRef<HTMLDivElement>(null)
 
@@ -111,7 +112,7 @@ export function SideChat({ onClose }: { onClose: () => void }) {
             rows={2}
             {...attach.handlers}
           />
-          {attach.button}
+          {attach.button}{mic}
           <button className="btn primary" onClick={() => void send(draft)} disabled={!draft.trim() || busy || !project}>
             <IconSend width={11} height={11} />
           </button>

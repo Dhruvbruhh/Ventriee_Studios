@@ -41,6 +41,7 @@ import { applyTemplate, type TemplateId } from './templates'
 import { Updater } from './updater'
 import { spendBlock, startOfToday } from './spend'
 import { attachmentPaths, recentScreenshots, saveAttachment } from './attachments'
+import { transcribe } from './transcribe'
 import type { GithubAction, CodeAskInput, CodeChangeInput, CodeCompleteInput, DebugBreakpoint, DebugEvent, DebugStartInput } from '../shared/workspace'
 import type {
   Agent,
@@ -268,7 +269,11 @@ function createWindow(projectId?: string) {
   win.webContents.on('will-redirect', (event, url) => {
     if (event.isMainFrame && originOf(url) !== rendererOrigin) event.preventDefault()
   })
-  win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
+  // Only the app's own page may use the microphone (voice input): audio only, no camera, nothing else.
+  win.webContents.session.setPermissionRequestHandler((_contents, permission, callback, details) => {
+    const types = 'mediaTypes' in details ? details.mediaTypes ?? [] : []
+    callback(permission === 'media' && originOf(details.requestingUrl) === rendererOrigin && types.length > 0 && types.every((t) => t === 'audio'))
+  })
   return win
 }
 
@@ -610,6 +615,7 @@ function registerIpc() {
     return copy
   })
 
+  handle(IPC.transcribe, (_e, audio: Uint8Array) => transcribe(audio, creds))
   handle(IPC.screenshots, (event, id: string) => recentScreenshots(projectRoot(event, id)))
   handle(IPC.attachmentSave, (event, id: string, name: string, data: Uint8Array) => saveAttachment(projectRoot(event, id), name, data))
   handle(IPC.startRun, async (_e, input: { projectId: string; instruction: string; attachments?: string[] }) => {

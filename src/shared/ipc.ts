@@ -96,6 +96,7 @@ export const IPC = {
   chatAdvisor: 'chat:advisor',
   attachmentSave: 'attachment:save',
   screenshots: 'screenshots:list',
+  transcribe: 'voice:transcribe',
   modelsDiscover: 'models:discover',
   modelPrefs: 'models:prefs',
   addProvider: 'provider:add',
@@ -266,6 +267,8 @@ export interface VentrieeApi {
   attachmentSave(projectId: string, name: string, data: Uint8Array): Promise<string>
   /** Screenshots agents took of the app (.ventriee/screens), newest first. */
   screenshots(projectId: string): Promise<Array<{ name: string; time: number; url: string }>>
+  /** Speech to text: a local Whisper, else an OpenAI or Mistral key the owner added. */
+  transcribe(audio: Uint8Array): Promise<string>
   modelsDiscover(projectId: string | null): Promise<ModelOption[]>
   saveModelPrefs(patch: Partial<ModelPrefs>): Promise<ModelPrefs>
   addProvider(input: {

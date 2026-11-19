@@ -177,6 +177,7 @@ const api: VentrieeApi = {
   chatAdvisor: (input) => ipcRenderer.invoke(IPC.chatAdvisor, input),
   attachmentSave: (id, name, data) => ipcRenderer.invoke(IPC.attachmentSave, id, name, data),
   screenshots: (id) => ipcRenderer.invoke(IPC.screenshots, id),
+  transcribe: (audio) => ipcRenderer.invoke(IPC.transcribe, audio),
   modelsDiscover: (projectId) => ipcRenderer.invoke(IPC.modelsDiscover, projectId),
   saveModelPrefs: (patch) => ipcRenderer.invoke(IPC.modelPrefs, patch),
   addProvider: (input) => ipcRenderer.invoke(IPC.addProvider, input),

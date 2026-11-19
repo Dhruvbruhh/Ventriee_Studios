@@ -6,7 +6,7 @@ import { findConflicts, resolveConflict } from './conflicts'
 import { applyProjectTypes, clearProjectTypes, fileUri } from './intellisense'
 import { GraphPanel } from '../components/GraphPanel'
 import { AgentChanges } from './AgentChanges'
-import { useAttachments } from '../components/Attachments'
+import { useAttachments, useVoice } from '../components/Attachments'
 import { startLsp, type LspSession, type OutlineSymbol } from './lsp'
 import { SYMBOL_KINDS, findSymbols, outlineFor, symbolPath } from './symbols'
 import { ExtensionsPanel } from './ExtensionsPanel'
@@ -139,6 +139,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [ask, setAsk] = useState(false)
   const [question, setQuestion] = useState('')
   const attach = useAttachments(project.id)
+  const mic = useVoice((text) => setQuestion((q) => (q ? `${q} ${text}` : text)))
   const [asking, setAsking] = useState<'ask' | 'edit' | 'change' | null>(null)
   const [changes, setChanges] = useState<Change[]>([])
   const [reply, setReply] = useState<{ answer: string; model: string; path: string } | null>(null)
@@ -893,7 +894,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <textarea className="textarea" aria-label="Question for the agent" rows={4} maxLength={4000} placeholder="Explain this, find the bug, add error handling…" value={question} onChange={(e) => setQuestion(e.target.value)} {...attach.handlers}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void askAgent('ask') } }} />
       {attach.strip}
-      <div className="code-ask-actions">{attach.button}<button className="btn" disabled={!tab || !question.trim() || Boolean(asking)} onClick={() => void askAgent('ask')}>{asking === 'ask' ? 'Asking…' : 'Ask'}</button>
+      <div className="code-ask-actions">{attach.button}{mic}<button className="btn" disabled={!tab || !question.trim() || Boolean(asking)} onClick={() => void askAgent('ask')}>{asking === 'ask' ? 'Asking…' : 'Ask'}</button>
         <button className="btn" disabled={!tab || !question.trim() || Boolean(asking)} onClick={() => void askAgent('edit')}>{asking === 'edit' ? 'Writing edit…' : 'Propose edit'}</button>
         <button className="btn primary" disabled={!question.trim() || Boolean(asking)} onClick={() => void askChange()} title="Change or create several files; your open tabs are the context">{asking === 'change' ? 'Changing files…' : 'Change files'}</button></div>
       {askError ? <p className="editor-error" role="alert">{askError}</p> : null}
