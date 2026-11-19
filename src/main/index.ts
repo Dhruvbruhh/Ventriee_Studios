@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol } from 'electron'
 import { join, relative, sep } from 'node:path'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
 import { StudioAuth } from './auth'
 import { FileService, workspacePath } from './files'
@@ -21,7 +21,7 @@ import { IPC } from '../shared/ipc'
 import { TerminalService, shells } from './terminal'
 import { DebugSession } from './debugger'
 import { DapSession, type Debugger } from './dap'
-import { debuggerFor, launchConfigs, substitute, currentFileLaunch } from './launch'
+import { debuggerFor, launchConfigs, substitute, currentFileLaunch, javaLaunch } from './launch'
 import { LspService, findExecutable } from './lsp'
 import { ExtensionService } from './extensions'
 import { TestService, detectRunners } from './testrunner'
@@ -29,7 +29,7 @@ import { listTasks } from './tasks'
 import { HistoryService } from './history'
 import { github } from './github'
 import { ErrorLog, issueUrl } from './errorlog'
-import { baseCatalog } from '../shared/catalog'
+import { baseCatalog, type Catalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
 import { projectTypes } from './typeindex'
 import { eslintFile, prettierFormat } from './projecttools'
@@ -67,7 +67,17 @@ const windows = new Map<number, { win: BrowserWindow; projectId: string | null }
 const terminals = new TerminalService()
 /** One debug session per window. */
 const debugSessions = new Map<number, Debugger>()
-const catalog = () => baseCatalog
+/** Plugin jars installed for a debugger (Java's java-debug), which its language server loads at start. */
+const pluginDir = (id: string) => join(app.getPath('userData'), 'debug-plugins', id)
+const pluginJars = (id: string) => { try { return readdirSync(pluginDir(id)).filter((f) => f.endsWith('.jar')).map((f) => join(pluginDir(id), f)) } catch { return [] } }
+const catalog = (): Catalog => ({
+  ...baseCatalog,
+  languages: baseCatalog.languages.map((l) => {
+    const d = baseCatalog.debuggers.find((x) => x.plugin && x.languages.includes(l.id))
+    const jars = d ? pluginJars(d.id) : []
+    return jars.length ? { ...l, servers: l.servers.map((s) => ({ ...s, initializationOptions: { ...(s.initializationOptions as Record<string, unknown> | undefined), bundles: jars } })) } : l
+  })
+})
 const lsp = new LspService(catalog)
 let tests: TestService
 const stopDebug = (owner: number) => { debugSessions.get(owner)?.stop(); debugSessions.delete(owner) }
@@ -400,6 +410,19 @@ function registerIpc() {
     session = dap
     debugSessions.set(sender.id, session)
     try {
+      if (spec.languageServerCommand) {
+        const language = spec.languages[0]
+        if (spec.plugin && !pluginJars(spec.id).length) {
+          await extensions.pluginJars(spec.plugin.extension, spec.plugin.folder, pluginDir(spec.id))
+          lsp.restart(sender.id, root, language)
+          throw new Error(`${spec.name} is now installed. The ${language} language server is restarting to load it; press Debug again once it shows as ready.`)
+        }
+        const ask = (command: string, args: unknown[] = []) => lsp.request(sender.id, root, language, 'workspace/executeCommand', { command, arguments: args }, 120_000)
+          .catch((e: Error) => { throw new Error(/not running/.test(e.message) ? `Open a ${language} file first so its language server starts` : e.message) })
+        const { port, args } = await javaLaunch(spec, ask, root, input.file, config)
+        await dap.start({ ...args, type: undefined, name: undefined, request: 'launch' }, bps, port)
+        return
+      }
       const args = config ?? await currentFileLaunch(spec, String(input?.language ?? ''), root, input.file)
       await dap.start({ ...args, type: undefined, name: undefined, request: args.request ?? 'launch' }, bps) } catch (error) { stopDebug(sender.id); throw error }
   })

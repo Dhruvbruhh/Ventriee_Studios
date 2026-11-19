@@ -94,7 +94,8 @@ export class ExtensionService {
       ...(manifest ? supportOf(manifest) : { supported: [], needsRuntime: true }), readme: readme.slice(0, 200_000) }
   }
 
-  async install(id: string): Promise<ExtensionInfo> {
+  /** A registry .vsix, size-capped and checked against the registry's sha256 when it gives one. */
+  private async download(id: string): Promise<Uint8Array> {
     if (!ID.test(id) || !id.includes('.')) throw new Error('Invalid extension id')
     const [ns, name] = id.split('.')
     const e = await getJson<{ version: string; files: { download: string; sha256?: string } }>(`${REGISTRY}/${ns}/${name}`)
@@ -107,6 +108,23 @@ export class ExtensionService {
       const expected = (await fetch(e.files.sha256).then((r) => r.text())).trim().split(/\s+/)[0].toLowerCase()
       if (expected && createHash('sha256').update(zip).digest('hex') !== expected) throw new Error('The download does not match the registry checksum')
     }
+    return zip
+  }
+
+  /**
+   * Java plugin jars from a registry extension (java-debug ships its debugger as one), saved as plain files in `dest`.
+   * They are loaded by the Java language server, a JVM program; no extension JavaScript runs.
+   */
+  async pluginJars(id: string, folder: string, dest: string): Promise<string[]> {
+    const zip = await this.download(id)
+    const files = unzipSync(zip, { filter: (f) => f.name.startsWith(folder) && f.name.endsWith('.jar') && !f.name.slice(folder.length).includes('/') && f.originalSize < MAX_UNPACKED })
+    if (!Object.keys(files).length) throw new Error(`${id} has no plugin to install`)
+    mkdirSync(dest, { recursive: true })
+    return Object.entries(files).map(([name, data]) => { const file = join(dest, name.slice(folder.length)); writeFileSync(file, data); return file })
+  }
+
+  async install(id: string): Promise<ExtensionInfo> {
+    const zip = await this.download(id)
     const staging = join(this.dir, `.staging-${id}-${Date.now()}`)
     try {
       unpackVsix(zip, staging)

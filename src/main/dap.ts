@@ -112,38 +112,52 @@ export class DapSession implements Debugger {
 
   async selectThread(threadId: number) { this.threadId = threadId; await this.showStop('thread') }
 
-  /** Start the adapter, then launch (or attach) with the given DAP arguments. */
-  async start(args: Record<string, unknown>, breakpoints: Record<string, DebugBreakpoint[]>) {
-    const file = findExecutable(this.spec.command)
-    const install = forOs(this.spec.install?.command, process.platform)
-    if (!file) throw new Error(`${this.spec.name} is not installed${install ? `. Install it with: ${install}` : ''}`)
-    const tcp = (this.spec.args ?? []).some((a) => a.includes('${port}'))
-    const port = tcp ? await freePort() : 0
-    const child = spawnTool(file, (this.spec.args ?? []).map((a) => a.replace('${port}', String(port))), this.root)
-    this.child = child
-    const died = new Promise<never>((_, reject) => {
-      child.on('error', (e) => reject(e))
-      child.on('exit', (code) => {
-        for (const p of this.pending.values()) p.reject(new Error(`${this.spec.name} stopped${this.stderr ? `: ${this.stderr.trim().split('\n').slice(-2).join(' ')}` : ''}${install ? `. If it is not installed: ${install}` : ''}`))
-        this.pending.clear()
-        if (!this.ended) { this.ended = true; this.emit({ type: 'exited', code: this.exitCode ?? code ?? 0 }) }
-        reject(new Error(`${this.spec.name} stopped before the program started${this.stderr ? `: ${this.stderr.trim().split('\n').slice(-2).join(' ')}` : ''}${install ? `. If it is not installed: ${install}` : ''}`))
-      })
-    })
-    died.catch(() => {})
-    child.stderr?.on('data', (d: Buffer) => { this.stderr = (this.stderr + d.toString()).slice(-4000) })
+  /** Start the adapter, then launch (or attach) with the given DAP arguments. `adapterPort`: the adapter already runs (Java's, inside its language server); connect to it. */
+  async start(args: Record<string, unknown>, breakpoints: Record<string, DebugBreakpoint[]>, adapterPort?: number) {
     const onData = (chunk: Buffer) => { for (const m of this.reader.push(chunk)) void this.onMessage(m as Message) }
-    if (tcp) {
-      // The adapter needs a moment to listen; try for up to 10 seconds.
-      for (let i = 0; ; i++) {
-        try {
-          this.socket = await Promise.race([died, new Promise<Socket>((resolve, reject) => { const s = connect(port, '127.0.0.1', () => resolve(s)); s.once('error', reject) })])
-          break
-        } catch (e) { if (i > 50 || this.ended) throw e; await new Promise((r) => setTimeout(r, 200)) }
-      }
-      this.socket.on('data', onData)
-      child.stdout?.on('data', (d: Buffer) => this.emit({ type: 'output', text: d.toString() }))
-    } else child.stdout?.on('data', onData)
+    let died: Promise<never>
+    if (adapterPort) {
+      const socket = await new Promise<Socket>((resolve, reject) => { const s = connect(adapterPort, '127.0.0.1', () => resolve(s)); s.once('error', reject) })
+      this.socket = socket
+      socket.on('data', onData)
+      died = new Promise<never>((_, reject) => socket.on('close', () => {
+        for (const p of this.pending.values()) p.reject(new Error(`${this.spec.name} disconnected`))
+        this.pending.clear()
+        if (!this.ended) { this.ended = true; this.emit({ type: 'exited', code: this.exitCode ?? 0 }) }
+        reject(new Error(`${this.spec.name} disconnected before the program started`))
+      }))
+      died.catch(() => {})
+    } else {
+      const file = findExecutable(this.spec.command)
+      const install = forOs(this.spec.install?.command, process.platform)
+      if (!file) throw new Error(`${this.spec.name} is not installed${install ? `. Install it with: ${install}` : ''}`)
+      const tcp = (this.spec.args ?? []).some((a) => a.includes('${port}'))
+      const port = tcp ? await freePort() : 0
+      const child = spawnTool(file, (this.spec.args ?? []).map((a) => a.replace('${port}', String(port))), this.root)
+      this.child = child
+      died = new Promise<never>((_, reject) => {
+        child.on('error', (e) => reject(e))
+        child.on('exit', (code) => {
+          for (const p of this.pending.values()) p.reject(new Error(`${this.spec.name} stopped${this.stderr ? `: ${this.stderr.trim().split('\n').slice(-2).join(' ')}` : ''}${install ? `. If it is not installed: ${install}` : ''}`))
+          this.pending.clear()
+          if (!this.ended) { this.ended = true; this.emit({ type: 'exited', code: this.exitCode ?? code ?? 0 }) }
+          reject(new Error(`${this.spec.name} stopped before the program started${this.stderr ? `: ${this.stderr.trim().split('\n').slice(-2).join(' ')}` : ''}${install ? `. If it is not installed: ${install}` : ''}`))
+        })
+      })
+      died.catch(() => {})
+      child.stderr?.on('data', (d: Buffer) => { this.stderr = (this.stderr + d.toString()).slice(-4000) })
+      if (tcp) {
+        // The adapter needs a moment to listen; try for up to 10 seconds.
+        for (let i = 0; ; i++) {
+          try {
+            this.socket = await Promise.race([died, new Promise<Socket>((resolve, reject) => { const s = connect(port, '127.0.0.1', () => resolve(s)); s.once('error', reject) })])
+            break
+          } catch (e) { if (i > 50 || this.ended) throw e; await new Promise((r) => setTimeout(r, 200)) }
+        }
+        this.socket.on('data', onData)
+        child.stdout?.on('data', (d: Buffer) => this.emit({ type: 'output', text: d.toString() }))
+      } else child.stdout?.on('data', onData)
+    }
     await Promise.race([died, this.request('initialize', { clientID: 'ventriee', clientName: 'Ventriee Studios', adapterID: this.spec.id, pathFormat: 'path', linesStartAt1: true, columnsStartAt1: true, supportsVariableType: true, supportsRunInTerminalRequest: false, locale: 'en' })])
     // Many adapters answer launch only after configurationDone, so send it without waiting.
     const launched = this.request(String(args.request ?? 'launch') === 'attach' ? 'attach' : 'launch', args, 60_000)

@@ -12,6 +12,10 @@ export interface DebuggerSpec {
   command: string; args?: string[]
   /** The DAP launch arguments for "debug the current file"; launch.json replaces them. */
   launch: Record<string, unknown>
+  /** The language server runs this adapter: this LSP command starts it and answers its port (Java). */
+  languageServerCommand?: string
+  /** Plugin jars the language server loads for it, from an Open VSX extension's folder. */
+  plugin?: { extension: string; folder: string }
   /** Per language, commands that build the current file before debugging it; the first one installed runs. A build printing cargo's JSON names the program. */
   build?: Record<string, string[][]>
   install?: InstallSpec
@@ -56,7 +60,9 @@ export const baseCatalog: Catalog = {
     { id: 'lldb', name: 'C, C++, Rust (LLDB)', languages: ['c', 'cpp', 'rust'], command: 'lldb-dap',
       launch: { request: 'launch', program: '${fileDirname}/${fileBasenameNoExtension}${exe}', cwd: '${workspaceFolder}' },
       build: { c: [['gcc', '-g', '-O0', '${file}', '-o', '${fileDirname}/${fileBasenameNoExtension}${exe}'], ['clang', '-g', '-O0', '${file}', '-o', '${fileDirname}/${fileBasenameNoExtension}${exe}']], cpp: [['g++', '-g', '-O0', '${file}', '-o', '${fileDirname}/${fileBasenameNoExtension}${exe}'], ['clang++', '-g', '-O0', '${file}', '-o', '${fileDirname}/${fileBasenameNoExtension}${exe}']], rust: [['cargo', 'build', '--message-format=json']] },
-      install: { command: { win32: 'winget install LLVM.LLVM', darwin: 'xcode-select --install', linux: 'sudo apt install lldb' } } }
+      install: { command: { win32: 'winget install LLVM.LLVM', darwin: 'xcode-select --install', linux: 'sudo apt install lldb' } } },
+    { id: 'java', name: 'Java (java-debug)', languages: ['java'], command: '', languageServerCommand: 'vscode.java.startDebugSession',
+      plugin: { extension: 'vscjava.vscode-java-debug', folder: 'extension/server/' }, launch: { request: 'launch', cwd: '${workspaceFolder}', console: 'internalConsole' } }
   ],
   testRunners: [
     { id: 'vitest', name: 'Vitest', detect: ['package.json:vitest'], command: 'npx', args: ['vitest', 'run', '--reporter=junit', '--outputFile=${report}'], fileArgs: ['${file}'], nameArgs: ['-t', '${name}'], report: 'junit' },
