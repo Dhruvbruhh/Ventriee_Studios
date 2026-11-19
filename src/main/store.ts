@@ -48,6 +48,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   optimizerEngine: 'api-ollama',
   optimizerModel: '',
   optimizerEndpoint: '',
+  completionEngine: 'api-ollama',
+  completionModel: '',
+  completionEndpoint: '',
   onboardingSeen: false
 }
 

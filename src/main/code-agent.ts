@@ -1,8 +1,8 @@
 import type { Credentials } from './credentials'
-import { runEngine, modelFor, defaultEndpoint } from './engines'
+import { runEngine, modelFor, defaultEndpoint, isCliEngine } from './engines'
 import { redact } from './redact'
 import type { AppSettings, Project } from '../shared/types'
-import type { CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult } from '../shared/workspace'
+import type { CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from '../shared/workspace'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseFileBlocks } from './deliver'
@@ -75,4 +75,34 @@ export async function changeFiles(project: Project, input: CodeChangeInput, sett
   if (!changes.length) throw new Error('The agent answered without any file changes. Ask again or say which files to change.')
   const marker = text.search(/^=+\s*FILE:/m)
   return { answer: (marker > 0 ? text.slice(0, marker) : '').trim(), changes, model: modelFor(engine, settings.plannerModel) }
+}
+
+/** The text to insert: no fences, no echo of the line already typed, at most 40 lines. */
+export function cleanCompletion(raw: string, prefix: string): string {
+  let text = raw.replace(/^\s*```[^\n]*\n?/, '').replace(/\n?```\s*$/, '')
+  const lastLine = prefix.slice(prefix.lastIndexOf('\n') + 1)
+  if (lastLine.trim() && text.startsWith(lastLine)) text = text.slice(lastLine.length)
+  return text.split('\n').slice(0, 40).join('\n').trimEnd()
+}
+
+const inflight = new Map<number, AbortController>()
+
+/** One inline completion for the cursor; a newer request from the same window cancels this one. */
+export async function completeCode(owner: number, input: CodeCompleteInput, settings: AppSettings, creds: Credentials): Promise<string> {
+  if (!settings.completionModel) return ''
+  if (isCliEngine(settings.completionEngine)) throw new Error('Inline completions need an API or local model; command-line agents are too slow to answer each keystroke.')
+  if (typeof input?.prefix !== 'string' || typeof input.suffix !== 'string') return ''
+  inflight.get(owner)?.abort()
+  const controller = new AbortController()
+  inflight.set(owner, controller)
+  const prefix = input.prefix.slice(-4000)
+  const suffix = input.suffix.slice(0, 1500)
+  const result = await runEngine({ engine: settings.completionEngine, model: settings.completionModel,
+    endpoint: settings.completionEndpoint || defaultEndpoint(settings.completionEngine),
+    system: 'You complete code. Reply with only the exact text to insert at <CURSOR>: no explanation, no code fences, no repetition of text before or after the cursor.',
+    prompt: `File: ${String(input.path).slice(0, 300)} (${String(input.language).slice(0, 40)})\n${prefix}<CURSOR>${suffix}`,
+    cwd: process.cwd(), maxTokens: 160, timeoutMs: 15_000, signal: controller.signal, reasoning: 'none' }, creds)
+  if (inflight.get(owner) === controller) inflight.delete(owner)
+  if (!result.ok || controller.signal.aborted) return ''
+  return cleanCompletion(redact(result.text, creds.secretValues()), prefix)
 }

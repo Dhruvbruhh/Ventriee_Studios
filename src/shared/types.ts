@@ -395,6 +395,10 @@ export interface AppSettings {
   optimizerEngine: EngineKind
   optimizerModel: string
   optimizerEndpoint: string
+  /** Inline completions as you type; an empty model means off. API or local engines only. */
+  completionEngine: EngineKind
+  completionModel: string
+  completionEndpoint: string
   /** Set true once the first-run engine onboarding has been dismissed. */
   onboardingSeen?: boolean
 }

@@ -357,6 +357,26 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     }, 5000)
     return () => clearInterval(timer)
   }, [project.id, visible, changed])
+  const completionModel = useStore((s) => s.snapshot?.settings.completionModel ?? '')
+  useEffect(() => {
+    if (!completionModel) return
+    // Ghost-text completions (Tab accepts). Waits for a pause in typing; a newer keystroke cancels the request.
+    const provider = monaco.languages.registerInlineCompletionsProvider('*', {
+      provideInlineCompletions: async (model, position, _context, token) => {
+        if (model.uri.authority !== project.id.toLowerCase()) return { items: [] }
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        if (token.isCancellationRequested) return { items: [] }
+        const all = model.getValue()
+        const offset = model.getOffsetAt(position)
+        const text = await window.ventriee.codeComplete(project.id, { path: model.uri.path.slice(1), language: model.getLanguageId(),
+          prefix: all.slice(Math.max(0, offset - 4000), offset), suffix: all.slice(offset, offset + 1500) }).catch(() => '')
+        if (!text || token.isCancellationRequested) return { items: [] }
+        return { items: [{ insertText: text, range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column) }] }
+      },
+      disposeInlineCompletions: () => {}
+    })
+    return () => provider.dispose()
+  }, [completionModel, project.id])
   useEffect(() => {
     // Monaco's own diagnostics (TypeScript, JSON, CSS, HTML) for the files open in tabs.
     const update = () => {
