@@ -42,10 +42,13 @@ const api: VentrieeApi = {
     ipcRenderer.on(IPC.termData, listener)
     return () => ipcRenderer.removeListener(IPC.termData, listener)
   },
-  debugStart: (id, file, breakpoints) => ipcRenderer.invoke(IPC.debugStart, id, file, breakpoints),
+  debugConfigs: (id) => ipcRenderer.invoke(IPC.debugConfigs, id),
+  debugStart: (id, input, breakpoints) => ipcRenderer.invoke(IPC.debugStart, id, input, breakpoints),
+  debugVariables: (ref) => ipcRenderer.invoke(IPC.debugVariables, ref),
+  debugThread: (threadId) => ipcRenderer.invoke(IPC.debugThread, threadId),
   debugCommand: (action) => ipcRenderer.invoke(IPC.debugCommand, action),
   debugEvaluate: (expression) => ipcRenderer.invoke(IPC.debugEvaluate, expression),
-  debugBreakpoints: (path, lines) => ipcRenderer.invoke(IPC.debugBreakpoints, path, lines),
+  debugBreakpoints: (path, list) => ipcRenderer.invoke(IPC.debugBreakpoints, path, list),
   debugStop: () => ipcRenderer.invoke(IPC.debugStop),
   onDebug: (cb) => {
     const listener = (_e: unknown, event: Parameters<typeof cb>[0]) => cb(event)

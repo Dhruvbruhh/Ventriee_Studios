@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol } from 'electron'
-import { join } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import { existsSync, mkdirSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
 import { StudioAuth } from './auth'
@@ -20,6 +20,8 @@ import { detectProviders, testEngine, defaultEndpoint, runEngine } from './engin
 import { IPC } from '../shared/ipc'
 import { TerminalService } from './terminal'
 import { DebugSession } from './debugger'
+import { DapSession, type Debugger } from './dap'
+import { debuggerFor, launchConfigs, substitute } from './launch'
 import { LspService } from './lsp'
 import { baseCatalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
@@ -30,7 +32,7 @@ import { summarizeRuns } from './runs'
 import { validMcpServers, writeMcpConfig } from './mcp'
 import { applyTemplate, type TemplateId } from './templates'
 import { Updater } from './updater'
-import type { CodeAskInput, CodeChangeInput, CodeCompleteInput } from '../shared/workspace'
+import type { CodeAskInput, CodeChangeInput, CodeCompleteInput, DebugBreakpoint, DebugEvent, DebugStartInput } from '../shared/workspace'
 import type {
   Agent,
   AppSettings,
@@ -54,7 +56,7 @@ const bus = new EventEmitter()
 const windows = new Map<number, { win: BrowserWindow; projectId: string | null }>()
 const terminals = new TerminalService()
 /** One debug session per window. */
-const debugSessions = new Map<number, DebugSession>()
+const debugSessions = new Map<number, Debugger>()
 // Extensions add to this later; until then it is the built-in catalog.
 const catalog = () => baseCatalog
 const lsp = new LspService(catalog)
@@ -324,17 +326,42 @@ function registerIpc() {
   handle(IPC.termResize, (event, id: string, cols: number, rows: number) => terminals.resize(event.sender.id, id, cols, rows))
   handle(IPC.termClose, (event, id: string) => terminals.close(event.sender.id, id))
   // Debugging runs the owner's program with their permissions, like a terminal, started in the project folder.
-  handle(IPC.debugStart, async (event, id: string, file: string, breakpoints: Record<string, number[]>) => {
+  handle(IPC.debugConfigs, (event, id: string) => launchConfigs(projectRoot(event, id)).map((c) => ({ name: c.name, type: c.type, request: c.request })))
+  handle(IPC.debugStart, async (event, id: string, input: DebugStartInput, breakpoints: Record<string, DebugBreakpoint[]>) => {
     const sender = event.sender
+    const root = projectRoot(event, id)
     stopDebug(sender.id)
-    const session = new DebugSession(projectRoot(event, id), (e) => { if (!sender.isDestroyed()) sender.send(IPC.debugEvent, e); if (e.type === 'exited' && debugSessions.get(sender.id) === session) debugSessions.delete(sender.id) })
+    const named = input?.config ? launchConfigs(root).find((c) => c.name === input.config) : null
+    if (input?.config && !named) throw new Error(`No launch configuration named ${input.config}`)
+    const config = named ? substitute(named, root, input.file || null) : null
+    const kind = debuggerFor(catalog(), config, String(input?.language ?? ''))
+    if (!kind) throw new Error(config ? `Debugging "${config.type}" configurations is not supported yet` : `No debugger is known for ${input?.language || 'this file'}`)
+    const emit = (e: DebugEvent) => { if (!sender.isDestroyed()) sender.send(IPC.debugEvent, e); if (e.type === 'exited' && debugSessions.get(sender.id) === session) debugSessions.delete(sender.id) }
+    const bps = breakpoints && typeof breakpoints === 'object' ? breakpoints : {}
+    let session: Debugger
+    if (kind === 'node') {
+      const node = new DebugSession(root, emit)
+      session = node
+      debugSessions.set(sender.id, session)
+      try {
+        if (config?.request === 'attach') await node.attach(Number(config.port ?? 9229), bps)
+        else await node.start(config ? relative(root, String(config.program ?? '')).split(sep).join('/') : input.file, bps)
+      } catch (error) { stopDebug(sender.id); throw error }
+      return
+    }
+    const spec = catalog().debuggers.find((d) => d.id === kind)!
+    const dap = new DapSession(root, spec, emit)
+    session = dap
     debugSessions.set(sender.id, session)
-    try { await session.start(file, breakpoints && typeof breakpoints === 'object' ? breakpoints : {}) } catch (error) { stopDebug(sender.id); throw error }
+    const args = config ?? substitute(spec.launch, root, input.file)
+    try { await dap.start({ ...args, type: undefined, name: undefined, request: args.request ?? 'launch' }, bps) } catch (error) { stopDebug(sender.id); throw error }
   })
+  handle(IPC.debugVariables, (event, ref: number) => debugOf(event.sender.id).variables?.(Number(ref)) ?? [])
+  handle(IPC.debugThread, (event, threadId: number) => debugOf(event.sender.id).selectThread?.(Number(threadId)))
   const debugOf = (owner: number) => { const s = debugSessions.get(owner); if (!s) throw new Error('No program is being debugged'); return s }
   handle(IPC.debugCommand, (event, action: 'continue' | 'over' | 'into' | 'out' | 'pause') => debugOf(event.sender.id).command(action))
   handle(IPC.debugEvaluate, (event, expression: string) => debugOf(event.sender.id).evaluate(String(expression)))
-  handle(IPC.debugBreakpoints, (event, path: string, lines: number[]) => debugSessions.get(event.sender.id)?.setBreakpoints(path, Array.isArray(lines) ? lines : []))
+  handle(IPC.debugBreakpoints, (event, path: string, list: DebugBreakpoint[]) => debugSessions.get(event.sender.id)?.setBreakpoints(path, Array.isArray(list) ? list : []))
   handle(IPC.debugStop, (event) => stopDebug(event.sender.id))
   handle(IPC.toolCatalog, () => catalog())
   // Language servers are the owner's installed tools (found on PATH), run in the project folder like a terminal.

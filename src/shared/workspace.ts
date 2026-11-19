@@ -9,8 +9,11 @@ export interface SearchResult { hits: SearchHit[]; filesSearched: number; trunca
 export interface TextFile { path: string; text: string; version: string; bom: boolean }
 export interface ProjectTypes { sources: Array<{ path: string; text: string }>; libs: Array<{ path: string; text: string }>; compilerOptions: Record<string, unknown>; truncated: boolean }
 export interface DebugFrame { name: string; path: string; line: number; column: number; internal: boolean }
-export interface DebugVariable { name: string; value: string; scope: string }
-export type DebugEvent = { type: 'running' } | { type: 'paused'; reason: string; frames: DebugFrame[]; variables: DebugVariable[] } | { type: 'output'; text: string } | { type: 'exited'; code: number }
+/** `ref` > 0: the value has children, fetched with debugVariables(ref). */
+export interface DebugVariable { name: string; value: string; scope: string; ref?: number }
+export interface DebugBreakpoint { line: number; condition?: string; logMessage?: string }
+export interface DebugStartInput { file: string; language: string; /** a launch.json configuration name; default: debug the current file */ config?: string }
+export type DebugEvent = { type: 'running' } | { type: 'paused'; reason: string; frames: DebugFrame[]; variables: DebugVariable[]; threads?: Array<{ id: number; name: string }>; threadId?: number } | { type: 'output'; text: string } | { type: 'exited'; code: number }
 export interface LintMessage { line: number; column: number; endLine: number; endColumn: number; severity: 'error' | 'warning'; message: string }
 export interface LineChange { kind: 'added' | 'modified' | 'deleted'; start: number; end: number }
 export interface BlameLine { hash: string; author: string; time: number; summary: string }

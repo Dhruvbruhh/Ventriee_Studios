@@ -11,7 +11,8 @@ import { Preview } from '../components/Preview'
 import { TerminalView } from '../components/Terminal'
 import { Modal } from '../shell'
 import { guard, useStore } from '../store'
-import type { CodeChangeResult, DebugFrame, DebugVariable, FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
+import type { CodeChangeResult, DebugBreakpoint, DebugFrame, DebugVariable, FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
+import type { Catalog } from '../../../shared/catalog'
 import type { Project } from '../../../shared/types'
 
 interface Tab { file: TextFile; model: monaco.editor.ITextModel; saved: string; subscription: monaco.IDisposable; view?: monaco.editor.ICodeEditorViewState | null }
@@ -61,7 +62,16 @@ function DiffView({ diff }: { diff: Diff }) {
   return <div ref={host} className="monaco-surface" aria-label={`Changes in ${diff.path}`} />
 }
 
-const debuggable = (path: string) => /\.(m|c)?(j|t)s$/.test(path)
+/** A debugger variable; one with children expands on click. */
+function VariableRow({ v, depth = 0 }: { v: DebugVariable; depth?: number }) {
+  const [children, setChildren] = useState<DebugVariable[] | null>(null)
+  const toggle = () => { if (children) setChildren(null); else if (v.ref) void window.ventriee.debugVariables(v.ref).then(setChildren, () => setChildren([])) }
+  return <>
+    <div className="debug-var" style={{ paddingLeft: depth * 12 }}>{v.ref ? <button className="tab-close" aria-expanded={Boolean(children)} aria-label={`Expand ${v.name}`} onClick={toggle}><IconChevron width={10} height={10} aria-hidden style={{ transform: children ? undefined : 'rotate(-90deg)' }} /></button> : null}
+      <b>{v.name}</b> <span title={v.value}>{v.value}</span></div>
+    {children?.map((c) => <VariableRow key={c.name} v={c} depth={depth + 1} />)}
+  </>
+}
 
 export default function CodeWorkspace({ project, visible, onNavigate }: { project: Project; visible: boolean; onNavigate?: (workspace: 'plan' | 'office') => void }) {
   const host = useRef<HTMLDivElement>(null)
@@ -76,8 +86,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   /** A command shown running in the Run panel (installs, tasks, tests); a new key starts a fresh shell. */
   const [run, setRun] = useState<{ label: string; command: string; key: number } | null>(null)
   const runInPanel = (label: string, command: string) => { setRun({ label, command, key: Date.now() }); setPanel('run') }
-  const [breakpoints, setBreakpoints] = useState<Record<string, number[]>>({})
-  const [debug, setDebug] = useState<{ status: 'idle' | 'starting' | 'running' | 'paused' | 'exited'; frames: DebugFrame[]; variables: DebugVariable[]; output: string; code?: number; error?: string }>({ status: 'idle', frames: [], variables: [], output: '' })
+  const [breakpoints, setBreakpoints] = useState<Record<string, DebugBreakpoint[]>>({})
+  const [debug, setDebug] = useState<{ status: 'idle' | 'starting' | 'running' | 'paused' | 'exited'; frames: DebugFrame[]; variables: DebugVariable[]; output: string; code?: number; error?: string; threads?: Array<{ id: number; name: string }>; threadId?: number }>({ status: 'idle', frames: [], variables: [], output: '' })
   const [evalText, setEvalText] = useState('')
   const [evalResult, setEvalResult] = useState('')
   const toggleBreakpoint = useRef((_path: string, _line: number) => {})
@@ -492,32 +502,38 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   }, [active, cursor.lineNumber, revision, project.id])
   // ---------- debugger ----------
   const debugLive = debug.status === 'running' || debug.status === 'paused' || debug.status === 'starting'
-  toggleBreakpoint.current = (path, line) => {
-    setBreakpoints((all) => {
-      const lines = all[path] ?? []
-      const next = lines.includes(line) ? lines.filter((l) => l !== line) : [...lines, line].sort((a, b) => a - b)
-      if (debugLive) void window.ventriee.debugBreakpoints(path, next).catch(() => {})
-      return { ...all, [path]: next }
-    })
-  }
+  const updateBreakpoints = (path: string, change: (list: DebugBreakpoint[]) => DebugBreakpoint[]) => setBreakpoints((all) => {
+    const next = change(all[path] ?? []).sort((a, b) => a.line - b.line)
+    if (debugLive) void window.ventriee.debugBreakpoints(path, next).catch(() => {})
+    return { ...all, [path]: next }
+  })
+  toggleBreakpoint.current = (path, line) => updateBreakpoints(path, (list) => list.some((b) => b.line === line) ? list.filter((b) => b.line !== line) : [...list, { line }])
   useEffect(() => window.ventriee.onDebug((e) => {
     if (!mounted.current) return
     if (e.type === 'output') setDebug((d) => ({ ...d, output: (d.output + e.text).slice(-40_000) }))
     else if (e.type === 'running') setDebug((d) => ({ ...d, status: 'running', frames: [], variables: [] }))
     else if (e.type === 'exited') setDebug((d) => ({ ...d, status: 'exited', code: e.code, frames: [], variables: [] }))
     else if (e.type === 'paused') {
-      setDebug((d) => ({ ...d, status: 'paused', frames: e.frames, variables: e.variables }))
+      setDebug((d) => ({ ...d, status: 'paused', frames: e.frames, variables: e.variables, threads: e.threads, threadId: e.threadId }))
       setEvalResult('')
       const top = e.frames.find((f) => !f.internal)
       if (top) void openAt(top.path, top.line, top.column)
     }
   }), [])
+  const [catalog, setCatalog] = useState<Catalog | null>(null)
+  useEffect(() => { void window.ventriee.toolCatalog().then(setCatalog).catch(() => {}) }, [])
+  const [launchConfigs, setLaunchConfigs] = useState<Array<{ name: string; type: string }>>([])
+  const [launchConfig, setLaunchConfig] = useState('')
+  useEffect(() => { if (panel === 'debug') void window.ventriee.debugConfigs(project.id).then(setLaunchConfigs).catch(() => setLaunchConfigs([])) }, [panel, project.id])
+  const activeLanguageId = active ? tabs.current.get(active)?.model.getLanguageId() ?? '' : ''
+  const debuggerSpec = catalog?.debuggers.find((d) => d.languages.includes(activeLanguageId))
+  const debuggable = ['javascript', 'typescript'].includes(activeLanguageId) || Boolean(debuggerSpec)
   const startDebug = async () => {
-    if (!active) return
-    if (!debuggable(active)) { useStore.getState().notify('The debugger runs JavaScript and TypeScript files with Node.js', 'info'); return }
+    if (!launchConfig && !active) return
+    if (!launchConfig && !debuggable) { useStore.getState().notify(`No debugger is known for ${activeLanguageId || 'this file'}. Add one in .vscode/launch.json or install an extension that provides it.`, 'info'); return }
     setPanel('debug'); setEvalResult('')
     setDebug({ status: 'starting', frames: [], variables: [], output: '' })
-    try { await window.ventriee.debugStart(project.id, active, breakpoints) } catch (error) {
+    try { await window.ventriee.debugStart(project.id, { file: active ?? '', language: activeLanguageId, config: launchConfig || undefined }, breakpoints) } catch (error) {
       if (mounted.current) setDebug({ status: 'idle', frames: [], variables: [], output: '', error: String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '') })
     }
   }
@@ -529,7 +545,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     const paused = debug.status === 'paused' ? debug.frames.find((f) => !f.internal && f.path === active) : undefined
     debugMarks.current?.clear()
     debugMarks.current = editor.current.createDecorationsCollection([
-      ...(breakpoints[active] ?? []).map((line) => ({ range: new monaco.Range(line, 1, line, 1), options: { glyphMarginClassName: 'bp-dot', glyphMarginHoverMessage: { value: 'Breakpoint (click to remove)' } } })),
+      ...(breakpoints[active] ?? []).map((b) => ({ range: new monaco.Range(b.line, 1, b.line, 1), options: { glyphMarginClassName: b.logMessage ? 'bp-dot bp-log' : b.condition ? 'bp-dot bp-cond' : 'bp-dot',
+        glyphMarginHoverMessage: { value: b.logMessage ? `Logpoint: ${b.logMessage}` : b.condition ? `Breakpoint when ${b.condition}` : 'Breakpoint (click to remove; add a condition in the Debug panel)' } } })),
       ...(paused ? [{ range: new monaco.Range(paused.line, 1, paused.line, 1), options: { isWholeLine: true, className: 'debug-current-line', glyphMarginClassName: 'debug-arrow' } }] : [])
     ])
   }, [breakpoints, active, debug])
@@ -653,18 +670,28 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
           : panel === 'debug' ? <div className="code-debug">
             <div className="debug-bar">
               {debugLive ? <button className="btn tiny" onClick={() => void window.ventriee.debugStop()}>Stop</button>
-                : <button className="btn tiny primary" disabled={!active || !debuggable(active)} onClick={() => void startDebug()} title="Run the open file with Node.js under the debugger">Debug {active?.split('/').pop() ?? 'file'}</button>}
+                : <><select aria-label="Debug configuration" value={launchConfig} onChange={(e) => setLaunchConfig(e.target.value)} disabled={!launchConfigs.length} title="Configurations come from .vscode/launch.json and .ventriee/launch.json">
+                  <option value="">Current file</option>{launchConfigs.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}</select>
+                  <button className="btn tiny primary" disabled={!launchConfig && (!active || !debuggable)} onClick={() => void startDebug()} title={launchConfig ? `Start "${launchConfig}"` : `Run the open file under ${debuggerSpec?.name ?? 'the Node.js debugger'}`}>{launchConfig ? 'Start' : `Debug ${active?.split('/').pop() ?? 'file'}`}</button></>}
               <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('continue')}>Continue</button>
               <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('over')}>Step over</button>
               <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('into')}>Step into</button>
               <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('out')}>Step out</button>
               <button className="btn tiny" disabled={debug.status !== 'running'} onClick={() => debugCommand('pause')}>Pause</button>
-              <span className="tree-note" role="status">{debug.error ? '' : debug.status === 'exited' ? `Exited with code ${debug.code}` : debug.status === 'idle' ? 'Click the margin left of a line number to set a breakpoint, then Debug. Runs JavaScript and TypeScript with your Node.js.' : debug.status === 'paused' ? 'Paused' : debug.status === 'starting' ? 'Starting…' : 'Running'}</span>
+              <span className="tree-note" role="status">{debug.error ? '' : debug.status === 'exited' ? `Exited with code ${debug.code}` : debug.status === 'idle' ? 'Click the margin left of a line number to set a breakpoint, then Debug. JavaScript/TypeScript, Python, Go, C/C++ and Rust, with your installed tools.' : debug.status === 'paused' ? 'Paused' : debug.status === 'starting' ? 'Starting…' : 'Running'}</span>
             </div>
-            {debug.error ? <p className="editor-error" role="alert">{debug.error}</p> : null}
+            {debug.error ? <p className="editor-error" role="alert">{debug.error}{(() => { const command = debuggerSpec?.install?.command; const install = typeof command === 'string' ? command : command?.[navigator.platform.startsWith('Win') ? 'win32' : navigator.platform.startsWith('Mac') ? 'darwin' : 'linux'] ?? command?.default
+              return install && /not installed|No module named/i.test(debug.error) ? <> <button className="btn tiny" onClick={() => runInPanel(`Install ${debuggerSpec!.name}`, install)}>Install debugger</button></> : null })()}</p> : null}
             <div className="debug-columns">
-              <section aria-label="Call stack"><h4>Call stack</h4>{debug.frames.filter((f) => !f.internal).map((f, i) => <button key={i} onClick={() => void openAt(f.path, f.line, f.column)}><b>{f.name}</b> <span className="dim">{f.path}:{f.line}</span></button>)}</section>
-              <section aria-label="Variables"><h4>Variables</h4>{debug.variables.map((v) => <div key={`${v.scope}:${v.name}`} className="debug-var"><b>{v.name}</b> <span title={v.value}>{v.value}</span></div>)}
+              <section aria-label="Call stack"><h4>Call stack</h4>
+                {debug.threads && debug.threads.length > 1 ? <select aria-label="Thread" value={debug.threadId} onChange={(e) => void window.ventriee.debugThread(Number(e.target.value)).catch(() => {})}>{debug.threads.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select> : null}
+                {debug.frames.filter((f) => !f.internal).map((f, i) => <button key={i} onClick={() => void openAt(f.path, f.line, f.column)}><b>{f.name}</b> <span className="dim">{f.path}:{f.line}</span></button>)}
+                <h4>Breakpoints</h4>{Object.entries(breakpoints).flatMap(([path, list]) => list.map((b) => <div className="debug-bp" key={`${path}:${b.line}`}>
+                  <button className="change-path" onClick={() => void openAt(path, b.line, 1)}>{path.split('/').pop()}:{b.line}</button>
+                  <input className="input mono" aria-label={`Condition or log message for ${path}:${b.line}`} placeholder="condition, or log: message {expr}" defaultValue={b.logMessage ? `log: ${b.logMessage}` : b.condition ?? ''}
+                    onBlur={(e) => { const v = e.target.value.trim(); updateBreakpoints(path, (all) => all.map((x) => x.line === b.line ? { line: x.line, ...(v.startsWith('log:') ? { logMessage: v.slice(4).trim() } : v ? { condition: v } : {}) } : x)) }} />
+                  <button className="tab-close" aria-label={`Remove breakpoint ${path}:${b.line}`} onClick={() => toggleBreakpoint.current(path, b.line)}><IconClose width={10} height={10} aria-hidden /></button></div>))}</section>
+              <section aria-label="Variables"><h4>Variables</h4>{debug.variables.map((v) => <VariableRow key={`${v.scope}:${v.name}`} v={v} />)}
                 {debug.status === 'paused' ? <form onSubmit={(e) => { e.preventDefault(); void window.ventriee.debugEvaluate(evalText).then(setEvalResult, (err) => setEvalResult(String(err))) }}>
                   <input className="input mono" aria-label="Expression to evaluate" placeholder="Evaluate an expression" value={evalText} onChange={(e) => setEvalText(e.target.value)} />
                   {evalResult ? <div className="debug-var"><b>=</b> <span>{evalResult}</span></div> : null}</form> : null}</section>

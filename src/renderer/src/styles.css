@@ -1421,3 +1421,11 @@
   .debug-var { display: flex; gap: 8px; font: 12px var(--mono); padding: 1px 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .debug-output { margin: 0; font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 }
+
+/* Conditional breakpoints and logpoints; breakpoint list; Run panel */
+.bp-dot.bp-cond { background: #f5a524; }
+.bp-dot.bp-log { border-radius: 2px; transform: rotate(45deg) scale(0.8); }
+.debug-bp { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+.debug-bp .input { flex: 1; min-width: 0; padding: 2px 6px; font-size: 11px; }
+.debug-bar select, .code-debug select { background: var(--surface-2, #1a1d23); color: inherit; border: 1px solid var(--line, #2a2f38); border-radius: 6px; font-size: 12px; padding: 2px 6px; }
+.code-run { height: 100%; min-height: 0; }

@@ -3,12 +3,18 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 import { relative } from 'node:path'
 import { existsSync } from 'node:fs'
 import { workspacePath } from './files'
-import type { DebugEvent, DebugFrame, DebugVariable } from '../shared/workspace'
+import type { DebugBreakpoint, DebugEvent, DebugFrame, DebugVariable } from '../shared/workspace'
+import type { Debugger } from './dap'
+
+type Breakpoints = Record<string, Array<DebugBreakpoint | number>>
+/** A logpoint is a condition that logs and never stops; `{expr}` parts are interpolated, as in VS Code. */
+export const logCondition = (message: string) =>
+  'console.log(`' + message.replace(/[`\\]/g, '\\$&').replace(/\$\{/g, '\\${').replace(/(?<!\$)\{([^}]+)\}/g, '${$1}') + '`), false'
 
 type Cdp = { id: number; result?: Record<string, unknown>; error?: { message: string }; method?: string; params?: Record<string, unknown> }
 
 /** One debugged Node.js process per window, driven over the inspector protocol (the one VS Code uses for Node). */
-export class DebugSession {
+export class DebugSession implements Debugger {
   private child: ChildProcess | null = null
   private ws: WebSocket | null = null
   private seq = 0
@@ -35,7 +41,7 @@ export class DebugSession {
   }
 
   /** Start `node --inspect-brk <file>` in the project folder with the given breakpoints. */
-  async start(file: string, breakpoints: Record<string, number[]>, nodePath = 'node') {
+  async start(file: string, breakpoints: Breakpoints, nodePath = 'node') {
     const abs = workspacePath(this.root, file)
     if (!existsSync(abs)) throw new Error(`${file} does not exist`)
     const child = spawn(nodePath, ['--inspect-brk=127.0.0.1:0', abs], { cwd: this.root, windowsHide: true, env: { ...process.env, FORCE_COLOR: '0' } })
@@ -61,7 +67,20 @@ export class DebugSession {
       child.on('exit', () => reject(new Error(err.trim().split('\n').slice(-3).join('\n') || 'The program exited before the debugger could attach')))
       setTimeout(() => reject(new Error('The debugger did not start within 10 seconds')), 10_000)
     })
+    await this.connect(url, breakpoints)
+  }
+
+  /** Attach to a Node.js process already started with --inspect on this port. */
+  async attach(port: number, breakpoints: Breakpoints) {
+    const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then((r) => r.json() as Promise<Array<{ webSocketDebuggerUrl?: string }>>).catch(() => [])
+    const url = targets.find((t) => t.webSocketDebuggerUrl)?.webSocketDebuggerUrl
+    if (!url) throw new Error(`No Node.js inspector is listening on port ${port}`)
+    await this.connect(url, breakpoints)
+  }
+
+  private async connect(url: string, breakpoints: Breakpoints) {
     this.ws = new WebSocket(url)
+    this.ws.addEventListener('close', () => { if (!this.child && this.ws) { this.ws = null; this.emit({ type: 'exited', code: 0 }) } })
     await new Promise((resolve, reject) => { this.ws!.addEventListener('open', resolve); this.ws!.addEventListener('error', () => reject(new Error('Could not connect to the debugger'))) })
     this.ws.addEventListener('message', (e) => this.onMessage(JSON.parse(String(e.data)) as Cdp))
     await this.send('Runtime.enable')
@@ -71,12 +90,13 @@ export class DebugSession {
     await this.send('Runtime.runIfWaitingForDebugger')
   }
 
-  async setBreakpoints(path: string, lines: number[]) {
+  async setBreakpoints(path: string, list: Array<DebugBreakpoint | number>) {
     for (const id of this.breakpoints.get(path) ?? []) await this.send('Debugger.removeBreakpoint', { breakpointId: id }).catch(() => {})
     const ids: string[] = []
     const url = pathToFileURL(workspacePath(this.root, path)).href
-    for (const line of lines.filter((l) => Number.isInteger(l) && l > 0).slice(0, 200)) {
-      const r = await this.send('Debugger.setBreakpointByUrl', { lineNumber: line - 1, url })
+    for (const bp of list.map((b) => (typeof b === 'number' ? { line: b } : b)).filter((b) => Number.isInteger(b.line) && b.line > 0).slice(0, 200)) {
+      const condition = bp.logMessage ? logCondition(bp.logMessage) : bp.condition || undefined
+      const r = await this.send('Debugger.setBreakpointByUrl', { lineNumber: bp.line - 1, url, condition })
       if (r.result?.breakpointId) ids.push(String(r.result.breakpointId))
     }
     this.breakpoints.set(path, ids)
@@ -120,6 +140,6 @@ export class DebugSession {
     return thrown ? `Error: ${thrown.exception?.description ?? 'evaluation failed'}` : (value?.description ?? JSON.stringify(value?.value) ?? String(value?.type))
   }
 
-  stop() { this.ws?.close(); this.child?.kill(); this.ws = null }
+  stop() { const ws = this.ws; this.ws = null; ws?.close(); this.child?.kill() }
   get running() { return Boolean(this.child) }
 }
