@@ -62,10 +62,16 @@ nsis:
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
   installerHeaderIcon: build/icon.ico
-  artifactName: ${productName}-${version}-setup.${ext}
+  # No spaces: GitHub renames them in uploads, which would break the updater's download path.
+  artifactName: Ventriee-Studios-${version}-setup.${ext}
   deleteAppDataOnUninstall: false
 
 portable:
-  artifactName: ${productName}-${version}-portable.${ext}
+  artifactName: Ventriee-Studios-${version}-portable.${ext}
 
-publish: null
+# Where installed copies look for updates (latest.yml is attached to each release).
+publish:
+  provider: github
+  owner: Dhruvbruhh
+  repo: Ventriee_Studios
+  releaseType: prerelease

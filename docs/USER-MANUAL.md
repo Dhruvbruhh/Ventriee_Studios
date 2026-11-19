@@ -87,7 +87,18 @@ The spark button in the top bar opens a side chat for anything: what to do next,
 
 **Settings → MCP tools** adds MCP servers (for example a browser, database or GitHub server) that Claude Code workers can use. Example: name `filesystem`, command `npx`, arguments `-y @modelcontextprotocol/server-filesystem .`. Codex and Gemini CLI read MCP servers from their own config files (`~/.codex/config.toml`, `~/.gemini/settings.json`). An MCP server runs as a program on your computer, so add only ones you trust.
 
-## 10. Good to know
+## 10. Updates
+
+The installed app checks for a new version a few seconds after it starts and every six hours, and downloads it in the background. When it is ready you get a Windows notification and a **Restart to update** button in the top bar. Click it, or just keep working: the update installs the next time you close the app. After installing, the app reopens on its own within about 20 seconds.
+
+- Your projects, chats, settings and sign-in are kept: they live in your data folder, which updates never touch.
+- If a new version changes how studio data is stored, it first saves a copy next to it (`ventriee.db.v<N>.bak`, the last three are kept).
+- If you open your data with an older version than the one that last saved it, the app tells you to update instead of opening it, so nothing is lost.
+- Restart to update is refused while a run is going, and it asks first if you have unsaved code.
+- **Settings → Data → Updates** shows your version and a **Check now** button.
+- The portable `.exe` cannot replace itself: it tells you when a new version exists and links to the download.
+
+## 11. Good to know
 
 - Workers and terminals act on your real files. Use Git or the run checkpoints, and back up valuable projects.
 - Projects and history live in `%APPDATA%\Ventriee Studios` on this PC. They are not synced to the cloud; sign-in is the only online account feature.

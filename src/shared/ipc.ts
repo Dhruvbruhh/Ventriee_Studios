@@ -21,12 +21,13 @@ import type {
   Snapshot,
   StartRunInput,
   RunSummary,
+  UpdateState,
   Task
 } from './types'
 import type { FileEntry, TextFile, GitState, GitAction, SearchResult, CodeAskInput, CodeAskResult } from './workspace'
 
 export const IPC = {
-  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesFind: 'files:find', filesSearch: 'files:search', codeAsk: 'code:ask', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo',
+  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesFind: 'files:find', filesSearch: 'files:search', codeAsk: 'code:ask', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
   gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action',
   termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
   authStatus: 'auth:status',
@@ -115,6 +116,10 @@ export interface VentrieeApi {
   runsList(projectId: string): Promise<RunSummary[]>
   runChanges(projectId: string, jobId: string): Promise<Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>>
   runUndo(projectId: string, jobId: string): Promise<number>
+  updateState(): Promise<UpdateState>
+  updateCheck(): Promise<UpdateState>
+  updateInstall(): Promise<void>
+  onUpdate(cb: (state: UpdateState) => void): () => void
   filesRead(projectId: string, path: string): Promise<TextFile>
   filesSave(projectId: string, file: TextFile): Promise<TextFile>
   filesCreate(projectId: string, path: string, directory: boolean): Promise<void>

@@ -24,6 +24,7 @@ import { CheckpointService } from './checkpoint'
 import { summarizeRuns } from './runs'
 import { validMcpServers, writeMcpConfig } from './mcp'
 import { applyTemplate, type TemplateId } from './templates'
+import { Updater } from './updater'
 import type { CodeAskInput } from '../shared/workspace'
 import type {
   Agent,
@@ -57,6 +58,10 @@ let preview: PreviewService
 let orchestrator: Orchestrator
 let planning: PlanningService
 let checkpoints: CheckpointService
+const updater = new Updater(
+  (state) => { for (const { win } of windows.values()) if (!win.isDestroyed()) win.webContents.send(IPC.updateChanged, state) },
+  () => store.projects().some((p) => store.runningJob(p.id)) ? 'A run is still going. Stop it or let it finish, then restart to update.' : null
+)
 let scheduler: NodeJS.Timeout | null = null
 let lastProviders: ProviderStatus[] = []
 /** Discovered model options. Refreshed on demand, never hardcoded. */
@@ -260,6 +265,9 @@ function registerIpc() {
   handle(IPC.filesList, (event, id: string, path = '') => files.list(projectRoot(event, id), path))
   handle(IPC.filesFind, (event, id: string, query: string) => files.find(projectRoot(event, id), query))
   handle(IPC.filesSearch, (event, id: string, query: string, caseSensitive: boolean) => files.search(projectRoot(event, id), query, caseSensitive === true))
+  handle(IPC.updateState, () => updater.state)
+  handle(IPC.updateCheck, () => updater.check())
+  handle(IPC.updateInstall, () => updater.install())
   handle(IPC.runsList, async (event, id: string) => {
     const root = projectRoot(event, id)
     const runs = summarizeRuns(store.jobs(id), store.sessions(id, 5000), store.agents(id))
@@ -974,7 +982,15 @@ app.whenReady().then(async () => {
   // Ties the window to the installed shortcut so the taskbar shows our icon, not Electron's.
   if (process.platform === 'win32') app.setAppUserModelId('com.ventriee.studios')
   if (!(isDev && process.env.ELECTRON_RENDERER_URL)) registerRendererProtocol(join(__dirname, '../renderer'), supabaseUrl)
-  bootstrapData()
+  try {
+    bootstrapData()
+  } catch (error) {
+    // Opening the data failed (newer data, or a migration that could not finish): say so and stop before anything writes.
+    const dataDir = app.getPath('userData')
+    dialog.showErrorBox('Ventriee Studios cannot open your data', `${(error as Error).message}\n\nYour data folder is ${dataDir}. Backups taken before each update are next to ventriee.db (ventriee.db.v<N>.bak).`)
+    app.quit()
+    return
+  }
   registerIpc()
   bus.on('output', (payload: { sessionId: string; agentId: string; taskId: string | null; chunk: string }) => {
     // Only windows showing that project need the chunk.
@@ -983,6 +999,7 @@ app.whenReady().then(async () => {
   })
   await refreshProviders()
   createWindow()
+  updater.start()
   createTray()
   startScheduler()
 

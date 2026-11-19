@@ -16,6 +16,7 @@ import { ProjectPanel } from './panels/ProjectPanel'
 import { RunsPanel } from './panels/RunsPanel'
 import { IconMemory, IconClock, IconSettings, IconSkill, IconSpark, IconPulse } from './icons'
 import { AccountButton } from './auth'
+import { UpdateNotice } from './components/UpdateNotice'
 const CodeWorkspace = lazy(() => import('./editor/CodeWorkspace'))
 
 export function App() {
@@ -131,6 +132,7 @@ export function App() {
           </button>
         </div>
         <div className="tb-spacer" />
+        <UpdateNotice />
         <AccountButton />
         <div className="health" title={`${configured} of ${snapshot.providers.length} engines ready`}>
           <span className={`health-dot${working > 0 ? ' on' : configured > 0 ? ' warn' : ''}`} />

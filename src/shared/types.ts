@@ -70,6 +70,16 @@ export type CostPreference = 'cheap' | 'balanced' | 'quality'
 
 export type Difficulty = 'low' | 'medium' | 'high'
 
+export interface UpdateState {
+  status: 'unsupported' | 'idle' | 'checking' | 'current' | 'downloading' | 'ready' | 'manual' | 'error'
+  current: string
+  version?: string
+  percent?: number
+  message?: string
+  /** Release page, for builds that cannot update themselves (portable). */
+  url?: string
+}
+
 export interface McpServer { name: string; command: string; args: string[]; enabled: boolean }
 
 export interface UsageRow { name: string; sessions: number; inputTokens: number; outputTokens: number; costUsd: number; seconds: number }
