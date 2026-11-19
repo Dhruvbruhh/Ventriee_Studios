@@ -47,6 +47,8 @@ jobs:
             dist/*.tar.gz
             dist/*.yml
             dist/*.blockmap
+            # electron-builder leaves its uninstaller stub next to the installer; it is not a download.
+            !dist/*__uninstaller*
           if-no-files-found: error
   release:
     needs: build
