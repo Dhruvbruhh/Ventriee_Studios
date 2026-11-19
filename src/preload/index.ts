@@ -179,7 +179,10 @@ const api: VentrieeApi = {
   addProvider: (input) => ipcRenderer.invoke(IPC.addProvider, input),
   updateProvider: (id, patch) => ipcRenderer.invoke(IPC.updateProvider, id, patch),
   deleteProvider: (id) => ipcRenderer.invoke(IPC.deleteProvider, id),
-  testProvider: (input) => ipcRenderer.invoke(IPC.testProvider, input)
+  testProvider: (input) => ipcRenderer.invoke(IPC.testProvider, input),
+  graphifyStatus: (id) => ipcRenderer.invoke(IPC.graphifyStatus, id),
+  graphifyBuild: (id) => ipcRenderer.invoke(IPC.graphifyBuild, id),
+  graphifyQuery: (id, question) => ipcRenderer.invoke(IPC.graphifyQuery, id, question)
 }
 
 contextBridge.exposeInMainWorld('ventriee', api)

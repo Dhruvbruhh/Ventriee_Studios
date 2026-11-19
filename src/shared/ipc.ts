@@ -99,7 +99,10 @@ export const IPC = {
   addProvider: 'provider:add',
   updateProvider: 'provider:update',
   deleteProvider: 'provider:delete',
-  testProvider: 'provider:test'
+  testProvider: 'provider:test',
+  graphifyStatus: 'graphify:status',
+  graphifyBuild: 'graphify:build',
+  graphifyQuery: 'graphify:query'
 } as const
 
 export interface CredentialInfo {
@@ -274,6 +277,12 @@ export interface VentrieeApi {
     apiKey?: string
     model: string
   }): Promise<{ ok: boolean; detail: string; models: string[] }>
+  /** Knowledge-graph (graphify) status for this project: CLI present, graph built, node count. */
+  graphifyStatus(projectId: string): Promise<{ installed: boolean; indexed: boolean; nodes: number }>
+  /** Build a code-only knowledge graph for this project (minutes on big repos). */
+  graphifyBuild(projectId: string): Promise<{ ok: boolean; out: string }>
+  /** Ask the project's graph a question; returns the scoped subgraph answer. */
+  graphifyQuery(projectId: string, question: string): Promise<{ ok: boolean; out: string }>
 }
 
 export type TaskPatch = Partial<Task>

@@ -126,6 +126,9 @@
   .code-ask-reply { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
   .code-ask-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; user-select: text; }
   .agent-changes { flex: 1; min-height: 0; overflow: auto; }
+  .graph-panel { flex: 1; min-height: 0; overflow: auto; padding-bottom: 12px; }
+  .graph-query { display: flex; gap: 8px; padding: 8px 12px; }
+  .graph-answer { margin: 0 12px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); font: 11px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
   .agent-changes-by { display: block; padding: 0 12px 4px; font-size: 11px; }
   .mcp-add { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 8px; margin-top: 12px; }
   .run-card { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }

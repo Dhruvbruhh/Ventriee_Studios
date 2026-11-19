@@ -36,6 +36,7 @@ import { eslintFile, prettierFormat } from './projecttools'
 import { CheckpointService } from './checkpoint'
 import { summarizeRuns } from './runs'
 import { validMcpServers, writeMcpConfig } from './mcp'
+import { GraphifyService } from './graphify'
 import { applyTemplate, type TemplateId } from './templates'
 import { Updater } from './updater'
 import type { GithubAction, CodeAskInput, CodeChangeInput, CodeCompleteInput, DebugBreakpoint, DebugEvent, DebugStartInput } from '../shared/workspace'
@@ -271,6 +272,7 @@ function createWindow(projectId?: string) {
 
 function registerIpc() {
   const files = new FileService()
+  const graphify = new GraphifyService()
   const git = new GitService()
   tests = new TestService(files)
   const projectRoot = (event: Electron.IpcMainInvokeEvent, id: string) => {
@@ -347,6 +349,9 @@ function registerIpc() {
   handle(IPC.gitLineChanges, (event, id: string, path: string) => git.lineChanges(projectRoot(event, id), path))
   handle(IPC.gitBlame, (event, id: string, path: string, line: number) => git.blame(projectRoot(event, id), path, Number(line)))
   handle(IPC.gitAction, (event, id: string, action: GitAction, path?: string, value?: string) => git.action(projectRoot(event, id), action, path, value))
+  handle(IPC.graphifyStatus, (event, id: string) => graphify.status(projectRoot(event, id)))
+  handle(IPC.graphifyBuild, (event, id: string) => graphify.build(projectRoot(event, id)))
+  handle(IPC.graphifyQuery, (event, id: string, question: string) => graphify.query(projectRoot(event, id), String(question ?? '')))
   handle(IPC.termOpen, (event, id: string, cols: number, rows: number) => {
     const sender = event.sender
     const send = (channel: string, payload: unknown) => { if (!sender.isDestroyed()) sender.send(channel, payload) }
