@@ -11,7 +11,7 @@ export async function loadIconTheme(id: string) {
   listeners.forEach((f) => f())
 }
 
-export const useIconTheme = () => useSyncExternalStore((f) => { listeners.add(f); return () => { listeners.delete(f) } }, () => theme)
+export const useIconTheme = () => useSyncExternalStore((f) => { listeners.add(f); return () => { listeners.delete(f) } }, () => theme, () => theme)
 
 /** VS Code's lookup order: exact name, then the longest extension (`test.ts` before `ts`), then language, then the default. */
 export function iconFor(t: FileIconTheme | null, name: string, directory: boolean, expanded = false): string | undefined {
