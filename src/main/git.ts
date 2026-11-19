@@ -15,16 +15,21 @@ export function parseGitChanges(raw: string): GitChange[] {
   }
   return changes
 }
+/** Git's own output can be far larger than one file (thousands of untracked paths); the 2 MB cap is for file contents. */
+const GIT_OUTPUT_BYTES = 64 * 1024 * 1024
+/** Changes shown in Source Control; the rest are counted, not listed. */
+export const MAX_LISTED_CHANGES = 5000
 export class GitService {
   private busy = new Set<string>()
   private async command(root: string, args: string[]) {
     try {
-      const result = await execute('git', ['--no-pager', '--literal-pathspecs', ...args], { cwd: root, windowsHide: true, timeout: 30_000, maxBuffer: MAX_TEXT_BYTES,
+      const result = await execute('git', ['--no-pager', '--literal-pathspecs', ...args], { cwd: root, windowsHide: true, timeout: 30_000, maxBuffer: GIT_OUTPUT_BYTES,
         env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', GIT_OPTIONAL_LOCKS: '0' } })
       return result.stdout
     } catch (error) {
       const failure = error as { stderr?: string; code?: string; killed?: boolean }
       if (failure.code === 'ENOENT') throw new Error('Git is not installed or is missing from PATH')
+      if (failure.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') throw new Error('Git returned more than 64 MB of output. Add large generated folders to .gitignore and refresh.')
       throw new Error(failure.killed ? 'Git timed out. Check credentials and network access.' : (failure.stderr?.trim().slice(0, 2000).replace(/https?:\/\/[^@\s]+@/g, 'https://[redacted]@') || 'Git operation failed'))
     }
   }
@@ -44,12 +49,13 @@ export class GitService {
       this.command(root, ['symbolic-ref', '--quiet', '--short', 'HEAD']).catch(() => '(detached HEAD)'),
       this.command(root, ['branch', '--format=%(refname:short)'])
     ])
-    const changes = parseGitChanges(raw)
+    const all = parseGitChanges(raw)
+    const changes = all.slice(0, MAX_LISTED_CHANGES)
     const log = await this.command(root, ['log', '-20', '--format=%h%x00%s']).catch(() => '')
     const counts = await this.command(root, ['rev-list', '--left-right', '--count', 'HEAD...@{upstream}']).catch(() => '0 0')
     const remote = (await this.command(root, ['remote', 'get-url', 'origin']).catch(() => '')).trim().replace(/https?:\/\/[^@\s]+@/g, 'https://[redacted]@')
     const [ahead, behind] = counts.trim().split(/\s+/).map(Number)
-    return { repository: true, remote, branch: branch.trim(), branches: branchList.split('\n').map((b) => b.trim()).filter(Boolean), changes,
+    return { repository: true, remote, ...(all.length > changes.length ? { totalChanges: all.length } : {}), branch: branch.trim(), branches: branchList.split('\n').map((b) => b.trim()).filter(Boolean), changes,
       log: log.trim().split('\n').filter(Boolean).map((row) => { const [hash, message] = row.split('\0'); return { hash, message } }), ahead, behind }
   }
   async diff(root: string, path: string, staged: boolean) {
@@ -61,6 +67,7 @@ export class GitService {
         throw error
       })
       if (text.includes('\0')) throw new Error('Binary diffs are not supported')
+      if (text.length > MAX_TEXT_BYTES) throw new Error('This file is over 2 MB, too large to compare here')
       return text
     }
     const beforePath = changed?.originalPath && (staged || changed.working === 'R') ? changed.originalPath : path

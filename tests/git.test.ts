@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { GitService } from '../src/main/git'
+import { GitService, MAX_LISTED_CHANGES } from '../src/main/git'
 let root: string
 const git = new GitService()
 const command = (...args: string[]) => execFileSync('git', args, { cwd: root, windowsHide: true, stdio: 'pipe' }).toString()
@@ -48,6 +48,13 @@ describe('real Git source control', { timeout: 30_000 }, () => {
     mkdirSync(join(root, 'child'))
     await expect(git.status(join(root, 'child'))).rejects.toThrow('repository root')
     await expect(git.action(root, 'stage', '../outside')).rejects.toThrow()
+  })
+  it('lists a capped number of changes instead of failing on a large working tree', async () => {
+    mkdirSync(join(root, 'scrape'))
+    for (let i = 0; i < MAX_LISTED_CHANGES + 600; i++) writeFileSync(join(root, 'scrape', `page-${i}.html`), '')
+    const state = await git.status(root)
+    expect(state.changes).toHaveLength(MAX_LISTED_CHANGES)
+    expect(state.totalChanges).toBe(MAX_LISTED_CHANGES + 600)
   })
   it('restores a changed or removed file from the last commit, but never deletes a new file', async () => {
     writeFileSync(join(root, 'kept [1].txt'), 'original\n'); command('add', '.'); command('commit', '-m', 'Base')
