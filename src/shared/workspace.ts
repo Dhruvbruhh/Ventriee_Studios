@@ -23,6 +23,13 @@ export type GitAction = 'init' | 'stage' | 'unstage' | 'commit' | 'checkout' | '
 
 export interface ExtensionSearchHit { id: string; name: string; publisher: string; version: string; description: string; downloads: number; icon: string | null }
 export interface ExtensionInfo { id: string; name: string; publisher: string; version: string; description: string; enabled: boolean; supported: string[]; needsRuntime: boolean }
+/** A Jupyter output in nbformat 4 shape. */
+export type NotebookOutput = { output_type: 'stream'; name: string; text: string | string[] } | { output_type: 'error'; ename: string; evalue: string; traceback: string[] }
+  | { output_type: 'execute_result' | 'display_data'; data: Record<string, string | string[]>; metadata?: Record<string, unknown>; execution_count?: number | null }
+/** What a running notebook kernel reports. */
+export type NotebookEvent = { path?: string } & ({ type: 'ready' } | { type: 'error'; message: string } | { type: 'exit'; code: number }
+  | { type: 'output'; id: string; output: NotebookOutput } | { type: 'done'; id: string; count: number | null; status: 'ok' | 'error' })
+
 /** A file icon theme: icon ids to data URLs, and names, extensions and language ids to icon ids (keys lower-case). */
 export interface FileIconTheme {
   icons: Record<string, string>

@@ -14,6 +14,9 @@ files:
 extraResources:
   - from: resources/skills
     to: skills
+  # Runs Jupyter kernels for notebooks (with the owner's Python and jupyter_client).
+  - from: resources/kernel_bridge.py
+    to: kernel_bridge.py
   # The running window reads this; the exe and shortcuts get the .ico.
   - from: build/icon.png
     to: icon.png
@@ -38,12 +41,16 @@ linux:
   category: Development
   syncDesktopName: true
   maintainer: Ventriee Studios <ventriee@example.com>
-  # Windows cannot build AppImage (symlink EPERM) or deb (fpm/Ruby absent).
-  # tar.gz is the portable Linux binary buildable from Windows; AppImage and
-  # deb are produced on Linux/CI with the same config.
+  # AppImage and deb need a Linux machine (the release workflow builds them);
+  # from Windows, `npm run dist:linux -- --linux tar.gz` still gives the portable tarball.
   target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
     - target: tar.gz
       arch: [x64]
+  artifactName: Ventriee-Studios-${version}-${arch}.${ext}
   executableName: ventriee-studios
   synopsis: Local-first multi-agent AI creation studio
   description: >-
@@ -51,6 +58,23 @@ linux:
     generate works refine a development prompt, assign real CLI agents (OpenCode,
     Claude Code, Codex, Gemini, Ollama) and watch them work in a live office with
     an always-visible preview.
+
+mac:
+  icon: build/icon.png
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  artifactName: Ventriee-Studios-${version}-mac-${arch}.${ext}
+  # Unsigned until there is an Apple Developer ID: set CSC_LINK / CSC_KEY_PASSWORD and
+  # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID, remove `identity: null`, and set notarize: true.
+  identity: null
+  notarize: false
+  hardenedRuntime: true
+  extendInfo:
+    NSMicrophoneUsageDescription: Voice input turns what you say into a brief or a question for the agents.
 
 nsis:
   oneClick: false

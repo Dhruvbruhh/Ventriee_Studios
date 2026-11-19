@@ -96,6 +96,16 @@ const api: VentrieeApi = {
   lspEnsure: (id, language) => ipcRenderer.invoke(IPC.lspEnsure, id, language),
   lspRequest: (id, language, method, params) => ipcRenderer.invoke(IPC.lspRequest, id, language, method, params),
   lspNotify: (id, language, method, params) => ipcRenderer.invoke(IPC.lspNotify, id, language, method, params),
+  notebookStart: (id, path) => ipcRenderer.invoke(IPC.notebookStart, id, path),
+  notebookExecute: (id, path, cell, code) => ipcRenderer.invoke(IPC.notebookExecute, id, path, cell, code),
+  notebookInterrupt: (id, path) => ipcRenderer.invoke(IPC.notebookInterrupt, id, path),
+  notebookRestart: (id, path) => ipcRenderer.invoke(IPC.notebookRestart, id, path),
+  notebookShutdown: (id, path) => ipcRenderer.invoke(IPC.notebookShutdown, id, path),
+  onNotebook: (cb) => {
+    const listener = (_e: unknown, event: Parameters<typeof cb>[0]) => cb(event)
+    ipcRenderer.on(IPC.notebookEvent, listener)
+    return () => ipcRenderer.removeListener(IPC.notebookEvent, listener)
+  },
   onLsp: (cb) => {
     const listener = (_e: unknown, event: Parameters<typeof cb>[0]) => cb(event)
     ipcRenderer.on(IPC.lspEvent, listener)
