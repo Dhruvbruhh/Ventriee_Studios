@@ -1,7 +1,9 @@
+import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { parseJsonc } from './typeindex'
-import type { Catalog } from '../shared/catalog'
+import { findExecutable } from './lsp'
+import type { Catalog, DebuggerSpec } from '../shared/catalog'
 
 export interface LaunchConfig { name: string; type: string; request: string; [key: string]: unknown }
 
@@ -46,3 +48,24 @@ export function debuggerFor(catalog: Catalog, config: LaunchConfig | null, langu
   if (['javascript', 'typescript'].includes(language)) return 'node'
   return catalog.debuggers.find((d) => d.languages.includes(language))?.id ?? null
 }
+
+/** Launch arguments for "debug the current file": builds it first when the debugger needs a compiled program. */
+export async function currentFileLaunch(spec: DebuggerSpec, language: string, root: string, file: string): Promise<Record<string, unknown>> {
+  const args = substitute(spec.launch, root, file)
+  const candidates = spec.build?.[language]
+  if (!candidates) return args
+  const found = candidates.map((c) => ({ c, exe: findExecutable(c[0]) })).find((x) => x.exe)
+  if (!found) throw new Error(`Install a compiler to debug this file: ${candidates.map((c) => c[0]).join(' or ')}`)
+  const [, ...rest] = substitute(found.c, root, file)
+  const output = await new Promise<string>((resolve, reject) => execFile(found.exe!, rest, { cwd: root, windowsHide: true, timeout: 5 * 60_000, maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
+    if (!error) { resolve(stdout); return }
+    // cargo's JSON carries the compiler messages; show their rendered text, not raw JSON.
+    const rendered = jsonLines(stdout).map((m) => m?.message?.rendered).filter(Boolean).join('')
+    reject(new Error(`The build failed:\n${String(rendered || stderr || error.message).trim().split('\n').slice(-30).join('\n')}`))
+  }))
+  const built = jsonLines(output).map((m) => m?.executable).filter(Boolean).at(-1)
+  return built ? { ...args, program: built } : args
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const jsonLines = (text: string): any[] => text.split('\n').flatMap((l) => { try { return [JSON.parse(l)] } catch { return [] } })

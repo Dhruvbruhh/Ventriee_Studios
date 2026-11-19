@@ -12,6 +12,8 @@ export interface DebuggerSpec {
   command: string; args?: string[]
   /** The DAP launch arguments for "debug the current file"; launch.json replaces them. */
   launch: Record<string, unknown>
+  /** Per language, commands that build the current file before debugging it; the first one installed runs. A build printing cargo's JSON names the program. */
+  build?: Record<string, string[][]>
   install?: InstallSpec
 }
 export interface TestRunnerSpec {
@@ -53,6 +55,7 @@ export const baseCatalog: Catalog = {
       launch: { request: 'launch', mode: 'debug', program: '${fileDirname}' }, install: { command: 'go install github.com/go-delve/delve/cmd/dlv@latest' } },
     { id: 'lldb', name: 'C, C++, Rust (LLDB)', languages: ['c', 'cpp', 'rust'], command: 'lldb-dap',
       launch: { request: 'launch', program: '${fileDirname}/${fileBasenameNoExtension}${exe}', cwd: '${workspaceFolder}' },
+      build: { c: [['gcc', '-g', '-O0', '${file}', '-o', '${fileDirname}/${fileBasenameNoExtension}${exe}'], ['clang', '-g', '-O0', '${file}', '-o', '${fileDirname}/${fileBasenameNoExtension}${exe}']], cpp: [['g++', '-g', '-O0', '${file}', '-o', '${fileDirname}/${fileBasenameNoExtension}${exe}'], ['clang++', '-g', '-O0', '${file}', '-o', '${fileDirname}/${fileBasenameNoExtension}${exe}']], rust: [['cargo', 'build', '--message-format=json']] },
       install: { command: { win32: 'winget install LLVM.LLVM', darwin: 'xcode-select --install', linux: 'sudo apt install lldb' } } }
   ],
   testRunners: [

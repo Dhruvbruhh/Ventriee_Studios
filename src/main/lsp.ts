@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, delimiter, join } from 'node:path'
@@ -37,7 +37,25 @@ export class FrameReader {
  * A program on PATH or in the standard per-user toolchain folders. Never one inside the project:
  * opening a file must not run code that came with a cloned repository.
  */
+let pathCheckedAt = 0
+/** Windows: add PATH entries saved since the app started (a toolchain installed while it runs), so tools and their children find them. */
+export function refreshPath(force = false) {
+  const env = process.env
+  if (process.platform !== 'win32' || (!force && Date.now() - pathCheckedAt < 5000)) return
+  pathCheckedAt = Date.now()
+  const key = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'Path'
+  const have = new Set((env[key] ?? '').split(delimiter).map((d) => d.toLowerCase()))
+  const saved = ['HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment', 'HKCU\\Environment'].flatMap((hive) => {
+    try {
+      const out = execFileSync('reg', ['query', hive, '/v', 'Path'], { encoding: 'utf8', windowsHide: true, timeout: 3000 })
+      return (/Path\s+REG_(?:EXPAND_)?SZ\s+(.*)/i.exec(out)?.[1] ?? '').split(delimiter)
+    } catch { return [] }
+  }).map((d) => d.trim().replace(/%([^%]+)%/g, (whole, name: string) => env[name] ?? whole)).filter((d) => d && !have.has(d.toLowerCase()))
+  if (saved.length) env[key] = [env[key], ...new Set(saved)].filter(Boolean).join(delimiter)
+}
+
 export function findExecutable(name: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env === process.env) refreshPath()
   const dirs = [...(env.PATH ?? env.Path ?? '').split(delimiter), join(homedir(), 'go', 'bin'), join(homedir(), '.cargo', 'bin'), join(homedir(), '.local', 'bin')]
   const exts = process.platform === 'win32' ? ['.exe', '.cmd', '.bat', ''] : ['']
   for (const dir of dirs.filter(Boolean)) for (const ext of exts) {
