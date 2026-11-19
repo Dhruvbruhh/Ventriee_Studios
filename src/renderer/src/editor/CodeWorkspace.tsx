@@ -3,6 +3,7 @@ import { IconChevron, IconClose, IconEdit, IconTrash } from '../icons'
 import { monaco, languageFor, editorLanguages } from './monaco'
 import { SourceControl } from './SourceControl'
 import { findConflicts, resolveConflict } from './conflicts'
+import { applyProjectTypes, clearProjectTypes, fileUri } from './intellisense'
 import { AgentChanges } from './AgentChanges'
 import { Preview } from '../components/Preview'
 import { TerminalView } from '../components/Terminal'
@@ -77,6 +78,19 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [findBusy, setFindBusy] = useState(false)
   const [findError, setFindError] = useState('')
   const searchRun = useRef(0)
+  const background = useRef(new Set<monaco.editor.ITextModel>())
+  const [typesInfo, setTypesInfo] = useState('')
+  const loadTypes = useCallback(async () => {
+    setTypesInfo('Loading project types…')
+    try {
+      const types = await window.ventriee.projectTypes(project.id)
+      if (!mounted.current) return
+      for (const model of applyProjectTypes(project.id, types)) background.current.add(model)
+      const packages = new Set(types.libs.map((l) => l.path.split('/').slice(1, l.path.split('/')[1]?.startsWith('@') ? 3 : 2).join('/'))).size
+      setTypesInfo(`TS: ${types.sources.length} files, ${packages} packages${types.truncated ? ' (limit reached)' : ''}`)
+    } catch { if (mounted.current) setTypesInfo('') }
+  }, [project.id])
+  useEffect(() => { void loadTypes() }, [loadTypes])
   const [ask, setAsk] = useState(false)
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState<'ask' | 'edit' | 'change' | null>(null)
@@ -115,7 +129,9 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     const selected = instance.onDidChangeCursorSelection(({ selection: s }) => setSelection(s.isEmpty() ? null : [s.startLineNumber, s.endLineNumber]))
     return () => {
       mounted.current = false; position.dispose(); selected.dispose(); instance.dispose()
-      for (const tab of tabs.current.values()) { tab.subscription.dispose(); tab.model.dispose() }
+      for (const tab of tabs.current.values()) { tab.subscription.dispose(); if (!background.current.has(tab.model)) tab.model.dispose() }
+      for (const model of background.current) if (!model.isDisposed()) model.dispose()
+      background.current.clear(); clearProjectTypes()
       tabs.current.clear(); editor.current = null; useStore.setState({ editorDirty: false })
     }
   }, [])
@@ -138,8 +154,11 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       const file = await window.ventriee.filesRead(project.id, path)
       if (!mounted.current) return
       if (!tabs.current.has(path)) {
-        const uri = monaco.Uri.from({ scheme: 'inmemory', authority: project.id, path: `/${path}` })
-        const model = monaco.editor.createModel(file.text, languageFor(path), uri)
+        const uri = fileUri(project.id, path)
+        // A project file may already be loaded for the TypeScript service; the tab takes it over.
+        const existing = monaco.editor.getModel(uri)
+        if (existing && existing.getValue() !== file.text) existing.setValue(file.text)
+        const model = existing ?? monaco.editor.createModel(file.text, languageFor(path), uri)
         tabs.current.set(path, { file, model, saved: model.getValue(), subscription: model.onDidChangeContent(changed) })
       }
       if (request === opening.current) activate(path)
@@ -305,7 +324,10 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     const tab = tabs.current.get(path)!
     if (tab.saved !== tab.model.getValue() && !window.confirm(`Discard unsaved edits to ${path}?`)) return
     if (path === active) editor.current?.setModel(null)
-    tab.subscription.dispose(); tab.model.dispose(); tabs.current.delete(path)
+    tab.subscription.dispose(); tabs.current.delete(path)
+    // Background models stay for the TypeScript service, back at the saved text.
+    if (background.current.has(tab.model)) tab.model.setValue(tab.saved)
+    else tab.model.dispose()
     if (path === conflict) setConflict(null)
     if (path === active) {
       const next = [...tabs.current.keys()].at(-1)
@@ -456,6 +478,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     { label: `View: ${preview ? 'Hide' : 'Show'} preview`, run: () => { setPreview(!preview); setAsk(false) } },
     { label: 'Agent: Ask about this code', run: () => { setAsk(true); setPreview(false); setTimeout(() => document.querySelector<HTMLTextAreaElement>('[aria-label="Question for the agent"]')?.focus()) }, disabled: !tab },
     { label: 'Editor: Find in file', keys: 'Ctrl+F', run: () => { editor.current?.focus(); void editor.current?.getAction('actions.find')?.run() }, disabled: !tab },
+    { label: 'Editor: Reload project types', run: () => void loadTypes() },
     { label: 'Editor: Format document', run: () => { void editor.current?.getAction('editor.action.formatDocument')?.run() }, disabled: !tab },
     ...(onNavigate ? [{ label: 'Studio: Go to Plan', run: () => onNavigate('plan') }, { label: 'Studio: Go to Office', run: () => onNavigate('office') }] : [])
   ]
@@ -508,7 +531,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <footer className="code-status"><span>{busy ? 'Saving…' : tab && tab.saved !== tab.model.getValue() ? 'Unsaved changes' : 'Saved'}</span>
         <button className="status-btn" onClick={() => setPanel((open) => open === 'problems' ? null : 'problems')} aria-label={`${problems.length} problems`}>{errors} errors · {problems.length - errors} warnings</button>
         <button className="status-btn" onClick={() => setPanel((open) => open === 'terminal' ? null : 'terminal')}>Terminal</button>
-        <button className="status-btn" onClick={() => { setCommand(''); setPalette(true) }} title="Command palette (Ctrl+Shift+P)">Commands</button><span className="grow" />{blame ? <span className="status-blame" title={blame}>{blame}</span> : null}<span>Ln {cursor.lineNumber}, Col {cursor.column}</span><span>UTF-8{tab?.file.bom ? ' BOM' : ''}</span>
+        <button className="status-btn" onClick={() => { setCommand(''); setPalette(true) }} title="Command palette (Ctrl+Shift+P)">Commands</button><span className="grow" />{blame ? <span className="status-blame" title={blame}>{blame}</span> : null}{typesInfo ? <span title="Files and installed packages the TypeScript service knows about">{typesInfo}</span> : null}<span>Ln {cursor.lineNumber}, Col {cursor.column}</span><span>UTF-8{tab?.file.bom ? ' BOM' : ''}</span>
         <select aria-label="Editor language" value={tab?.model.getLanguageId() ?? 'plaintext'} disabled={!tab || Boolean(diff)} onChange={(e) => { if (tab) { monaco.editor.setModelLanguage(tab.model, e.target.value); changed() } }}>
           {editorLanguages().sort((a, b) => a.id.localeCompare(b.id)).map((lang) => <option value={lang.id} key={lang.id}>{lang.aliases?.[0] ?? lang.id}</option>)}
         </select></footer>

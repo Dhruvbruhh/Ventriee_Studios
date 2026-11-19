@@ -20,6 +20,7 @@ import { detectProviders, testEngine, defaultEndpoint, runEngine } from './engin
 import { IPC } from '../shared/ipc'
 import { TerminalService } from './terminal'
 import { askCode, changeFiles, completeCode } from './code-agent'
+import { projectTypes } from './typeindex'
 import { CheckpointService } from './checkpoint'
 import { summarizeRuns } from './runs'
 import { validMcpServers, writeMcpConfig } from './mcp'
@@ -266,6 +267,7 @@ function registerIpc() {
   }
   handle(IPC.filesList, (event, id: string, path = '') => files.list(projectRoot(event, id), path))
   handle(IPC.filesFind, (event, id: string, query: string) => files.find(projectRoot(event, id), query))
+  handle(IPC.projectTypes, (event, id: string) => projectTypes(projectRoot(event, id), files))
   handle(IPC.filesSearch, (event, id: string, query: string, caseSensitive: boolean) => files.search(projectRoot(event, id), query, caseSensitive === true))
   handle(IPC.updateState, () => updater.state)
   handle(IPC.updateCheck, () => updater.check())

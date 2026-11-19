@@ -6,6 +6,7 @@ const api: VentrieeApi = {
   filesList: (id, path) => ipcRenderer.invoke(IPC.filesList, id, path),
   filesFind: (id, query) => ipcRenderer.invoke(IPC.filesFind, id, query),
   filesSearch: (id, query, caseSensitive) => ipcRenderer.invoke(IPC.filesSearch, id, query, caseSensitive),
+  projectTypes: (id) => ipcRenderer.invoke(IPC.projectTypes, id),
   codeAsk: (id, input) => ipcRenderer.invoke(IPC.codeAsk, id, input),
   codeChange: (id, input) => ipcRenderer.invoke(IPC.codeChange, id, input),
   codeComplete: (id, input) => ipcRenderer.invoke(IPC.codeComplete, id, input),
