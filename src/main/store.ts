@@ -182,7 +182,8 @@ export class Store {
       engine: (r.engine as Task['engine']) ?? null,
       model: (r.model as Task['model']) ?? null,
       endpoint: (r.endpoint as Task['endpoint']) ?? null,
-      routedBy: (r.routedBy as Task['routedBy']) ?? null
+      routedBy: (r.routedBy as Task['routedBy']) ?? null,
+      changedFiles: safeJson<NonNullable<Task['changedFiles']>>(r.changedFiles as string, [])
     }))
   }
 
@@ -208,10 +209,10 @@ export class Store {
     const n = { ...cur, ...patch, updatedAt: Date.now() }
     this.db.run(
       `UPDATE tasks SET parentId=?,title=?,description=?,acceptance=?,role=?,agentId=?,status=?,dependsOn=?,
-        output=?,review=?,attempts=?,phase=?,engine=?,model=?,endpoint=?,routedBy=?,updatedAt=? WHERE id=?`,
+        output=?,review=?,attempts=?,phase=?,engine=?,model=?,endpoint=?,routedBy=?,changedFiles=?,updatedAt=? WHERE id=?`,
       n.parentId, n.title, n.description, n.acceptance, n.role, n.agentId, n.status,
       JSON.stringify(n.dependsOn), n.output, n.review, n.attempts, n.phase,
-      n.engine ?? null, n.model ?? null, n.endpoint ?? null, n.routedBy ?? null, n.updatedAt, id
+      n.engine ?? null, n.model ?? null, n.endpoint ?? null, n.routedBy ?? null, JSON.stringify(n.changedFiles ?? []), n.updatedAt, id
     )
   }
 

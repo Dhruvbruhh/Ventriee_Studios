@@ -18,6 +18,9 @@ import { PlanningService } from './planning'
 import { isInside } from './paths'
 import { detectProviders, testEngine, defaultEndpoint, runEngine } from './engines'
 import { IPC } from '../shared/ipc'
+import { TerminalService } from './terminal'
+import { askCode } from './code-agent'
+import type { CodeAskInput } from '../shared/workspace'
 import type {
   Agent,
   AppSettings,
@@ -39,6 +42,7 @@ import type {
 const bus = new EventEmitter()
 /** One entry per open window. The project id lives here, not in global kv. */
 const windows = new Map<number, { win: BrowserWindow; projectId: string | null }>()
+const terminals = new TerminalService()
 let tray: Tray | null = null
 let quitting = false
 let store: Store
@@ -201,6 +205,7 @@ function createWindow(projectId?: string) {
   const windowId = win.webContents.id
   windows.set(windowId, { win, projectId: initial })
   win.on('closed', () => {
+    terminals.closeOwner(windowId)
     auth.clear(windowId)
     windows.delete(windowId)
     refreshTray()
@@ -245,12 +250,22 @@ function registerIpc() {
   }
   handle(IPC.filesList, (event, id: string, path = '') => files.list(projectRoot(event, id), path))
   handle(IPC.filesFind, (event, id: string, query: string) => files.find(projectRoot(event, id), query))
+  handle(IPC.filesSearch, (event, id: string, query: string, caseSensitive: boolean) => files.search(projectRoot(event, id), query, caseSensitive === true))
+  handle(IPC.codeAsk, (event, id: string, input: CodeAskInput) => { projectRoot(event, id); return askCode(store.project(id)!, input, store.settings(), creds) })
   handle(IPC.filesRead, (event, id: string, path: string) => files.read(projectRoot(event, id), path))
   handle(IPC.filesSave, (event, id: string, file: TextFile) => files.save(projectRoot(event, id), file))
   handle(IPC.filesCreate, (event, id: string, path: string, directory: boolean) => files.create(projectRoot(event, id), path, directory === true))
   handle(IPC.gitStatus, (event, id: string) => git.status(projectRoot(event, id)))
   handle(IPC.gitDiff, (event, id: string, path: string, staged: boolean) => git.diff(projectRoot(event, id), path, staged === true))
   handle(IPC.gitAction, (event, id: string, action: GitAction, path?: string, value?: string) => git.action(projectRoot(event, id), action, path, value))
+  handle(IPC.termOpen, (event, id: string, cols: number, rows: number) => {
+    const sender = event.sender
+    const send = (channel: string, payload: unknown) => { if (!sender.isDestroyed()) sender.send(channel, payload) }
+    return terminals.open(sender.id, projectRoot(event, id), cols, rows, (term, data) => send(IPC.termData, { id: term, data }), (term, code) => send(IPC.termExit, { id: term, code }))
+  })
+  handle(IPC.termWrite, (event, id: string, data: string) => terminals.write(event.sender.id, id, data))
+  handle(IPC.termResize, (event, id: string, cols: number, rows: number) => terminals.resize(event.sender.id, id, cols, rows))
+  handle(IPC.termClose, (event, id: string) => terminals.close(event.sender.id, id))
   handle(IPC.authStatus, async (event) => {
     const session = await auth.restore(event.sender.id)
     debouncedNotify()
@@ -263,6 +278,7 @@ function registerIpc() {
   })
   handle(IPC.authClear, async () => {
     const signingOut = auth.signOut()
+    terminals.closeAll()
     for (const project of store.projects()) {
       orchestrator.stopRun(project.id)
       preview.stop(project.id)
@@ -942,6 +958,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   quitting = true
+  terminals.closeAll()
   if (scheduler) clearInterval(scheduler)
   tray?.destroy()
   for (const project of store?.projects?.() ?? []) {

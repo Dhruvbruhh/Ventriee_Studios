@@ -111,6 +111,10 @@ const MIGRATIONS: string[] = [
   // Which skills a worker is offered. Empty falls back to its role template.
   `
   ALTER TABLE agents ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';
+  `,
+  // Files a task changed or removed, recorded from its evidence check for review.
+  `
+  ALTER TABLE tasks ADD COLUMN changedFiles TEXT NOT NULL DEFAULT '[]';
   `
 ]
 

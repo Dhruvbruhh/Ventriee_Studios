@@ -5,12 +5,28 @@ import type { ChatMessage, EngineKind, ModelOption, ModelPrefs, PromptDoc, Provi
 const api: VentrieeApi = {
   filesList: (id, path) => ipcRenderer.invoke(IPC.filesList, id, path),
   filesFind: (id, query) => ipcRenderer.invoke(IPC.filesFind, id, query),
+  filesSearch: (id, query, caseSensitive) => ipcRenderer.invoke(IPC.filesSearch, id, query, caseSensitive),
+  codeAsk: (id, input) => ipcRenderer.invoke(IPC.codeAsk, id, input),
   filesRead: (id, path) => ipcRenderer.invoke(IPC.filesRead, id, path),
   filesSave: (id, file) => ipcRenderer.invoke(IPC.filesSave, id, file),
   filesCreate: (id, path, directory) => ipcRenderer.invoke(IPC.filesCreate, id, path, directory),
   gitStatus: (id) => ipcRenderer.invoke(IPC.gitStatus, id),
   gitDiff: (id, path, staged) => ipcRenderer.invoke(IPC.gitDiff, id, path, staged),
   gitAction: (id, action, path, value) => ipcRenderer.invoke(IPC.gitAction, id, action, path, value),
+  termOpen: (id, cols, rows) => ipcRenderer.invoke(IPC.termOpen, id, cols, rows),
+  termWrite: (id, data) => ipcRenderer.invoke(IPC.termWrite, id, data),
+  termResize: (id, cols, rows) => ipcRenderer.invoke(IPC.termResize, id, cols, rows),
+  termClose: (id) => ipcRenderer.invoke(IPC.termClose, id),
+  onTermData: (cb) => {
+    const listener = (_e: unknown, payload: { id: string; data: string }) => cb(payload)
+    ipcRenderer.on(IPC.termData, listener)
+    return () => ipcRenderer.removeListener(IPC.termData, listener)
+  },
+  onTermExit: (cb) => {
+    const listener = (_e: unknown, payload: { id: string; code: number }) => cb(payload)
+    ipcRenderer.on(IPC.termExit, listener)
+    return () => ipcRenderer.removeListener(IPC.termExit, listener)
+  },
   authStatus: () => ipcRenderer.invoke(IPC.authStatus),
   authSignIn: (input, signup) => ipcRenderer.invoke(IPC.authSignIn, input, signup),
   authClear: () => ipcRenderer.invoke(IPC.authClear),

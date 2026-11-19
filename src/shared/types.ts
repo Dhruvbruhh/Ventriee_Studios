@@ -225,6 +225,8 @@ export interface Task {
   model: string | null
   endpoint: string | null
   routedBy: RoutingMode | null
+  /** Project-relative files the task's evidence check saw change or disappear. */
+  changedFiles?: Array<{ path: string; removed: boolean }>
   createdAt: number
   updatedAt: number
 }

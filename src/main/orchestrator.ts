@@ -782,7 +782,11 @@ JSON shape:
       evidence.summary = `${evidence.summary} (studio wrote ${written.slice(0, 5).join(', ')})`
     }
 
-    this.deps.store.updateTask(task.id, { output: text.slice(-6000) })
+    this.deps.store.updateTask(task.id, {
+      output: text.slice(-6000),
+      changedFiles: [...evidence.changed.map((path) => ({ path, removed: false })), ...evidence.removed.map((path) => ({ path, removed: true }))]
+        .slice(0, 500).map((f) => ({ ...f, path: f.path.replace(/\\/g, '/') }))
+    })
     this.deps.store.addMessage({
       projectId: project.id,
       taskId: task.id,

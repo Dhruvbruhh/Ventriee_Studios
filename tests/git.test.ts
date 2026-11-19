@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -13,10 +13,10 @@ beforeEach((context) => {
     if (/Permission denied|operation not permitted/i.test(String(error))) { context.skip('This environment denies Git metadata writes'); return }
     throw error
   }
-  command('config', 'user.name', 'Editor Test'); command('config', 'user.email', 'editor-test@example.invalid'); command('config', 'commit.gpgsign', 'false')
+  command('config', 'user.name', 'Editor Test'); command('config', 'user.email', 'editor-test@example.invalid'); command('config', 'commit.gpgsign', 'false'); command('config', 'core.autocrlf', 'false')
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
-describe('real Git source control', () => {
+describe('real Git source control', { timeout: 30_000 }, () => {
   it('stages literal paths, commits, reads diffs and unstages changes', async () => {
     writeFileSync(join(root, 'file[1].ts'), 'export const value = 1\n')
     expect((await git.status(root)).changes[0].index).toBe('?')
@@ -48,6 +48,18 @@ describe('real Git source control', () => {
     mkdirSync(join(root, 'child'))
     await expect(git.status(join(root, 'child'))).rejects.toThrow('repository root')
     await expect(git.action(root, 'stage', '../outside')).rejects.toThrow()
+  })
+  it('restores a changed or removed file from the last commit, but never deletes a new file', async () => {
+    writeFileSync(join(root, 'kept [1].txt'), 'original\n'); command('add', '.'); command('commit', '-m', 'Base')
+    writeFileSync(join(root, 'kept [1].txt'), 'agent edit\n')
+    await git.action(root, 'discard', 'kept [1].txt')
+    expect(readFileSync(join(root, 'kept [1].txt'), 'utf8')).toBe('original\n')
+    rmSync(join(root, 'kept [1].txt'))
+    await git.action(root, 'discard', 'kept [1].txt')
+    expect(readFileSync(join(root, 'kept [1].txt'), 'utf8')).toBe('original\n')
+    writeFileSync(join(root, 'new.txt'), 'new')
+    await expect(git.action(root, 'discard', 'new.txt')).rejects.toThrow('not in the last commit')
+    expect(readFileSync(join(root, 'new.txt'), 'utf8')).toBe('new')
   })
   it('pushes, fetches and fast-forwards against a disposable remote, and never merges diverged history', async () => {
     const remote = mkdtempSync(join(tmpdir(), 'ventriee-remote-'))

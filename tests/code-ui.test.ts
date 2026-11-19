@@ -11,7 +11,7 @@ const project = { id: 'test-project', name: '<script>example</script>', path: 'D
 describe('code workspace initial UI', () => {
   it('renders accessible editor, explorer, language picker, and empty-state controls', () => {
     const html = renderToStaticMarkup(createElement(CodeWorkspace, { project, visible: true }))
-    for (const label of ['Project files', 'Code editor', 'Open files', 'Editor language', 'New file', 'New folder', 'Source Control', 'Show preview']) expect(html).toContain(label)
+    for (const label of ['Project files', 'Code editor', 'Open files', 'Editor language', 'New file', 'New folder', 'Source Control', 'Show preview', 'Agent changes', 'Ask agent', 'Commands', '>Search<']) expect(html).toContain(label)
     expect(html).toContain('Ctrl+P')
     expect(html).toContain('&lt;script&gt;example&lt;/script&gt;')
     expect(html).not.toContain('<script>example</script>')

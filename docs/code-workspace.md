@@ -10,6 +10,21 @@ Open a project, then choose **Code** in the top bar. The workspace adds a Monaco
 - Buffers remain open when switching between Plan, Code, and Office. Switching projects, closing dirty tabs, signing out, or closing the window asks before discarding edits. Save conflicts from agent/external edits require an explicit reload or preserving your edits elsewhere; there is no silent overwrite option.
 - Clean active files reload from disk periodically. Dirty buffers are never automatically replaced by disk updates. New file/folder paths are relative to the project; parent folders must already exist. Symlink/junction editing and access to `.git` are refused.
 
+## Search, panel, palette and terminals
+
+- **Search** (sidebar, Ctrl/Cmd+Shift+F) finds text across project files and opens a result at its line. It reads up to 5,000 files, skips dependency/build folders, binary files and files over 2 MB, and stops at 500 hits.
+- **Panel** (Ctrl/Cmd+`, or the status bar) has a **Terminal** and **Problems**. Problems lists Monaco's own diagnostics for open files (TypeScript/JavaScript, JSON, CSS, HTML). It is not a project-wide language server, so imports from `node_modules` show as unresolved.
+- **Command palette** (Ctrl/Cmd+Shift+P) lists editor and view actions; arrow keys and Enter work.
+- **Terminals**: the Code panel has one and the Office view has two on its left. Each is a real shell (PowerShell on Windows, `$SHELL` elsewhere, via `node-pty`) started in the project folder, with the owner's full permissions. Nothing sandboxes what you type. Shells keep running when you switch views, are private to the window that opened them (up to 8 per window), and are closed on sign-out, window close, project switch and quit.
+
+## Ask agent
+
+**Ask agent** (toolbar or palette) sends the selected code, or the whole open file if nothing is selected (up to 60,000 characters), and your question to the planner model set in Settings. **Ask** returns an answer. **Propose edit** returns a replacement shown as a diff; **Accept into editor** applies it as one undoable edit to the open buffer, and nothing reaches disk until you save. A proposal is refused if the file changed after you asked. Code you send goes to that provider.
+
+## Agent changes
+
+The **Agents** sidebar tab lists files each finished worker task changed or removed, recorded from its evidence check (tasks that ran before this version have none). In a Git repository a file opens as a diff against Git and can be restored from the last commit after confirmation. New files are never deleted from here. Without Git, files can only be opened.
+
 ## Source Control
 
 Requires Git on PATH and a project pointing at the repository root. Supports repository initialization, working/staged file lists, read-only side-by-side diffs, per-file stage/unstage, commits, recent history, local branch selection/creation, origin configuration, fetch, fast-forward-only pull, and push. First push sets an upstream on origin. Push and remote replacement ask for confirmation.
