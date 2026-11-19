@@ -62,6 +62,26 @@ export class Store {
   readonly db: Db
   constructor(file: string) {
     this.db = new Db(file)
+    // Seed the graphify MCP server once, disabled by default (owner enables it
+    // in settings). Queries graphify-out/graph.json relative to the session cwd.
+    if (!this.db.kvGet('mcpSeeded')) {
+      const s = this.settings()
+      if (!s.mcpServers.some((m) => m.name === 'graphify')) {
+        this.saveSettings({
+          mcpServers: [
+            ...s.mcpServers,
+            { name: 'graphify', command: 'python', args: ['-m', 'graphify.serve', '--transport', 'stdio'], enabled: false },
+            { name: 'headroom', command: 'headroom', args: ['mcp', 'serve'], enabled: false }
+          ]
+        })
+      } else if (!s.mcpServers.some((m) => m.name === 'headroom')) {
+        // Existing installs seeded graphify earlier; add headroom without duplicating it.
+        this.saveSettings({
+          mcpServers: [...s.mcpServers, { name: 'headroom', command: 'headroom', args: ['mcp', 'serve'], enabled: false }]
+        })
+      }
+      this.db.kvSet('mcpSeeded', '1')
+    }
   }
 
   // ---------- settings ----------
