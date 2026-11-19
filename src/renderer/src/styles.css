@@ -105,6 +105,8 @@
   .code-preview { border-left: 1px solid var(--line); overflow: auto; min-height: 0; display: flex; flex-direction: column; }
   .code-preview > * { flex: 1; min-height: 0; }
   .code-empty { padding: 22px 16px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+  .editor-conflict { position: absolute; top: 8px; left: 12px; right: 18px; z-index: 4; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--err); border-radius: 7px; background: var(--panel-2); font-size: 11px; }
+  .editor-conflict span { flex: 1 1 260px; overflow-wrap: anywhere; }
   .editor-error { padding: 10px 12px; color: var(--err); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
   .sc-branch, .sc-commit, .sc-new-branch { display: grid; gap: 8px; padding: 12px; }
   .sc-branch label, .sc-branch small { font-size: 10px; color: var(--muted); }

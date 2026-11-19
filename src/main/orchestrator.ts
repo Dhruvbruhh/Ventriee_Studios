@@ -189,43 +189,60 @@ export class Orchestrator {
     return redact(text.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, ''), this.secrets())
   }
 
-  /** Seed the default roster only for projects that have no workers yet. */
-  ensureRoster(project: Project, creds: Credentials): Agent[] {
+  /** A new project starts with the orchestrator only; everyone else is hired when a task needs them. */
+  ensureRoster(project: Project, _creds?: Credentials): Agent[] {
     const existing = this.deps.store.agents(project.id)
     if (existing.length) return existing
-    return ROLE_TEMPLATES.map((tpl, index) => {
-      const agent: Agent = {
-        id: newId('agt'),
-        projectId: project.id,
-        role: tpl.role,
-        name: tpl.name,
-        title: tpl.title,
-        engine: 'cli-opencode',
-        model: '',
-        endpoint: '',
-        instructions: tpl.instructions,
-        autonomy: 'scoped',
-        reasoning: 'auto',
-        skills: tpl.skills,
-        concurrency: 1,
-        budgetUsd: 5,
-        color: tpl.color,
-        desk: index,
-        enabled: true,
-        status: 'idle',
-        currentTaskId: null,
-        lastError: null,
-        createdAt: Date.now()
-      }
-      this.deps.store.insertAgent(agent)
-      this.deps.memory.bootstrapAgent(agent, project)
-      return agent
-    })
+    const orchestrator = this.hire(project, 'orchestrator', existing)
+    return orchestrator ? [orchestrator] : []
+  }
+
+  /** Roles the planner may schedule: enabled workers plus any template role the owner has not switched off. */
+  private plannableRoles(roster: Agent[]): string[] {
+    const disabled = new Set(roster.filter((a) => !a.enabled).map((a) => a.role))
+    const enabled = new Set(roster.filter((a) => a.enabled).map((a) => a.role))
+    const hireable = ROLE_TEMPLATES.map((t) => t.role).filter((role) => !disabled.has(role) || enabled.has(role))
+    return [...new Set([...enabled, ...hireable])]
+  }
+
+  /** Create a worker for a template role, on the engine and model the owner configured in Settings. */
+  private hire(project: Project, role: string, roster: Agent[]): Agent | null {
+    const tpl = roleByName(role)
+    if (!tpl) return null
+    const settings = this.deps.store.settings()
+    const agent: Agent = {
+      id: newId('agt'),
+      projectId: project.id,
+      role: tpl.role,
+      name: tpl.name,
+      title: tpl.title,
+      engine: settings.orchestratorEngine,
+      model: settings.orchestratorModel,
+      endpoint: '',
+      instructions: tpl.instructions,
+      autonomy: 'scoped',
+      reasoning: 'auto',
+      skills: tpl.skills,
+      concurrency: 1,
+      budgetUsd: 5,
+      color: tpl.color,
+      desk: roster.reduce((max, a) => Math.max(max, a.desk + 1), 0),
+      enabled: true,
+      status: 'idle',
+      currentTaskId: null,
+      lastError: null,
+      createdAt: Date.now()
+    }
+    this.deps.store.insertAgent(agent)
+    this.deps.memory.bootstrapAgent(agent, project)
+    this.log(project.id, agent.id, null, 'plan', `Hired ${agent.name} (${agent.title}) for this run`)
+    return agent
   }
 
   // ------------------------------------------------------------------ planning
   private planningPrompt(project: Project, instruction: string, roster: Agent[], memoryBlock: string) {
-    const roles = roster.filter((a) => a.enabled).map((a) => `${a.role} (${a.title})`).join(', ')
+    const roles = this.plannableRoles(roster).filter((role) => role !== 'orchestrator')
+      .map((role) => `${role} (${roster.find((a) => a.role === role)?.title ?? roleByName(role)?.title ?? role})`).join(', ')
     return `You are planning work for a real software project. Respond with JSON only, no prose.
 
 Project: ${project.name}
@@ -252,7 +269,7 @@ JSON shape:
 
   private async makePlan(project: Project, instruction: string, roster: Agent[]): Promise<Plan> {
     const orchestrator = roster.find((a) => a.role === 'orchestrator' && a.enabled)
-    const validRoles = roster.filter((a) => a.enabled).map((a) => a.role)
+    const validRoles = this.plannableRoles(roster)
     const fallback = this.deps.store.settings().plannerFallback
     const noPlan = (reason: string): Plan => {
       if (fallback) return heuristicPlan(instruction)
@@ -380,7 +397,11 @@ JSON shape:
     const ordered = orderTasks(plan.tasks)
     const keyToId = new Map<string, string>()
     for (const planned of ordered) {
-      const agent = roster.find((a) => a.role === planned.role && a.enabled)
+      let agent = roster.find((a) => a.role === planned.role && a.enabled)
+      if (!agent && !roster.some((a) => a.role === planned.role)) {
+        agent = this.hire(project, planned.role, roster) ?? undefined
+        if (agent) roster.push(agent)
+      }
       const id = newId('tsk')
       keyToId.set(planned.key, id)
       this.deps.store.insertTask({

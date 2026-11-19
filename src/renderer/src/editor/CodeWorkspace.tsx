@@ -8,7 +8,7 @@ import type { FileEntry, TextFile } from '../../../shared/workspace'
 import type { Project } from '../../../shared/types'
 
 interface Tab { file: TextFile; model: monaco.editor.ITextModel; saved: string; subscription: monaco.IDisposable; view?: monaco.editor.ICodeEditorViewState | null }
-interface Diff { path: string; original: string; modified: string; staged: boolean }
+interface Diff { path: string; original: string; modified: string; staged: boolean; label?: string }
 
 function Directory({ projectId, path, depth, revision, onOpen }: { projectId: string; path: string; depth: number; revision: number; onOpen: (path: string) => void }) {
   const [entries, setEntries] = useState<FileEntry[]>([])
@@ -58,6 +58,7 @@ export default function CodeWorkspace({ project, visible }: { project: Project; 
   const [sidebar, setSidebar] = useState<'files' | 'git'>('files')
   const [preview, setPreview] = useState(false)
   const [diff, setDiff] = useState<Diff | null>(null)
+  const [conflict, setConflict] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [cursor, setCursor] = useState({ lineNumber: 1, column: 1 })
@@ -118,24 +119,35 @@ export default function CodeWorkspace({ project, visible }: { project: Project; 
   const save = async (all = false) => {
     if (saving.current) return
     saving.current = true; setBusy(true)
+    let current = ''
     try {
       const targets = all ? [...tabs.current.values()] : active && tabs.current.has(active) ? [tabs.current.get(active)!] : []
       for (const tab of targets) {
         const text = tab.model.getValue()
         if (text === tab.saved) continue
+        current = tab.file.path
         const result = await window.ventriee.filesSave(project.id, { ...tab.file, text })
         if (!mounted.current || tab.model.isDisposed()) continue
         tab.file = result; tab.saved = text
+        setConflict((path) => path === current ? null : path)
       }
       changed(); setRevision((value) => value + 1)
-    } catch (error) { useStore.getState().notify(String(error), 'error') }
+    } catch (error) {
+      if (/changed on disk/i.test(String(error)) && tabs.current.has(current)) { setConflict(current); if (current !== selected.current) activate(current) }
+      else useStore.getState().notify(String(error), 'error')
+    }
     finally { saving.current = false; if (mounted.current) setBusy(false) }
   }
   const reload = async () => {
     const tab = active ? tabs.current.get(active) : null
     if (!tab || (tab.saved !== tab.model.getValue() && !window.confirm('Discard your unsaved edits and reload this file from disk?'))) return
     const file = await guard(() => window.ventriee.filesRead(project.id, active!))
-    if (file && mounted.current && !tab.model.isDisposed()) { tab.file = file; tab.model.setValue(file.text); tab.saved = tab.model.getValue(); changed() }
+    if (file && mounted.current && !tab.model.isDisposed()) { tab.file = file; tab.model.setValue(file.text); tab.saved = tab.model.getValue(); setConflict(null); changed() }
+  }
+  const compareWithDisk = async () => {
+    const tab = conflict ? tabs.current.get(conflict) : null
+    const disk = tab ? await guard(() => window.ventriee.filesRead(project.id, tab.file.path)) : null
+    if (tab && disk && mounted.current && !tab.model.isDisposed()) setDiff({ path: tab.file.path, original: disk.text, modified: tab.model.getValue(), staged: false, label: 'On disk (left) / your draft (right)' })
   }
   const close = (path: string) => {
     if (saving.current) return
@@ -143,6 +155,7 @@ export default function CodeWorkspace({ project, visible }: { project: Project; 
     if (tab.saved !== tab.model.getValue() && !window.confirm(`Discard unsaved edits to ${path}?`)) return
     if (path === active) editor.current?.setModel(null)
     tab.subscription.dispose(); tab.model.dispose(); tabs.current.delete(path)
+    if (path === conflict) setConflict(null)
     if (path === active) {
       const next = [...tabs.current.keys()].at(-1)
       if (next) activate(next); else { selected.current = null; setActive(null); setDiff(null) }
@@ -207,10 +220,12 @@ export default function CodeWorkspace({ project, visible }: { project: Project; 
     <section className="code-main" aria-label="Code editor">
       <div className="code-tabs" role="tablist" aria-label="Open files">{[...tabs.current].map(([path, value]) => <div className={`code-tab${path === active && !diff ? ' on' : ''}`} key={path}>
         <button role="tab" aria-selected={path === active && !diff} title={path} onClick={() => activate(path)}>{path.split('/').at(-1)}{value.saved !== value.model.getValue() ? <span aria-label="Unsaved"> ●</span> : null}</button><button className="tab-close" onClick={() => close(path)} aria-label={`Close ${path}`}>×</button></div>)}</div>
-      <div className="code-toolbar"><span className="code-breadcrumb" title={diff?.path ?? active ?? project.path}>{diff ? `${diff.staged ? 'Staged' : 'Working tree'} / ${diff.path}` : active ?? 'Open a file to begin'}</span>
+      <div className="code-toolbar"><span className="code-breadcrumb" title={diff?.path ?? active ?? project.path}>{diff ? `${diff.label ?? (diff.staged ? 'Staged' : 'Working tree')} / ${diff.path}` : active ?? 'Open a file to begin'}</span>
         {diff ? <button className="btn tiny" onClick={() => setDiff(null)}>Back to editor</button> : <><button className="btn tiny" disabled={!tab || busy} onClick={() => void reload()}>Reload</button><button className="btn tiny" disabled={!tab || busy} onClick={() => { setNewPath(''); setCreate('copy') }}>Save copy</button><button className="btn tiny primary" disabled={!tab || busy || tab.saved === tab.model.getValue()} onClick={() => void save()}>Save</button></>}
         <button className="btn tiny" aria-pressed={preview} onClick={() => setPreview(!preview)}>{preview ? 'Hide preview' : 'Show preview'}</button></div>
-      <div className="code-editor-body"><div ref={host} className="monaco-surface" style={{ visibility: active && !diff ? 'visible' : 'hidden' }} />
+      <div className="code-editor-body">{conflict && conflict === active && !diff ? <div className="editor-conflict" role="alert"><span>{conflict} changed on disk after you opened it. Your edits are kept here and were not saved.</span>
+        <button className="btn tiny" onClick={() => void compareWithDisk()}>Compare with disk</button><button className="btn tiny" onClick={() => void reload()}>Reload from disk</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('copy') }}>Save a copy</button></div> : null}
+        <div ref={host} className="monaco-surface" style={{ visibility: active && !diff ? 'visible' : 'hidden' }} />
         {diff ? <DiffView diff={diff} /> : !active ? <div className="code-welcome"><span className="code-welcome-symbol">{'{ }'}</span><h2>Your code, in one place</h2><p>Open a file in Explorer or press Ctrl+P.</p><p>Ctrl+S to save · Ctrl+F to find · Ctrl+H to replace</p><p>UTF-8 text files up to 2 MB. Language runtimes are installed separately.</p></div> : null}
         {loading ? <div className="editor-loading" role="status">Opening file…</div> : null}</div>
       <footer className="code-status"><span>{busy ? 'Saving…' : tab && tab.saved !== tab.model.getValue() ? 'Unsaved changes' : 'Saved'}</span><span className="grow" /><span>Ln {cursor.lineNumber}, Col {cursor.column}</span><span>UTF-8{tab?.file.bom ? ' BOM' : ''}</span>

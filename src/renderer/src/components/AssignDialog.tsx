@@ -44,7 +44,7 @@ export function AssignDialog({
   }
 
   const go = async () => {
-    if (!project || !selected.length) return
+    if (!project || (mode === 'manual' && !selected.length)) return
     setBusy(true)
     const result = await guard(() =>
       window.ventriee.assignPrompt({
@@ -73,8 +73,8 @@ export function AssignDialog({
         actions={
           <>
             <button className="btn" onClick={onClose}>Cancel</button>
-            <button className="btn primary" onClick={go} disabled={busy || !selected.length}>
-              {busy ? 'Starting…' : mode === 'manual' ? `Assign in order (${selected.length})` : `Assign to ${selected.length || 'no'} worker${selected.length === 1 ? '' : 's'}`}
+            <button className="btn primary" onClick={go} disabled={busy || (mode === 'manual' && !selected.length)}>
+              {busy ? 'Starting…' : mode === 'manual' ? `Assign in order (${selected.length})` : selected.length ? `Assign to ${selected.length} worker${selected.length === 1 ? '' : 's'}` : 'Let the orchestrator build the team'}
             </button>
           </>
         }
@@ -88,7 +88,7 @@ export function AssignDialog({
           >
             <span className="assign-mode-title">Orchestrator breaks it down</span>
             <span className="assign-mode-sub">
-              {orchestrator ? `${orchestrator.name} plans the subtasks, then dispatches only the workers you pick.` : 'No enabled orchestrator; the deterministic planner is used.'}
+              {orchestrator ? `${orchestrator.name} plans the subtasks and hires the roles they need, or dispatches only the workers you pick.` : 'No enabled orchestrator; the deterministic planner is used.'}
             </span>
           </button>
           <button
