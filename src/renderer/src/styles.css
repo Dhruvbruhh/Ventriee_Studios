@@ -127,6 +127,28 @@
   .code-ask-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; user-select: text; }
   .agent-changes { flex: 1; min-height: 0; overflow: auto; }
   .agent-changes-by { display: block; padding: 0 12px 4px; font-size: 10px; }
+  .mcp-add { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 8px; margin-top: 12px; }
+  .run-card { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+  .run-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; width: 100%; text-align: left; padding: 10px 12px; font-size: 11px; }
+  .run-head:hover { background: var(--panel-2); }
+  .run-title { font-size: 12.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .run-body { padding: 0 12px 12px; display: grid; gap: 10px; }
+  .runs-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .runs-table caption { text-align: left; font-weight: 600; padding: 4px 0; color: var(--muted); }
+  .runs-table th, .runs-table td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line-soft); }
+  .run-changes { max-height: 200px; overflow: auto; margin: 6px 0; padding-left: 0; list-style: none; font: 11px var(--mono); }
+  .run-changes b { display: inline-block; width: 56px; }
+  .run-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 14px; }
+  .run-modes > .section-label { grid-column: 1 / -1; }
+  .run-mode { display: grid; gap: 4px; text-align: left; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 11px; color: var(--muted); }
+  .run-mode b { color: var(--text); font-size: 12px; }
+  .run-mode.on { border-color: var(--accent); background: var(--panel-2); }
+  .session-tabs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 8px 24px 0; }
+  .session-tabs > button { padding: 5px 12px; border-radius: 999px; font-size: 11px; color: var(--muted); border: 1px solid var(--line); }
+  .session-tabs > button.on { color: var(--text); border-color: var(--accent); background: var(--panel-2); }
+  .session-hint { margin-left: 8px; font-size: 10.5px; color: var(--faint); }
+  .subscription-terminal { margin-top: 12px; }
+  .subscription-terminal .term-pane { height: 320px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
   .status-btn { font-size: 10px; color: #d4c4ef; padding: 0 4px; }
   .status-btn:hover, .status-btn:focus-visible { color: var(--text); text-decoration: underline; }
   .palette-list > button { display: flex; justify-content: space-between; gap: 12px; font-family: inherit; }

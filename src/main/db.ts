@@ -115,6 +115,14 @@ const MIGRATIONS: string[] = [
   // Files a task changed or removed, recorded from its evidence check for review.
   `
   ALTER TABLE tasks ADD COLUMN changedFiles TEXT NOT NULL DEFAULT '[]';
+  `,
+  // Several planning sessions per project; an empty title shows as "Session N".
+  `
+  ALTER TABLE conversations ADD COLUMN title TEXT NOT NULL DEFAULT '';
+  `,
+  // Planner's difficulty estimate, used to route easy tasks to cheaper models.
+  `
+  ALTER TABLE tasks ADD COLUMN difficulty TEXT;
   `
 ]
 

@@ -1,4 +1,5 @@
 import type { Phase } from './roles'
+import type { Difficulty } from '../shared/types'
 
 export interface PlannedTask {
   key: string
@@ -8,6 +9,8 @@ export interface PlannedTask {
   role: string
   phase: Phase
   dependsOnKeys: string[]
+  /** How hard the task is; routing sends low ones to cheaper models. */
+  difficulty?: Difficulty
 }
 
 export interface Plan {
@@ -416,6 +419,7 @@ export function parsePlanAnswer(raw: string, validRoles: string[]): Plan | null 
         acceptance?: string
         role?: string
         phase?: string
+        difficulty?: string
         dependsOn?: string[] | string
         dependsOnKeys?: string[] | string
       }>
@@ -441,7 +445,8 @@ export function parsePlanAnswer(raw: string, validRoles: string[]): Plan | null 
         acceptance: String(t.acceptance ?? 'Deliverable exists and is verifiable.').slice(0, 600),
         role: normalizeRole(String(t.role ?? 'frontend'), validRoles),
         phase: (String(t.phase ?? 'build').toLowerCase() as Phase) ?? 'build',
-        dependsOnKeys: dependsRaw.map((d) => String(d))
+        dependsOnKeys: dependsRaw.map((d) => String(d)),
+        ...(['low', 'medium', 'high'].includes(String(t.difficulty).toLowerCase()) ? { difficulty: String(t.difficulty).toLowerCase() as Difficulty } : {})
       })
     })
     if (!tasks.length) return null

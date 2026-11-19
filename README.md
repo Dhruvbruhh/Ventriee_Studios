@@ -97,6 +97,8 @@ Sign-in requires a connection to Supabase; project data remains local.
 
 ## Getting started (5 minutes)
 
+The full walkthrough (subscriptions, the free local prompt optimizer with Ollama, sessions, run modes, Runs and undo, the code editor, terminals and MCP tools) is in the [user manual](docs/USER-MANUAL.md).
+
 The **Code** workspace adds a Monaco editor with file tabs, Explorer, quick file
 navigation, conflict-aware saves, and Source Control for Git diffs, staging,
 commits, branches, and remotes. See [Code workspace](docs/code-workspace.md) for

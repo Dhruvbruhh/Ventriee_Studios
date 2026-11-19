@@ -5,9 +5,18 @@ import { ENGINE_LABELS, type Agent, type EngineKind } from '../../../shared/type
 import { IconCheck, IconPlus, IconRefresh, IconTrash } from '../icons'
 import { ModelPicker, resolveModel } from '../components/ModelPicker'
 import { AddProviderDialog } from '../components/AddProviderDialog'
+import { TerminalView } from '../components/Terminal'
 import type { CredentialInfo } from '../../../shared/ipc'
 
-type Tab = 'engines' | 'workers' | 'run' | 'data'
+type Tab = 'subscriptions' | 'engines' | 'workers' | 'run' | 'tools' | 'data'
+
+/** Subscriptions reach the studio through each vendor's own CLI login; the studio never sees the password. */
+const SUBSCRIPTIONS: Array<{ engine: EngineKind; name: string; plan: string; install: string; login: string; hint: string }> = [
+  { engine: 'cli-claude', name: 'Claude', plan: 'Claude Pro / Max', install: 'npm install -g @anthropic-ai/claude-code', login: 'claude', hint: 'Claude Code opens (if it asks to trust the folder, choose Yes). Type /login, choose your Claude subscription and finish in the browser, then type /exit.' },
+  { engine: 'cli-codex', name: 'ChatGPT', plan: 'ChatGPT Plus / Pro (Codex CLI)', install: 'npm install -g @openai/codex', login: 'codex login', hint: 'Choose "Sign in with ChatGPT" and finish in the browser.' },
+  { engine: 'cli-gemini', name: 'Gemini', plan: 'Google account (Gemini CLI)', install: 'npm install -g @google/gemini-cli', login: 'gemini', hint: 'Choose "Login with Google" and finish in the browser, then type /quit.' },
+  { engine: 'cli-opencode', name: 'OpenCode', plan: 'Any provider OpenCode supports', install: 'npm install -g opencode-ai', login: 'opencode auth login', hint: 'Pick a provider and follow its sign-in.' }
+]
 
 const ENGINE_ORDER: EngineKind[] = [
   'cli-opencode', 'cli-claude', 'cli-codex', 'cli-gemini', 'cli-custom', 'cli-ollama',
@@ -17,7 +26,7 @@ const ENGINE_ORDER: EngineKind[] = [
 ]
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>('engines')
+  const [tab, setTab] = useState<Tab>('subscriptions')
   return (
     <Modal
       title="Studio settings"
@@ -25,7 +34,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       tabs={
         <div className="modal-tabs" role="tablist">
-          {([['engines', 'Engines'], ['workers', 'Workers'], ['run', 'Run policy'], ['data', 'Data']] as Array<[Tab, string]>).map(
+          {([['subscriptions', 'Subscriptions'], ['engines', 'Engines'], ['workers', 'Workers'], ['run', 'Run policy'], ['tools', 'MCP tools'], ['data', 'Data']] as Array<[Tab, string]>).map(
             ([id, label]) => (
               <button key={id} className={`modal-tab${tab === id ? ' on' : ''}`} onClick={() => setTab(id)} role="tab" aria-selected={tab === id}>
                 {label}
@@ -35,12 +44,84 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         </div>
       }
     >
+      {tab === 'subscriptions' ? <Subscriptions /> : null}
       {tab === 'engines' ? <Engines /> : null}
       {tab === 'workers' ? <Workers /> : null}
       {tab === 'run' ? <RunPolicy /> : null}
+      {tab === 'tools' ? <McpTools /> : null}
       {tab === 'data' ? <DataTab /> : null}
     </Modal>
   )
+}
+
+function McpTools() {
+  const servers = useStore((s) => s.snapshot)!.settings.mcpServers ?? []
+  const [name, setName] = useState('')
+  const [command, setCommand] = useState('')
+  const [args, setArgs] = useState('')
+  const save = (next: typeof servers, done?: string) => guard(() => window.ventriee.saveSettings({ mcpServers: next }), done)
+  const nameOk = /^[A-Za-z0-9_-]{1,40}$/.test(name) && !servers.some((s) => s.name === name)
+  return <>
+    <p className="hint" style={{ marginBottom: 12 }}>
+      MCP servers give workers extra tools (a browser, a database, GitHub…). Enabled servers are passed to <b>Claude Code</b> workers on every run.
+      Codex and Gemini CLI read MCP servers from their own config files (<code>~/.codex/config.toml</code>, <code>~/.gemini/settings.json</code>), so add them there for those engines.
+      A server runs as a program on this computer with your permissions: add only ones you trust.
+    </p>
+    {!servers.length ? <p className="hint">No MCP servers yet.</p> : servers.map((s, i) => <div className="provider-line" key={s.name}>
+      <span className="prov-name">{s.name}</span>
+      <span className="prov-detail mono" title={`${s.command} ${s.args.join(' ')}`}>{s.command} {s.args.join(' ')}</span>
+      <Switch on={s.enabled} onClick={() => void save(servers.map((x, j) => (j === i ? { ...x, enabled: !x.enabled } : x)))} label={`Enable ${s.name}`} />
+      <button className="btn tiny" onClick={() => void save(servers.filter((_, j) => j !== i), `Removed ${s.name}`)} aria-label={`Remove ${s.name}`}><IconTrash /></button>
+    </div>)}
+    <form className="mcp-add" onSubmit={(e) => { e.preventDefault(); if (!nameOk || !command.trim()) return
+      void save([...servers, { name, command: command.trim(), args: args.trim() ? args.trim().split(/\s+/) : [], enabled: true }], `Added ${name}`).then(() => { setName(''); setCommand(''); setArgs('') }) }}>
+      <input className="input" aria-label="Server name" placeholder="name, e.g. filesystem" value={name} onChange={(e) => setName(e.target.value)} />
+      <input className="input mono" aria-label="Command" placeholder="command, e.g. npx" value={command} onChange={(e) => setCommand(e.target.value)} />
+      <input className="input mono" aria-label="Arguments" placeholder="arguments, e.g. -y @modelcontextprotocol/server-filesystem ." value={args} onChange={(e) => setArgs(e.target.value)} />
+      <button className="btn primary" disabled={!nameOk || !command.trim()}>Add server</button>
+    </form>
+    {name && !nameOk ? <p className="hint">Use letters, numbers, - or _ (up to 40), and a name not already used.</p> : null}
+  </>
+}
+
+function Subscriptions() {
+  const snapshot = useStore((s) => s.snapshot)!
+  const project = snapshot.projects.find((p) => p.id === snapshot.activeProjectId) ?? null
+  const [running, setRunning] = useState<{ engine: EngineKind; action: 'install' | 'login' } | null>(null)
+  const [checking, setChecking] = useState<EngineKind | null>(null)
+  const [checked, setChecked] = useState<Record<string, { ok: boolean; detail: string }>>({})
+  const sub = running ? SUBSCRIPTIONS.find((s) => s.engine === running.engine)! : null
+  return <>
+    <p className="hint" style={{ marginBottom: 12 }}>
+      Use a subscription you already pay for. Each one signs in through the vendor's own command-line tool, in a terminal below; Ventriee never sees your password.
+      After signing in, <b>Check</b> sends one tiny request to prove it works, and <b>Use everywhere</b> makes it the default for the planner and new workers.
+    </p>
+    {SUBSCRIPTIONS.map((s) => {
+      const provider = snapshot.providers.find((p) => p.engine === s.engine)
+      const result = checked[s.engine]
+      const isDefault = snapshot.settings.plannerEngine === s.engine && snapshot.settings.orchestratorEngine === s.engine
+      return <div key={s.engine} className="provider-line">
+        <span className="prov-name">{s.name}<small className="dim" style={{ display: 'block', fontSize: 10 }}>{s.plan}</small></span>
+        <span className={`badge ${provider?.available ? 'ok' : 'err'}`}>{provider?.available ? 'installed' : 'not installed'}</span>
+        <span className="prov-detail" title={result?.detail}>{result ? `${result.ok ? '✓ signed in and answering' : `✕ ${result.detail}`}` : isDefault ? 'Default for planner and new workers' : ''}</span>
+        {!provider?.available ? <button className="btn tiny" disabled={!project} onClick={() => setRunning({ engine: s.engine, action: 'install' })}>Install</button> : null}
+        <button className="btn tiny" disabled={!project || !provider?.available} onClick={() => setRunning({ engine: s.engine, action: 'login' })}>Sign in</button>
+        <button className="btn tiny" disabled={!provider?.available || checking === s.engine} onClick={async () => {
+          setChecking(s.engine)
+          const r = await guard(() => window.ventriee.testEngine(s.engine, '', ''))
+          setChecking(null)
+          if (r) setChecked((c) => ({ ...c, [s.engine]: r }))
+        }}>{checking === s.engine ? 'Checking…' : 'Check'}</button>
+        <button className="btn tiny primary" disabled={!provider?.available || isDefault} onClick={() => void guard(() => window.ventriee.saveSettings({ plannerEngine: s.engine, plannerModel: '', plannerEndpoint: '', orchestratorEngine: s.engine, orchestratorModel: '' }), `${s.name} is now the default`)}>Use everywhere</button>
+      </div>
+    })}
+    {!project ? <p className="hint">Open a project first: the sign-in terminal starts in its folder.</p> : null}
+    {running && sub && project ? <div className="subscription-terminal">
+      <p className="hint"><b>{running.action === 'install' ? `Installing ${sub.name} (needs Node.js)` : `Signing in to ${sub.name}`}.</b> {running.action === 'install' ? 'When it finishes, close this and press Sign in.' : sub.hint}
+        {' '}<button className="ghost-link" onClick={() => setRunning(null)}>Close terminal</button></p>
+      <TerminalView key={`${running.engine}-${running.action}`} projectId={project.id} slot={`connect-${running.engine}-${running.action}`} label={running.action === 'install' ? `Install ${sub.name}` : `${sub.name} sign-in`} command={running.action === 'install' ? sub.install : sub.login} closeOnUnmount />
+    </div> : null}
+  </>
 }
 
 function Engines() {
@@ -499,6 +580,20 @@ function RunPolicy() {
           <option value="balanced">Balanced</option>
           <option value="quality">Best quality</option>
         </select>
+      </div>
+
+      <div className="section-label" style={{ marginTop: 14 }}>Prompt optimizer</div>
+      <div className="kv-row">
+        <div className="kv-row-main">
+          <div className="kv-row-title">Model for Enhance</div>
+          <div className="kv-row-sub">
+            {settings.optimizerModel ? `Enhance runs on ${settings.optimizerModel}.` : 'Not set: Enhance uses the planner model.'} A local Ollama model makes it free and private; the User Manual explains setup.
+          </div>
+        </div>
+        <ModelPicker compact value={settings.optimizerModel ? { engine: settings.optimizerEngine, model: settings.optimizerModel, endpoint: settings.optimizerEndpoint, providerId: null } : null}
+          onPick={(option) => { const r = resolveModel(option, snapshot.providerConfigs); void update({ optimizerEngine: r.engine, optimizerModel: r.model, optimizerEndpoint: r.endpoint }) }}
+          onAddProvider={() => useStore.getState().notify('Add local models under Engines, or start Ollama and reopen Settings.', 'info')} />
+        {settings.optimizerModel ? <button className="btn tiny" onClick={() => void update({ optimizerModel: '' })}>Use planner</button> : null}
       </div>
 
       <div className="section-label" style={{ marginTop: 14 }}>Run</div>

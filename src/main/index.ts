@@ -20,6 +20,10 @@ import { detectProviders, testEngine, defaultEndpoint, runEngine } from './engin
 import { IPC } from '../shared/ipc'
 import { TerminalService } from './terminal'
 import { askCode } from './code-agent'
+import { CheckpointService } from './checkpoint'
+import { summarizeRuns } from './runs'
+import { validMcpServers, writeMcpConfig } from './mcp'
+import { applyTemplate, type TemplateId } from './templates'
 import type { CodeAskInput } from '../shared/workspace'
 import type {
   Agent,
@@ -52,6 +56,7 @@ let skills: SkillService
 let preview: PreviewService
 let orchestrator: Orchestrator
 let planning: PlanningService
+let checkpoints: CheckpointService
 let scheduler: NodeJS.Timeout | null = null
 let lastProviders: ProviderStatus[] = []
 /** Discovered model options. Refreshed on demand, never hardcoded. */
@@ -251,7 +256,22 @@ function registerIpc() {
   handle(IPC.filesList, (event, id: string, path = '') => files.list(projectRoot(event, id), path))
   handle(IPC.filesFind, (event, id: string, query: string) => files.find(projectRoot(event, id), query))
   handle(IPC.filesSearch, (event, id: string, query: string, caseSensitive: boolean) => files.search(projectRoot(event, id), query, caseSensitive === true))
-  handle(IPC.codeAsk, (event, id: string, input: CodeAskInput) => { projectRoot(event, id); return askCode(store.project(id)!, input, store.settings(), creds) })
+  handle(IPC.runsList, async (event, id: string) => {
+    const root = projectRoot(event, id)
+    const runs = summarizeRuns(store.jobs(id), store.sessions(id, 5000), store.agents(id))
+    for (const run of runs) run.checkpoint = await checkpoints.has(id, root, run.jobId).catch(() => false)
+    return runs
+  })
+  handle(IPC.runChanges, (event, id: string, jobId: string) => checkpoints.changes(id, projectRoot(event, id), jobId))
+  handle(IPC.runUndo, async (event, id: string, jobId: string) => {
+    const root = projectRoot(event, id)
+    if (store.runningJob(id)) throw new Error('Stop the active run before undoing one')
+    const changes = await checkpoints.restore(id, root, jobId)
+    store.addEvent({ projectId: id, agentId: null, taskId: null, type: 'checkpoint', message: `Owner undid a run: ${changes.length} file(s) restored to the pre-run checkpoint` })
+    debouncedNotify()
+    return changes.length
+  })
+  handle(IPC.codeAsk,(event, id: string, input: CodeAskInput) => { projectRoot(event, id); return askCode(store.project(id)!, input, store.settings(), creds) })
   handle(IPC.filesRead, (event, id: string, path: string) => files.read(projectRoot(event, id), path))
   handle(IPC.filesSave, (event, id: string, file: TextFile) => files.save(projectRoot(event, id), file))
   handle(IPC.filesCreate, (event, id: string, path: string, directory: boolean) => files.create(projectRoot(event, id), path, directory === true))
@@ -304,11 +324,13 @@ function registerIpc() {
     return result
   })
 
-  handle(IPC.createProject, async (event, input: { name: string; path: string; description: string }) => {
+  handle(IPC.createProject, async (event, input: { name: string; path: string; description: string; template?: TemplateId }) => {
     const path = input.path.trim()
     if (!path) throw new Error('A project workspace path is required')
     if (!existsSync(path)) mkdirSync(path, { recursive: true })
-    const project = store.createProject({ name: input.name.trim() || 'Untitled project', path, description: input.description ?? '' })
+    const brief = applyTemplate(path, input.template ?? 'empty')
+    const description = [input.description?.trim(), brief].filter(Boolean).join('\n\n')
+    const project = store.createProject({ name: input.name.trim() || 'Untitled project', path, description })
     store.setActiveProject(project.id)
     // The window that created it switches to it; other windows keep theirs.
     const entry = windows.get(event.sender.id)
@@ -596,6 +618,7 @@ function registerIpc() {
   })
 
   handle(IPC.saveSettings, async (_e, patch: Partial<AppSettings>) => {
+    if (patch && 'mcpServers' in patch) patch = { ...patch, mcpServers: validMcpServers(patch.mcpServers) }
     const next = store.saveSettings(patch)
     debouncedNotify()
     return next
@@ -666,6 +689,15 @@ function registerIpc() {
   })
 
   // ---------------------------------------------------------------- planning
+  handle(IPC.chatSessionNew, (_e, projectId: string) => {
+    if (!store.project(projectId)) throw new Error('Project not found')
+    store.createConversation(projectId)
+    debouncedNotify()
+  })
+  handle(IPC.chatSessionSelect, (_e, projectId: string, conversationId: string) => {
+    store.setActiveConversation(projectId, conversationId)
+    debouncedNotify()
+  })
   handle(IPC.chatSend, async (_e, input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string }) => {
     const project = store.project(input.projectId)
     if (!project) throw new Error('Project not found')
@@ -685,7 +717,9 @@ function registerIpc() {
   handle(IPC.promptEnhance, async (_e, input: { projectId: string; promptId: string; engine: EngineKind; model: string; endpoint: string }) => {
     const project = store.project(input.projectId)
     if (!project) throw new Error('Project not found')
-    const doc = await planning.enhancePrompt(project, input.promptId, input)
+    const s = store.settings()
+    const optimizer = s.optimizerModel ? { engine: s.optimizerEngine, model: s.optimizerModel, endpoint: s.optimizerEndpoint } : input
+    const doc = await planning.enhancePrompt(project, input.promptId, optimizer)
     debouncedNotify()
     return doc
   })
@@ -709,13 +743,13 @@ function registerIpc() {
    * Advisor side-chat: answers on the planner engine, with a summary of the
    * current project so it can give concrete improvement advice.
    */
-  handle(IPC.chatAdvisor, async (_e, input: { projectId: string; text: string }) => {
+  handle(IPC.chatAdvisor, async (_e, input: { projectId: string; text: string; history?: Array<{ role: 'user' | 'assistant'; text: string }> }) => {
     const project = store.project(input.projectId)
     if (!project) throw new Error('Project not found')
     const tasks = store.tasks(project.id).slice(-12).map((t) => `- [${t.status}] ${t.title} (${t.role}${t.attempts ? `, attempt ${t.attempts}` : ''})`)
     const latestPrompt = store.prompts(project.id).at(-1)
     const job = store.runningJob(project.id)
-    const system = `You are the advisor inside Ventriee Studios, a local multi-agent AI studio. The owner is building "${project.name}" (${project.description || 'no description'}). Be concrete and practical. Give short, actionable advice: how to improve the prompt, split tasks, choose models, or interpret failures. Do not invent credentials or claim things ran that did not.
+    const system = `You are the side chat inside Ventriee Studios, a local multi-agent AI studio. The owner can talk to you about anything: what to build or do next, ideas, how something works, or general questions. You also know the state of their current project "${project.name}" (${project.description || 'no description'}) and can advise on prompts, splitting tasks, choosing models or reading failures. Be concrete and brief. You cannot start work or change files; say so if asked. Do not invent credentials or claim things ran that did not.
 
 Current project state:
 - Active run: ${job ? 'running' : 'none'}
@@ -730,7 +764,7 @@ Answer the owner's question directly.`
         model: settings.plannerModel,
         endpoint: settings.plannerEndpoint,
         system,
-        prompt: input.text,
+        prompt: [...(Array.isArray(input.history) ? input.history.slice(-12) : []).map((m) => `${m.role === 'user' ? 'Owner' : 'You'}: ${String(m.text).slice(0, 4000)}`), `Owner: ${input.text}`].join('\n\n') + '\n\nReply to the Owner\'s last message.',
         cwd: project.path,
         maxTokens: 8000,
         timeoutMs: 120_000,
@@ -873,6 +907,7 @@ function bootstrapData() {
   creds = new Credentials(store.db)
   memory = new MemoryService(store, userData)
   skills = new SkillService(store, userData)
+  checkpoints = new CheckpointService(userData)
   preview = new PreviewService(debouncedNotify, (projectId) => store.db.kvGet(`preview:autoapproved:${projectId}`) === '1')
   planning = new PlanningService(
     store,
@@ -903,7 +938,9 @@ function bootstrapData() {
     notify: debouncedNotify,
     isProjectOpen: () => true,
     models: () => lastModels,
-    providerConfigs: () => store.providers()
+    providerConfigs: () => store.providers(),
+    checkpoints,
+    mcpConfig: () => writeMcpConfig(userData, store.settings().mcpServers)
   })
 
   // Mark anything that was mid-flight at shutdown, so the UI never shows a stale spinner.

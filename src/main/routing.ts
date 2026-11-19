@@ -1,4 +1,4 @@
-import type { CostPreference, ModelOption } from '../shared/types'
+import type { CostPreference, Difficulty, ModelOption } from '../shared/types'
 
 /**
  * Deterministic model routing. It only ever chooses from models the app has
@@ -31,20 +31,24 @@ export interface RouteInput {
   costPreference: CostPreference
   /** Models already in use by the rest of the team, to spread load. */
   inUse?: string[]
+  /** The task's difficulty, when known; it outranks the role's default shape. */
+  difficulty?: Difficulty | null
 }
 
 export function routeModel(input: RouteInput): RouteChoice | null {
   const candidates = input.models.filter((m) => m.configured && m.model.trim())
   if (!candidates.length) return null
 
-  const wantsStrength = DEEP_ROLES.has(input.role)
-  const wantsSpeed = FAST_ROLES.has(input.role)
+  const wantsStrength = input.difficulty === 'high' || (!input.difficulty && DEEP_ROLES.has(input.role))
+  const wantsSpeed = input.difficulty === 'low' || (!input.difficulty && FAST_ROLES.has(input.role))
 
   const score = (option: ModelOption): number => {
     let value = 0
     const name = option.model
-    if (STRONG.test(name)) value += wantsStrength ? 6 : 2
+    if (STRONG.test(name)) value += wantsStrength ? 6 : wantsSpeed && input.difficulty === 'low' ? -3 : 2
     if (FAST.test(name)) value += wantsSpeed ? 5 : 1
+    // An easy task should not spend a premium model when a free one exists.
+    if (input.difficulty === 'low' && option.free === true) value += 3
     if (option.free === true) value += input.costPreference === 'cheap' ? 6 : 1
     if (option.free === false) value += input.costPreference === 'quality' ? 3 : 0
     if (input.costPreference === 'cheap' && CHEAP_FREE.test(name)) value += 3
@@ -57,7 +61,7 @@ export function routeModel(input: RouteInput): RouteChoice | null {
   const best = ranked[0]!
   const runnerUp = ranked[1]
   const margin = score(best) - (runnerUp ? score(runnerUp) : 0)
-  const shape = wantsStrength ? 'reasoning-heavy' : wantsSpeed ? 'high-volume' : 'balanced'
+  const shape = input.difficulty ? `${input.difficulty}-difficulty task` : wantsStrength ? 'reasoning-heavy' : wantsSpeed ? 'high-volume' : 'balanced'
   const cost = input.costPreference === 'cheap' ? 'cost-first' : input.costPreference === 'quality' ? 'quality-first' : 'balanced cost'
   return {
     option: best,

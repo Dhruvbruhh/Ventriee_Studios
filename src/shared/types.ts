@@ -68,6 +68,29 @@ export type RoutingMode = 'manual' | 'automatic' | 'hybrid'
 
 export type CostPreference = 'cheap' | 'balanced' | 'quality'
 
+export type Difficulty = 'low' | 'medium' | 'high'
+
+export interface McpServer { name: string; command: string; args: string[]; enabled: boolean }
+
+export interface UsageRow { name: string; sessions: number; inputTokens: number; outputTokens: number; costUsd: number; seconds: number }
+export interface RunSummary {
+  jobId: string
+  instruction: string
+  status: string
+  startedAt: number
+  endedAt: number | null
+  sessions: number
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+  /** False when no engine in the run reported a price; the cost is then unknown, not zero. */
+  costReported: boolean
+  byModel: UsageRow[]
+  byAgent: UsageRow[]
+  /** A pre-run snapshot exists, so the run can be undone. */
+  checkpoint: boolean
+}
+
 /** A planning conversation message. Separate from worker mail. */
 export interface ChatMessage {
   id: string
@@ -84,6 +107,8 @@ export interface ChatMessage {
 export interface Conversation {
   id: string
   projectId: string
+  /** Empty shows as "Session N" by creation order. */
+  title: string
   createdAt: number
   updatedAt: number
 }
@@ -227,6 +252,8 @@ export interface Task {
   routedBy: RoutingMode | null
   /** Project-relative files the task's evidence check saw change or disappear. */
   changedFiles?: Array<{ path: string; removed: boolean }>
+  /** Planner's estimate; null when the plan did not say. */
+  difficulty?: Difficulty | null
   createdAt: number
   updatedAt: number
 }
@@ -350,6 +377,14 @@ export interface AppSettings {
   plannerEngine: EngineKind
   plannerModel: string
   plannerEndpoint: string
+  /** sequential: one task at a time; hybrid: parallel where safe, chained where dependent; parallel: everything starts at once. */
+  runMode: 'sequential' | 'hybrid' | 'parallel'
+  /** MCP servers offered to Claude Code workers (passed with --mcp-config). */
+  mcpServers: McpServer[]
+  /** Model that runs Enhance (often a local Ollama model). Empty model means "use the planner". */
+  optimizerEngine: EngineKind
+  optimizerModel: string
+  optimizerEndpoint: string
   /** Set true once the first-run engine onboarding has been dismissed. */
   onboardingSeen?: boolean
 }
@@ -412,6 +447,7 @@ export interface Snapshot {
   running: boolean
   /** Planning state for the active project. */
   conversation: Conversation | null
+  conversations: Conversation[]
   chat: ChatMessage[]
   prompts: PromptDoc[]
   providerConfigs: ProviderConfig[]

@@ -20,12 +20,13 @@ import type {
   SkillScanReport,
   Snapshot,
   StartRunInput,
+  RunSummary,
   Task
 } from './types'
 import type { FileEntry, TextFile, GitState, GitAction, SearchResult, CodeAskInput, CodeAskResult } from './workspace'
 
 export const IPC = {
-  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesFind: 'files:find', filesSearch: 'files:search', codeAsk: 'code:ask',
+  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesFind: 'files:find', filesSearch: 'files:search', codeAsk: 'code:ask', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo',
   gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action',
   termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
   authStatus: 'auth:status',
@@ -80,7 +81,7 @@ export const IPC = {
   openPath: 'shell:openPath',
   openExternal: 'shell:openExternal',
   revealFile: 'shell:reveal',
-  chatSend: 'chat:send',
+  chatSend: 'chat:send', chatSessionNew: 'chat:session-new', chatSessionSelect: 'chat:session-select',
   promptCreate: 'prompt:create',
   promptEnhance: 'prompt:enhance',
   promptSave: 'prompt:save',
@@ -111,6 +112,9 @@ export interface VentrieeApi {
   filesFind(projectId: string, query: string): Promise<FileEntry[]>
   filesSearch(projectId: string, query: string, caseSensitive: boolean): Promise<SearchResult>
   codeAsk(projectId: string, input: CodeAskInput): Promise<CodeAskResult>
+  runsList(projectId: string): Promise<RunSummary[]>
+  runChanges(projectId: string, jobId: string): Promise<Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>>
+  runUndo(projectId: string, jobId: string): Promise<number>
   filesRead(projectId: string, path: string): Promise<TextFile>
   filesSave(projectId: string, file: TextFile): Promise<TextFile>
   filesCreate(projectId: string, path: string, directory: boolean): Promise<void>
@@ -131,7 +135,7 @@ export interface VentrieeApi {
   onPatch(cb: (patch: Snapshot) => void): () => void
   onOutput(cb: (payload: { sessionId: string; agentId: string; taskId: string | null; chunk: string }) => void): () => void
   testEngine(engine: EngineKind, model: string, endpoint: string): Promise<{ ok: boolean; detail: string }>
-  createProject(input: { name: string; path: string; description: string }): Promise<Project>
+  createProject(input: { name: string; path: string; description: string; template?: 'empty' | 'static' | 'react-vite' | 'express-api' | 'fastapi' }): Promise<Project>
   pickFolder(): Promise<string | null>
   selectProject(id: string): Promise<void>
   openProjectWindow(projectId: string): Promise<void>
@@ -183,13 +187,15 @@ export interface VentrieeApi {
   openExternal(url: string): Promise<void>
   revealFile(path: string): Promise<void>
   chatSend(input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string }): Promise<ChatMessage>
+  chatSessionNew(projectId: string): Promise<void>
+  chatSessionSelect(projectId: string, conversationId: string): Promise<void>
   onChatChunk(cb: (payload: { projectId: string; messageId: string; chunk: string }) => void): () => void
   promptCreate(input: { projectId: string; engine: EngineKind; model: string; endpoint: string }): Promise<PromptDoc>
   promptEnhance(input: { projectId: string; promptId: string; engine: EngineKind; model: string; endpoint: string }): Promise<PromptDoc>
   promptSave(input: { projectId: string; promptId: string; body: string; source: 'edited' | 'restored' }): Promise<PromptDoc>
   assignPrompt(input: AssignPromptInput): Promise<{ jobId: string; taskCount: number }>
   /** Advisor side-chat: talk with a model that sees the current project state. */
-  chatAdvisor(input: { projectId: string; text: string }): Promise<{ reply: string; model: string }>
+  chatAdvisor(input: { projectId: string; text: string; history?: Array<{ role: 'user' | 'assistant'; text: string }> }): Promise<{ reply: string; model: string }>
   modelsDiscover(projectId: string | null): Promise<ModelOption[]>
   saveModelPrefs(patch: Partial<ModelPrefs>): Promise<ModelPrefs>
   addProvider(input: {

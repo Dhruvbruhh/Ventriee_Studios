@@ -29,7 +29,8 @@ function closeOtherProjects(projectId: string) {
   for (const [key, slot] of slots) if (slot.projectId !== projectId) { if (slot.id) void window.ventriee.termClose(slot.id).catch(() => {}); slots.delete(key) }
 }
 
-export function TerminalView({ projectId, slot: name, label }: { projectId: string; slot: string; label: string }) {
+/** `closeOnUnmount` is for one-off terminals (sign-in, install): their shell ends with the view instead of living on. */
+export function TerminalView({ projectId, slot: name, label, command, closeOnUnmount }: { projectId: string; slot: string; label: string; command?: string; closeOnUnmount?: boolean }) {
   const host = useRef<HTMLDivElement>(null)
   const [error, setError] = useState('')
   const [exited, setExited] = useState(false)
@@ -54,15 +55,25 @@ export function TerminalView({ projectId, slot: name, label }: { projectId: stri
     const start = async () => {
       if (slot.id) { void window.ventriee.termResize(slot.id, term.cols, term.rows).catch(() => {}); return }
       slot.exited = null; setExited(false)
-      try { slot.id = await window.ventriee.termOpen(projectId, term.cols, term.rows); if (alive) setError('') }
+      try {
+        const id = await window.ventriee.termOpen(projectId, term.cols, term.rows)
+        if (!alive && closeOnUnmount) { void window.ventriee.termClose(id).catch(() => {}); return }
+        slot.id = id
+        if (alive) setError('')
+        // Give the shell a moment to print its prompt before typing the owner-chosen command.
+        if (command) setTimeout(() => { if (slot.id === id) void window.ventriee.termWrite(id, `${command}\r`).catch(() => {}) }, 900)
+      }
       catch (reason) { if (alive) setError(String(reason).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '')) }
     }
     void start()
     const input = term.onData((data) => { if (slot.id) void window.ventriee.termWrite(slot.id, data).catch(() => {}) })
     const observer = new ResizeObserver(() => { fitNow(); if (slot.id) void window.ventriee.termResize(slot.id, term.cols, term.rows).catch(() => {}) })
     observer.observe(host.current!)
-    return () => { alive = false; observer.disconnect(); input.dispose(); slot.listeners.delete(listener); term.dispose() }
-  }, [projectId, name, generation])
+    return () => {
+      alive = false; observer.disconnect(); input.dispose(); slot.listeners.delete(listener); term.dispose()
+      if (closeOnUnmount) { if (slot.id) void window.ventriee.termClose(slot.id).catch(() => {}); slots.delete(key) }
+    }
+  }, [projectId, name, generation, command, closeOnUnmount])
   const restart = () => {
     const slot = slots.get(`${projectId}:${name}`)
     if (slot) { if (slot.id) void window.ventriee.termClose(slot.id).catch(() => {}); slot.id = null; slot.buffer = '' }

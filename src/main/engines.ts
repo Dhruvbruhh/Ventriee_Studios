@@ -18,6 +18,8 @@ export interface EngineRunInput {
   stallMs?: number
   signal?: AbortSignal
   onChunk?: (chunk: string) => void
+  /** Path to an MCP servers JSON file; only Claude Code accepts one per run. */
+  mcpConfig?: string
 }
 
 export interface EngineRunOutput {
@@ -136,7 +138,7 @@ export function modelFor(engine: EngineKind, model: string) {
  * cmd.exe parses it on Windows (the npm .cmd shims), and a stray quote in the brief
  * leaves the session waiting on stdin forever.
  */
-function buildCliInvocation(input: EngineRunInput): { bin: string; args: string[]; stdin?: string } {
+export function buildCliInvocation(input: EngineRunInput): { bin: string; args: string[]; stdin?: string } {
   const model = input.model.trim()
   switch (input.engine) {
     case 'cli-opencode': {
@@ -147,6 +149,7 @@ function buildCliInvocation(input: EngineRunInput): { bin: string; args: string[
     case 'cli-claude': {
       const args = ['-p', '--output-format', 'json']
       if (model) args.push('--model', model)
+      if (input.mcpConfig) args.push('--mcp-config', input.mcpConfig)
       return { bin: 'claude', args, stdin: input.prompt }
     }
     case 'cli-codex': {

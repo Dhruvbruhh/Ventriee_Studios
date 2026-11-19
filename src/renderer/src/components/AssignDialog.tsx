@@ -102,6 +102,15 @@ export function AssignDialog({
           </button>
         </div>
 
+        {mode === 'orchestrator' ? <div className="run-modes" role="radiogroup" aria-label="How tasks run">
+          <span className="section-label" style={{ margin: 0 }}>How tasks run</span>
+          {([['sequential', 'One at a time', 'Plan order, one worker at a time. Slowest, easiest to follow.'],
+            ['hybrid', 'Hybrid', 'Parallel where tasks are independent, chained where one needs another. Recommended.'],
+            ['parallel', 'All at once', 'Every task starts together and teammates coordinate by message. Fastest; later tasks may start before what they need exists.']] as const)
+            .map(([value, title, sub]) => <button key={value} role="radio" aria-checked={snapshot.settings.runMode === value} className={`run-mode${snapshot.settings.runMode === value ? ' on' : ''}`}
+              onClick={() => void guard(() => window.ventriee.saveSettings({ runMode: value }))} title={sub}><b>{title}</b><span>{sub}</span></button>)}
+        </div> : null}
+
         <div className="assign-head">
           <span className="section-label" style={{ margin: 0 }}>Team</span>
           <div className="flex gap-4">

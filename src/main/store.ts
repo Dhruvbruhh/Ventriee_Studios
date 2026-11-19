@@ -43,6 +43,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   plannerEngine: 'cli-opencode',
   plannerModel: '',
   plannerEndpoint: '',
+  runMode: 'hybrid',
+  mcpServers: [],
+  optimizerEngine: 'api-ollama',
+  optimizerModel: '',
+  optimizerEndpoint: '',
   onboardingSeen: false
 }
 
@@ -183,7 +188,8 @@ export class Store {
       model: (r.model as Task['model']) ?? null,
       endpoint: (r.endpoint as Task['endpoint']) ?? null,
       routedBy: (r.routedBy as Task['routedBy']) ?? null,
-      changedFiles: safeJson<NonNullable<Task['changedFiles']>>(r.changedFiles as string, [])
+      changedFiles: safeJson<NonNullable<Task['changedFiles']>>(r.changedFiles as string, []),
+      difficulty: (r.difficulty as Task['difficulty']) ?? null
     }))
   }
 
@@ -194,11 +200,11 @@ export class Store {
   insertTask(t: Task) {
     this.db.run(
       `INSERT INTO tasks(id,projectId,parentId,title,description,acceptance,role,agentId,status,
-        dependsOn,output,review,attempts,phase,engine,model,endpoint,routedBy,createdAt,updatedAt)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        dependsOn,output,review,attempts,phase,engine,model,endpoint,routedBy,difficulty,createdAt,updatedAt)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       t.id, t.projectId, t.parentId, t.title, t.description, t.acceptance, t.role, t.agentId, t.status,
       JSON.stringify(t.dependsOn), t.output, t.review, t.attempts, t.phase,
-      t.engine ?? null, t.model ?? null, t.endpoint ?? null, t.routedBy ?? null,
+      t.engine ?? null, t.model ?? null, t.endpoint ?? null, t.routedBy ?? null, t.difficulty ?? null,
       t.createdAt, t.updatedAt
     )
   }
@@ -458,31 +464,44 @@ export class Store {
   }
 
   // ---------- planning: conversations ----------
+  /** Sessions in creation order, so "Session N" stays stable. */
+  conversations(projectId: string): Conversation[] {
+    return this.db.all<Conversation>('SELECT * FROM conversations WHERE projectId = ? ORDER BY createdAt ASC, rowid ASC', projectId)
+  }
+
+  /** The project's active planning session, creating the first one on demand. */
   conversation(projectId: string): Conversation {
-    const existing = this.db.get<Conversation>(
-      'SELECT * FROM conversations WHERE projectId = ? ORDER BY createdAt ASC LIMIT 1',
-      projectId
-    )
-    if (existing) return existing
+    const all = this.conversations(projectId)
+    const activeId = this.db.kvGet(`activeConversation:${projectId}`)
+    return all.find((c) => c.id === activeId) ?? all[0] ?? this.createConversation(projectId)
+  }
+
+  createConversation(projectId: string): Conversation {
     const now = Date.now()
-    const row: Conversation = { id: newId('cnv'), projectId, createdAt: now, updatedAt: now }
+    const row: Conversation = { id: newId('cnv'), projectId, title: '', createdAt: now, updatedAt: now }
     this.db.run(
-      'INSERT INTO conversations(id,projectId,createdAt,updatedAt) VALUES(?,?,?,?)',
-      row.id, row.projectId, row.createdAt, row.updatedAt
+      'INSERT INTO conversations(id,projectId,title,createdAt,updatedAt) VALUES(?,?,?,?,?)',
+      row.id, row.projectId, row.title, row.createdAt, row.updatedAt
     )
+    this.db.kvSet(`activeConversation:${projectId}`, row.id)
     return row
+  }
+
+  setActiveConversation(projectId: string, id: string) {
+    if (!this.conversations(projectId).some((c) => c.id === id)) throw new Error('Session not found in this project')
+    this.db.kvSet(`activeConversation:${projectId}`, id)
   }
 
   touchConversation(id: string) {
     this.db.run('UPDATE conversations SET updatedAt = ? WHERE id = ?', Date.now(), id)
   }
 
-  chatMessages(projectId: string, limit = 400): ChatMessage[] {
-    const rows = this.db.all<ChatMessage>(
-      'SELECT * FROM chat_messages WHERE projectId = ? ORDER BY createdAt ASC LIMIT ?',
-      projectId, limit
+  /** Messages of one session (the active one when not given), oldest first, newest `limit` kept. */
+  chatMessages(projectId: string, limit = 400, conversationId = this.conversation(projectId).id): ChatMessage[] {
+    return this.db.all<ChatMessage>(
+      'SELECT * FROM (SELECT * FROM chat_messages WHERE projectId = ? AND conversationId = ? ORDER BY createdAt DESC LIMIT ?) ORDER BY createdAt ASC',
+      projectId, conversationId, limit
     )
-    return rows
   }
 
   addChatMessage(input: Omit<ChatMessage, 'id' | 'createdAt'> & { createdAt?: number }): ChatMessage {
@@ -654,6 +673,7 @@ export class Store {
       },
       running: Boolean(projectId && this.runningJob(projectId)),
       conversation: projectId ? this.conversation(projectId) : null,
+      conversations: projectId ? this.conversations(projectId) : [],
       chat: projectId ? this.chatMessages(projectId) : [],
       prompts: projectId ? this.prompts(projectId) : [],
       providerConfigs: this.providers(),

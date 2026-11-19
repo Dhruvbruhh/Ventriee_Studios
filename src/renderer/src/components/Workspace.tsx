@@ -113,6 +113,12 @@ export function Workspace() {
             useStore.getState().setRailTab('plan')
           }}
         />
+        <div className="session-tabs" role="tablist" aria-label="Planning sessions">
+          {snapshot.conversations.map((c, i) => <button key={c.id} role="tab" aria-selected={c.id === snapshot.conversation?.id} className={c.id === snapshot.conversation?.id ? 'on' : ''} disabled={sending}
+            onClick={() => void guard(() => window.ventriee.chatSessionSelect(project.id, c.id))}>{c.title || `Session ${i + 1}`}</button>)}
+          <button className="session-new" disabled={sending} onClick={() => void guard(() => window.ventriee.chatSessionNew(project.id))} title="Start another planning session for this project">+ New session</button>
+          {snapshot.conversations.length > 1 ? <span className="session-hint">Type @Session 2 to bring another session into this one</span> : null}
+        </div>
         <ChatThread chat={chat} stream={chatStream} />
         <ChatComposer
           sending={sending}

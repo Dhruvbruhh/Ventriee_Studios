@@ -169,6 +169,7 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
   const [path, setPath] = useState('')
   const [description, setDescription] = useState('')
+  const [template, setTemplate] = useState<'empty' | 'static' | 'react-vite' | 'express-api' | 'fastapi'>('empty')
   const [busy, setBusy] = useState(false)
 
   const submit = async () => {
@@ -176,7 +177,7 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
     if (useStore.getState().editorDirty && !window.confirm('Discard unsaved code edits and create a project?')) return
     setBusy(true)
     const project = await guard(
-      () => window.ventriee.createProject({ name, path, description }),
+      () => window.ventriee.createProject({ name, path, description, template }),
       'Project created'
     )
     setBusy(false)
@@ -198,6 +199,17 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
       <div className="field">
         <label className="field-label" htmlFor="proj-name">Project name</label>
         <input id="proj-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Client site refresh" autoFocus />
+      </div>
+      <div className="field">
+        <label className="field-label" htmlFor="proj-template">Start from</label>
+        <select id="proj-template" className="select" value={template} onChange={(e) => setTemplate(e.target.value as typeof template)}>
+          <option value="empty">Empty folder (or an existing project)</option>
+          <option value="static">Static website (HTML, CSS, JS)</option>
+          <option value="react-vite">React + Vite app</option>
+          <option value="express-api">Node API (Express)</option>
+          <option value="fastapi">Python API (FastAPI)</option>
+        </select>
+        {template !== 'empty' ? <p className="hint">Starter files are written only into an empty folder. Dependencies install when you start the preview or run the install in a terminal.</p> : null}
       </div>
       <div className="field">
         <label className="field-label" htmlFor="proj-path">Workspace folder</label>
