@@ -13,3 +13,12 @@ describe('code agent reply parsing', () => {
     expect(replacementFrom('Delete it.\n```\n```')).toBe('')
   })
 })
+
+describe('inline completion cleanup', () => {
+  it('drops fences, the echoed current line and anything past 40 lines', async () => {
+    const { cleanCompletion } = await import('../src/main/code-agent')
+    expect(cleanCompletion('```ts\n  return a + b\n```', 'function add(a, b) {\n')).toBe('  return a + b')
+    expect(cleanCompletion('const total = items.length', 'const total = ')).toBe('items.length')
+    expect(cleanCompletion(Array.from({ length: 60 }, (_, i) => `l${i}`).join('\n'), '').split('\n')).toHaveLength(40)
+  })
+})

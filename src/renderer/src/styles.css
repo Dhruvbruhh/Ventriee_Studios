@@ -1384,3 +1384,40 @@
   /* With the sidebar open the office floor needs the width more than the terminals do. */
   .shell:not(.no-sidebar) .main.with-terminals { grid-template-columns: 300px minmax(0, 1fr) 320px; }
 }
+
+@layer components {
+  .file-tree-item { position: relative; display: flex; align-items: center; }
+  .file-tree-item > .file-tree-row { flex: 1; min-width: 0; }
+  /* Row actions appear on hover or when the row is focused by keyboard. */
+  .file-tree-actions { position: absolute; right: 6px; display: none; gap: 2px; }
+  .file-tree-item:hover .file-tree-actions, .file-tree-item:focus-within .file-tree-actions { display: flex; }
+}
+
+@layer components {
+  .change-row { display: flex; align-items: center; gap: 6px; }
+  .change-path { flex: 1; min-width: 0; text-align: left; font: 11.5px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .change-path:hover { text-decoration: underline; }
+}
+
+@layer components {
+  /* Gutter marks against the last commit, like VS Code's. */
+  .gutter-added, .gutter-modified { border-left: 3px solid var(--ok); margin-left: 3px; }
+  .gutter-modified { border-left-color: var(--info); }
+  .gutter-deleted { border-left: 3px solid var(--err); margin-left: 3px; height: 4px !important; }
+  .editor-conflict.merge { border-color: var(--warn); }
+  .status-blame { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
+}
+
+@layer components {
+  .bp-dot { background: var(--err); border-radius: 99px; width: 9px !important; height: 9px !important; margin: 5px 0 0 5px; }
+  .debug-arrow { border-left: 7px solid var(--warn); border-top: 5px solid transparent; border-bottom: 5px solid transparent; margin: 4px 0 0 6px; height: 0 !important; width: 0 !important; }
+  .debug-current-line { background: color-mix(in srgb, var(--warn) 16%, transparent); }
+  .code-debug { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; }
+  .debug-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--line-soft); }
+  .debug-columns { display: grid; grid-template-columns: 1fr 1fr 1.2fr; min-height: 0; }
+  .debug-columns > section { min-height: 0; overflow: auto; padding: 6px 10px; border-right: 1px solid var(--line-soft); font-size: 12px; }
+  .debug-columns h4 { margin: 0 0 4px; font-size: 11px; color: var(--muted); font-weight: 600; }
+  .debug-columns section > button { display: block; width: 100%; text-align: left; padding: 2px 0; font: 12px var(--mono); }
+  .debug-var { display: flex; gap: 8px; font: 12px var(--mono); padding: 1px 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .debug-output { margin: 0; font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+}

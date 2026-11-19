@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { existsSync, mkdirSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
 import { StudioAuth } from './auth'
-import { FileService } from './files'
+import { FileService, workspacePath } from './files'
 import { GitService } from './git'
 import type { TextFile, GitAction } from '../shared/workspace'
 import { registerRendererProtocol } from './renderer-protocol'
@@ -19,13 +19,16 @@ import { isInside } from './paths'
 import { detectProviders, testEngine, defaultEndpoint, runEngine } from './engines'
 import { IPC } from '../shared/ipc'
 import { TerminalService } from './terminal'
-import { askCode } from './code-agent'
+import { DebugSession } from './debugger'
+import { askCode, changeFiles, completeCode } from './code-agent'
+import { projectTypes } from './typeindex'
+import { eslintFile, prettierFormat } from './projecttools'
 import { CheckpointService } from './checkpoint'
 import { summarizeRuns } from './runs'
 import { validMcpServers, writeMcpConfig } from './mcp'
 import { applyTemplate, type TemplateId } from './templates'
 import { Updater } from './updater'
-import type { CodeAskInput } from '../shared/workspace'
+import type { CodeAskInput, CodeChangeInput, CodeCompleteInput } from '../shared/workspace'
 import type {
   Agent,
   AppSettings,
@@ -48,6 +51,9 @@ const bus = new EventEmitter()
 /** One entry per open window. The project id lives here, not in global kv. */
 const windows = new Map<number, { win: BrowserWindow; projectId: string | null }>()
 const terminals = new TerminalService()
+/** One debug session per window. */
+const debugSessions = new Map<number, DebugSession>()
+const stopDebug = (owner: number) => { debugSessions.get(owner)?.stop(); debugSessions.delete(owner) }
 let tray: Tray | null = null
 let quitting = false
 let store: Store
@@ -218,6 +224,7 @@ function createWindow(projectId?: string) {
   windows.set(windowId, { win, projectId: initial })
   win.on('closed', () => {
     terminals.closeOwner(windowId)
+    stopDebug(windowId)
     auth.clear(windowId)
     windows.delete(windowId)
     refreshTray()
@@ -234,7 +241,7 @@ function createWindow(projectId?: string) {
   // Project previews must never navigate the privileged studio document.
   // A reload starts a new renderer that cannot reach the old shells; end them so they don't pile up to the limit.
   win.webContents.on('did-start-navigation', (details) => {
-    if (details.isMainFrame && !details.isSameDocument) terminals.closeOwner(windowId)
+    if (details.isMainFrame && !details.isSameDocument) { terminals.closeOwner(windowId); stopDebug(windowId) }
   })
   win.webContents.on('will-navigate', (event, url) => {
     if (originOf(url) !== rendererOrigin) event.preventDefault()
@@ -266,6 +273,9 @@ function registerIpc() {
   }
   handle(IPC.filesList, (event, id: string, path = '') => files.list(projectRoot(event, id), path))
   handle(IPC.filesFind, (event, id: string, query: string) => files.find(projectRoot(event, id), query))
+  handle(IPC.toolsFormat, (event, id: string, path: string, text: string) => prettierFormat(projectRoot(event, id), path, String(text)))
+  handle(IPC.toolsLint, (event, id: string, path: string, text: string) => eslintFile(projectRoot(event, id), path, String(text)))
+  handle(IPC.projectTypes, (event, id: string) => projectTypes(projectRoot(event, id), files))
   handle(IPC.filesSearch, (event, id: string, query: string, caseSensitive: boolean) => files.search(projectRoot(event, id), query, caseSensitive === true))
   handle(IPC.updateState, () => updater.state)
   handle(IPC.updateCheck, () => updater.check())
@@ -285,12 +295,19 @@ function registerIpc() {
     debouncedNotify()
     return changes.length
   })
+  handle(IPC.codeComplete, (event, id: string, input: CodeCompleteInput) => { projectRoot(event, id); return completeCode(event.sender.id, input, store.settings(), creds) })
+  handle(IPC.codeChange, (event, id: string, input: CodeChangeInput) => { projectRoot(event, id); return changeFiles(store.project(id)!, input, store.settings(), creds, files) })
   handle(IPC.codeAsk,(event, id: string, input: CodeAskInput) => { projectRoot(event, id); return askCode(store.project(id)!, input, store.settings(), creds) })
   handle(IPC.filesRead, (event, id: string, path: string) => files.read(projectRoot(event, id), path))
   handle(IPC.filesSave, (event, id: string, file: TextFile) => files.save(projectRoot(event, id), file))
   handle(IPC.filesCreate, (event, id: string, path: string, directory: boolean) => files.create(projectRoot(event, id), path, directory === true))
+  handle(IPC.filesRename, (event, id: string, from: string, to: string) => files.rename(projectRoot(event, id), from, to))
+  // To the Recycle Bin, so a mistaken delete can be undone outside the app.
+  handle(IPC.filesTrash, (event, id: string, path: string) => shell.trashItem(workspacePath(projectRoot(event, id), path)))
   handle(IPC.gitStatus, (event, id: string) => git.status(projectRoot(event, id)))
   handle(IPC.gitDiff, (event, id: string, path: string, staged: boolean) => git.diff(projectRoot(event, id), path, staged === true))
+  handle(IPC.gitLineChanges, (event, id: string, path: string) => git.lineChanges(projectRoot(event, id), path))
+  handle(IPC.gitBlame, (event, id: string, path: string, line: number) => git.blame(projectRoot(event, id), path, Number(line)))
   handle(IPC.gitAction, (event, id: string, action: GitAction, path?: string, value?: string) => git.action(projectRoot(event, id), action, path, value))
   handle(IPC.termOpen, (event, id: string, cols: number, rows: number) => {
     const sender = event.sender
@@ -300,6 +317,19 @@ function registerIpc() {
   handle(IPC.termWrite, (event, id: string, data: string) => terminals.write(event.sender.id, id, data))
   handle(IPC.termResize, (event, id: string, cols: number, rows: number) => terminals.resize(event.sender.id, id, cols, rows))
   handle(IPC.termClose, (event, id: string) => terminals.close(event.sender.id, id))
+  // Debugging runs the owner's program with their permissions, like a terminal, started in the project folder.
+  handle(IPC.debugStart, async (event, id: string, file: string, breakpoints: Record<string, number[]>) => {
+    const sender = event.sender
+    stopDebug(sender.id)
+    const session = new DebugSession(projectRoot(event, id), (e) => { if (!sender.isDestroyed()) sender.send(IPC.debugEvent, e); if (e.type === 'exited' && debugSessions.get(sender.id) === session) debugSessions.delete(sender.id) })
+    debugSessions.set(sender.id, session)
+    try { await session.start(file, breakpoints && typeof breakpoints === 'object' ? breakpoints : {}) } catch (error) { stopDebug(sender.id); throw error }
+  })
+  const debugOf = (owner: number) => { const s = debugSessions.get(owner); if (!s) throw new Error('No program is being debugged'); return s }
+  handle(IPC.debugCommand, (event, action: 'continue' | 'over' | 'into' | 'out' | 'pause') => debugOf(event.sender.id).command(action))
+  handle(IPC.debugEvaluate, (event, expression: string) => debugOf(event.sender.id).evaluate(String(expression)))
+  handle(IPC.debugBreakpoints, (event, path: string, lines: number[]) => debugSessions.get(event.sender.id)?.setBreakpoints(path, Array.isArray(lines) ? lines : []))
+  handle(IPC.debugStop, (event) => stopDebug(event.sender.id))
   handle(IPC.authStatus, async (event) => {
     const session = await auth.restore(event.sender.id)
     debouncedNotify()
@@ -313,6 +343,7 @@ function registerIpc() {
   handle(IPC.authClear, async () => {
     const signingOut = auth.signOut()
     terminals.closeAll()
+    for (const owner of [...debugSessions.keys()]) stopDebug(owner)
     for (const project of store.projects()) {
       orchestrator.stopRun(project.id)
       preview.stop(project.id)
@@ -1019,6 +1050,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   quitting = true
   terminals.closeAll()
+  for (const owner of [...debugSessions.keys()]) stopDebug(owner)
   if (scheduler) clearInterval(scheduler)
   tray?.destroy()
   for (const project of store?.projects?.() ?? []) {

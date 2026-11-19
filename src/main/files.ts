@@ -24,9 +24,9 @@ export function workspacePath(root: string, path: unknown, allowRoot = false): s
 }
 const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex')
 export class FileService {
-  find(root: string, query: string): FileEntry[] {
+  find(root: string, query: string, limit = 100): FileEntry[] {
     if (typeof query !== 'string' || query.length > 200) throw new Error('Invalid file search')
-    return this.walk(root, 100, (entry) => entry.path.toLowerCase().includes(query.toLowerCase()))
+    return this.walk(root, Math.min(Math.max(1, limit), 1000), (entry) => entry.path.toLowerCase().includes(query.toLowerCase()))
   }
   /** Text search across project files, bounded by file count and hit count so large repositories stay responsive. */
   async search(root: string, query: string, caseSensitive = false): Promise<SearchResult> {
@@ -103,5 +103,18 @@ export class FileService {
     const target = workspacePath(root, path)
     if (directory) mkdirSync(target)
     else writeFileSync(target, '', { flag: 'wx' })
+  }
+  /** Rename or move a file or folder inside the project. Never overwrites. */
+  rename(root: string, from: string, to: string) {
+    const source = workspacePath(root, from)
+    const target = workspacePath(root, to)
+    if (!existsSync(source)) throw new Error(`${from} no longer exists`)
+    // A case-only rename (readme.md -> README.md) is the same file on Windows, not a clash.
+    const caseOnly = source !== target && source.toLowerCase() === target.toLowerCase()
+    if (existsSync(target) && !caseOnly) throw new Error(`${to} already exists`)
+    if (!existsSync(dirname(target))) throw new Error('The destination folder does not exist')
+    const inside = relative(source, target)
+    if (inside && !inside.startsWith('..') && !isAbsolute(inside)) throw new Error('A folder cannot be moved into itself')
+    renameSync(source, target)
   }
 }

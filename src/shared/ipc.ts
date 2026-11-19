@@ -24,12 +24,13 @@ import type {
   UpdateState,
   Task
 } from './types'
-import type { FileEntry, TextFile, GitState, GitAction, SearchResult, CodeAskInput, CodeAskResult } from './workspace'
+import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, DebugEvent, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
 
 export const IPC = {
-  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesFind: 'files:find', filesSearch: 'files:search', codeAsk: 'code:ask', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
-  gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action',
+  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', projectTypes: 'files:project-types', toolsFormat: 'tools:format', toolsLint: 'tools:lint', codeAsk: 'code:ask', codeChange: 'code:change', codeComplete: 'code:complete', runsList: 'runs:list', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
+  gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action', gitLineChanges: 'git:line-changes', gitBlame: 'git:blame',
   termOpen: 'term:open', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
+  debugStart: 'debug:start', debugCommand: 'debug:command', debugEvaluate: 'debug:evaluate', debugBreakpoints: 'debug:breakpoints', debugStop: 'debug:stop', debugEvent: 'debug:event',
   authStatus: 'auth:status',
   authSignIn: 'auth:signIn',
   authClear: 'auth:clear',
@@ -112,7 +113,12 @@ export interface VentrieeApi {
   filesList(projectId: string, path?: string): Promise<FileEntry[]>
   filesFind(projectId: string, query: string): Promise<FileEntry[]>
   filesSearch(projectId: string, query: string, caseSensitive: boolean): Promise<SearchResult>
+  projectTypes(projectId: string): Promise<ProjectTypes>
+  toolsFormat(projectId: string, path: string, text: string): Promise<string | null>
+  toolsLint(projectId: string, path: string, text: string): Promise<LintMessage[]>
   codeAsk(projectId: string, input: CodeAskInput): Promise<CodeAskResult>
+  codeChange(projectId: string, input: CodeChangeInput): Promise<CodeChangeResult>
+  codeComplete(projectId: string, input: CodeCompleteInput): Promise<string>
   runsList(projectId: string): Promise<RunSummary[]>
   runChanges(projectId: string, jobId: string): Promise<Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>>
   runUndo(projectId: string, jobId: string): Promise<number>
@@ -123,15 +129,25 @@ export interface VentrieeApi {
   filesRead(projectId: string, path: string): Promise<TextFile>
   filesSave(projectId: string, file: TextFile): Promise<TextFile>
   filesCreate(projectId: string, path: string, directory: boolean): Promise<void>
+  filesRename(projectId: string, from: string, to: string): Promise<void>
+  filesTrash(projectId: string, path: string): Promise<void>
   gitStatus(projectId: string): Promise<GitState>
   gitDiff(projectId: string, path: string, staged: boolean): Promise<{ original: string; modified: string; path: string }>
   gitAction(projectId: string, action: GitAction, path?: string, value?: string): Promise<void>
+  gitLineChanges(projectId: string, path: string): Promise<LineChange[]>
+  gitBlame(projectId: string, path: string, line: number): Promise<BlameLine | null>
   termOpen(projectId: string, cols: number, rows: number): Promise<string>
   termWrite(id: string, data: string): Promise<void>
   termResize(id: string, cols: number, rows: number): Promise<void>
   termClose(id: string): Promise<void>
   onTermData(cb: (payload: { id: string; data: string }) => void): () => void
   onTermExit(cb: (payload: { id: string; code: number }) => void): () => void
+  debugStart(projectId: string, file: string, breakpoints: Record<string, number[]>): Promise<void>
+  debugCommand(action: 'continue' | 'over' | 'into' | 'out' | 'pause'): Promise<void>
+  debugEvaluate(expression: string): Promise<string>
+  debugBreakpoints(path: string, lines: number[]): Promise<void>
+  debugStop(): Promise<void>
+  onDebug(cb: (event: DebugEvent) => void): () => void
   authStatus(): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number } | null>
   authSignIn(input: { email: string; password: string }, signup?: boolean): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number } | null; message: string }>
   authClear(): Promise<void>

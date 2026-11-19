@@ -6,7 +6,12 @@ const api: VentrieeApi = {
   filesList: (id, path) => ipcRenderer.invoke(IPC.filesList, id, path),
   filesFind: (id, query) => ipcRenderer.invoke(IPC.filesFind, id, query),
   filesSearch: (id, query, caseSensitive) => ipcRenderer.invoke(IPC.filesSearch, id, query, caseSensitive),
+  projectTypes: (id) => ipcRenderer.invoke(IPC.projectTypes, id),
+  toolsFormat: (id, path, text) => ipcRenderer.invoke(IPC.toolsFormat, id, path, text),
+  toolsLint: (id, path, text) => ipcRenderer.invoke(IPC.toolsLint, id, path, text),
   codeAsk: (id, input) => ipcRenderer.invoke(IPC.codeAsk, id, input),
+  codeChange: (id, input) => ipcRenderer.invoke(IPC.codeChange, id, input),
+  codeComplete: (id, input) => ipcRenderer.invoke(IPC.codeComplete, id, input),
   runsList: (id) => ipcRenderer.invoke(IPC.runsList, id),
   runChanges: (id, jobId) => ipcRenderer.invoke(IPC.runChanges, id, jobId),
   runUndo: (id, jobId) => ipcRenderer.invoke(IPC.runUndo, id, jobId),
@@ -21,9 +26,13 @@ const api: VentrieeApi = {
   filesRead: (id, path) => ipcRenderer.invoke(IPC.filesRead, id, path),
   filesSave: (id, file) => ipcRenderer.invoke(IPC.filesSave, id, file),
   filesCreate: (id, path, directory) => ipcRenderer.invoke(IPC.filesCreate, id, path, directory),
+  filesRename: (id, from, to) => ipcRenderer.invoke(IPC.filesRename, id, from, to),
+  filesTrash: (id, path) => ipcRenderer.invoke(IPC.filesTrash, id, path),
   gitStatus: (id) => ipcRenderer.invoke(IPC.gitStatus, id),
   gitDiff: (id, path, staged) => ipcRenderer.invoke(IPC.gitDiff, id, path, staged),
   gitAction: (id, action, path, value) => ipcRenderer.invoke(IPC.gitAction, id, action, path, value),
+  gitLineChanges: (id, path) => ipcRenderer.invoke(IPC.gitLineChanges, id, path),
+  gitBlame: (id, path, line) => ipcRenderer.invoke(IPC.gitBlame, id, path, line),
   termOpen: (id, cols, rows) => ipcRenderer.invoke(IPC.termOpen, id, cols, rows),
   termWrite: (id, data) => ipcRenderer.invoke(IPC.termWrite, id, data),
   termResize: (id, cols, rows) => ipcRenderer.invoke(IPC.termResize, id, cols, rows),
@@ -32,6 +41,16 @@ const api: VentrieeApi = {
     const listener = (_e: unknown, payload: { id: string; data: string }) => cb(payload)
     ipcRenderer.on(IPC.termData, listener)
     return () => ipcRenderer.removeListener(IPC.termData, listener)
+  },
+  debugStart: (id, file, breakpoints) => ipcRenderer.invoke(IPC.debugStart, id, file, breakpoints),
+  debugCommand: (action) => ipcRenderer.invoke(IPC.debugCommand, action),
+  debugEvaluate: (expression) => ipcRenderer.invoke(IPC.debugEvaluate, expression),
+  debugBreakpoints: (path, lines) => ipcRenderer.invoke(IPC.debugBreakpoints, path, lines),
+  debugStop: () => ipcRenderer.invoke(IPC.debugStop),
+  onDebug: (cb) => {
+    const listener = (_e: unknown, event: Parameters<typeof cb>[0]) => cb(event)
+    ipcRenderer.on(IPC.debugEvent, listener)
+    return () => ipcRenderer.removeListener(IPC.debugEvent, listener)
   },
   onTermExit: (cb) => {
     const listener = (_e: unknown, payload: { id: string; code: number }) => cb(payload)

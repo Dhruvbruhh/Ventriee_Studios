@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { IconChevron, IconClose } from '../icons'
+import { IconChevron, IconClose, IconEdit, IconTrash } from '../icons'
 import { monaco, languageFor, editorLanguages } from './monaco'
 import { SourceControl } from './SourceControl'
+import { findConflicts, resolveConflict } from './conflicts'
+import { applyProjectTypes, clearProjectTypes, fileUri } from './intellisense'
 import { AgentChanges } from './AgentChanges'
 import { Preview } from '../components/Preview'
 import { TerminalView } from '../components/Terminal'
 import { Modal } from '../shell'
 import { guard, useStore } from '../store'
-import type { FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
+import type { CodeChangeResult, DebugFrame, DebugVariable, FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
 import type { Project } from '../../../shared/types'
 
 interface Tab { file: TextFile; model: monaco.editor.ITextModel; saved: string; subscription: monaco.IDisposable; view?: monaco.editor.ICodeEditorViewState | null }
-interface Diff { path: string; original: string; modified: string; staged: boolean; label?: string; proposal?: boolean }
+type Change = CodeChangeResult['changes'][number]
+interface Diff { path: string; original: string; modified: string; staged: boolean; label?: string; proposal?: boolean; change?: Change }
 interface Proposal { path: string; range: monaco.IRange; versionId: number; replacement: string }
 interface Problem { path: string; line: number; column: number; message: string; severity: number }
 interface Command { label: string; keys?: string; run: () => void; disabled?: boolean }
 
-function Directory({ projectId, path, depth, revision, onOpen }: { projectId: string; path: string; depth: number; revision: number; onOpen: (path: string) => void }) {
+type EntryAction = (entry: FileEntry) => void
+function Directory({ projectId, path, depth, revision, onOpen, onRename, onDelete }: { projectId: string; path: string; depth: number; revision: number; onOpen: (path: string) => void; onRename: EntryAction; onDelete: EntryAction }) {
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
@@ -31,13 +35,15 @@ function Directory({ projectId, path, depth, revision, onOpen }: { projectId: st
   if (error) return <p className="editor-error" role="alert">{error}</p>
   if (!entries.length) return <p className="tree-note">Empty folder</p>
   return <div role="group">{entries.map((entry) => <div key={entry.path}>
-    <button className="file-tree-row" style={{ paddingLeft: depth * 14 + 12 }} title={entry.path}
+    <div className="file-tree-item"><button className="file-tree-row" style={{ paddingLeft: depth * 14 + 12 }} title={entry.path}
       aria-expanded={entry.directory ? expanded.has(entry.path) : undefined}
       onClick={() => {
         if (!entry.directory) { onOpen(entry.path); return }
         setExpanded((old) => { const next = new Set(old); if (next.has(entry.path)) next.delete(entry.path); else next.add(entry.path); return next })
       }}><span className="file-glyph">{entry.directory ? <IconChevron width={12} height={12} aria-hidden style={{ transform: expanded.has(entry.path) ? undefined : 'rotate(-90deg)' }} /> : null}</span><span>{entry.name}</span></button>
-    {entry.directory && expanded.has(entry.path) ? <Directory {...{ projectId, revision, onOpen }} path={entry.path} depth={depth + 1} /> : null}
+      <span className="file-tree-actions"><button className="tab-close" aria-label={`Rename or move ${entry.path}`} title="Rename or move" onClick={() => onRename(entry)}><IconEdit width={12} height={12} aria-hidden /></button>
+        <button className="tab-close" aria-label={`Delete ${entry.path}`} title="Move to Recycle Bin" onClick={() => onDelete(entry)}><IconTrash width={12} height={12} aria-hidden /></button></span></div>
+    {entry.directory && expanded.has(entry.path) ? <Directory {...{ projectId, revision, onOpen, onRename, onDelete }} path={entry.path} depth={depth + 1} /> : null}
   </div>)}</div>
 }
 
@@ -53,6 +59,8 @@ function DiffView({ diff }: { diff: Diff }) {
   return <div ref={host} className="monaco-surface" aria-label={`Changes in ${diff.path}`} />
 }
 
+const debuggable = (path: string) => /\.(m|c)?(j|t)s$/.test(path)
+
 export default function CodeWorkspace({ project, visible, onNavigate }: { project: Project; visible: boolean; onNavigate?: (workspace: 'plan' | 'office') => void }) {
   const host = useRef<HTMLDivElement>(null)
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
@@ -62,7 +70,12 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [revision, setRevision] = useState(0)
   const [, setRender] = useState(0)
   const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'agents'>('files')
-  const [panel, setPanel] = useState<'terminal' | 'problems' | null>(null)
+  const [panel, setPanel] = useState<'terminal' | 'problems' | 'debug' | null>(null)
+  const [breakpoints, setBreakpoints] = useState<Record<string, number[]>>({})
+  const [debug, setDebug] = useState<{ status: 'idle' | 'starting' | 'running' | 'paused' | 'exited'; frames: DebugFrame[]; variables: DebugVariable[]; output: string; code?: number; error?: string }>({ status: 'idle', frames: [], variables: [], output: '' })
+  const [evalText, setEvalText] = useState('')
+  const [evalResult, setEvalResult] = useState('')
+  const toggleBreakpoint = useRef((_path: string, _line: number) => {})
   const [problems, setProblems] = useState<Problem[]>([])
   const [palette, setPalette] = useState(false)
   const [command, setCommand] = useState('')
@@ -72,9 +85,23 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [findBusy, setFindBusy] = useState(false)
   const [findError, setFindError] = useState('')
   const searchRun = useRef(0)
+  const background = useRef(new Set<monaco.editor.ITextModel>())
+  const [typesInfo, setTypesInfo] = useState('')
+  const loadTypes = useCallback(async () => {
+    setTypesInfo('Loading project types…')
+    try {
+      const types = await window.ventriee.projectTypes(project.id)
+      if (!mounted.current) return
+      for (const model of applyProjectTypes(project.id, types)) background.current.add(model)
+      const packages = new Set(types.libs.map((l) => l.path.split('/').slice(1, l.path.split('/')[1]?.startsWith('@') ? 3 : 2).join('/'))).size
+      setTypesInfo(`TS: ${types.sources.length} files, ${packages} packages${types.truncated ? ' (limit reached)' : ''}`)
+    } catch { if (mounted.current) setTypesInfo('') }
+  }, [project.id])
+  useEffect(() => { void loadTypes() }, [loadTypes])
   const [ask, setAsk] = useState(false)
   const [question, setQuestion] = useState('')
-  const [asking, setAsking] = useState<'ask' | 'edit' | null>(null)
+  const [asking, setAsking] = useState<'ask' | 'edit' | 'change' | null>(null)
+  const [changes, setChanges] = useState<Change[]>([])
   const [reply, setReply] = useState<{ answer: string; model: string; path: string } | null>(null)
   const [askError, setAskError] = useState('')
   const [proposal, setProposal] = useState<Proposal | null>(null)
@@ -86,6 +113,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [loading, setLoading] = useState(false)
   const [cursor, setCursor] = useState({ lineNumber: 1, column: 1 })
   const [create, setCreate] = useState<'file' | 'folder' | 'copy' | null>(null)
+  const [moving, setMoving] = useState<FileEntry | null>(null)
   const [newPath, setNewPath] = useState('')
   const [quick, setQuick] = useState(false)
   const [query, setQuery] = useState('')
@@ -102,13 +130,19 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   useEffect(() => {
     mounted.current = true
     const instance = monaco.editor.create(host.current!, { theme: 'ventriee', automaticLayout: true, fontFamily: 'Cascadia Code, Consolas, monospace', fontSize: 13,
-      minimap: { enabled: true }, padding: { top: 12 }, scrollBeyondLastLine: false, tabSize: 2, model: null })
+      minimap: { enabled: true }, padding: { top: 12 }, scrollBeyondLastLine: false, tabSize: 2, model: null, glyphMargin: true })
     editor.current = instance
     const position = instance.onDidChangeCursorPosition((event: { position: { lineNumber: number; column: number } }) => setCursor(event.position))
-    const selected = instance.onDidChangeCursorSelection(({ selection: s }) => setSelection(s.isEmpty() ? null : [s.startLineNumber, s.endLineNumber]))
+    const selectionSub = instance.onDidChangeCursorSelection(({ selection: s }) => setSelection(s.isEmpty() ? null : [s.startLineNumber, s.endLineNumber]))
+    // Clicking the margin left of the line numbers toggles a breakpoint.
+    const margin = instance.onMouseDown((e) => {
+      if (e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN && e.target.position && selected.current) toggleBreakpoint.current(selected.current, e.target.position.lineNumber)
+    })
     return () => {
-      mounted.current = false; position.dispose(); selected.dispose(); instance.dispose()
-      for (const tab of tabs.current.values()) { tab.subscription.dispose(); tab.model.dispose() }
+      mounted.current = false; position.dispose(); selectionSub.dispose(); margin.dispose(); instance.dispose()
+      for (const tab of tabs.current.values()) { tab.subscription.dispose(); if (!background.current.has(tab.model)) tab.model.dispose() }
+      for (const model of background.current) if (!model.isDisposed()) model.dispose()
+      background.current.clear(); clearProjectTypes()
       tabs.current.clear(); editor.current = null; useStore.setState({ editorDirty: false })
     }
   }, [])
@@ -131,8 +165,11 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       const file = await window.ventriee.filesRead(project.id, path)
       if (!mounted.current) return
       if (!tabs.current.has(path)) {
-        const uri = monaco.Uri.from({ scheme: 'inmemory', authority: project.id, path: `/${path}` })
-        const model = monaco.editor.createModel(file.text, languageFor(path), uri)
+        const uri = fileUri(project.id, path)
+        // A project file may already be loaded for the TypeScript service; the tab takes it over.
+        const existing = monaco.editor.getModel(uri)
+        if (existing && existing.getValue() !== file.text) existing.setValue(file.text)
+        const model = existing ?? monaco.editor.createModel(file.text, languageFor(path), uri)
         tabs.current.set(path, { file, model, saved: model.getValue(), subscription: model.onDidChangeContent(changed) })
       }
       if (request === opening.current) activate(path)
@@ -158,6 +195,34 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     } catch (error) {
       if (mounted.current && run === searchRun.current) { setFound(null); setFindError(String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '')) }
     } finally { if (mounted.current && run === searchRun.current) setFindBusy(false) }
+  }
+  /** Open tabs inside a file or folder; refuses when one has unsaved edits, so a move or delete never loses them. */
+  const tabsUnder = (entry: FileEntry): string[] | null => {
+    const hit = [...tabs.current.keys()].filter((p) => p === entry.path || (entry.directory && p.startsWith(`${entry.path}/`)))
+    const dirty = hit.find((p) => { const t = tabs.current.get(p)!; return t.model.getValue() !== t.saved })
+    if (dirty) { useStore.getState().notify(`Save or close ${dirty} first: it has unsaved edits.`, 'error'); return null }
+    return hit
+  }
+  const trash = async (entry: FileEntry) => {
+    const openTabs = tabsUnder(entry)
+    if (!openTabs || !window.confirm(`Move ${entry.path} to the Recycle Bin?`)) return
+    const done = await guard(() => window.ventriee.filesTrash(project.id, entry.path), `${entry.path} moved to the Recycle Bin`)
+    if (done === null) return
+    for (const path of openTabs) close(path)
+    setRevision((v) => v + 1)
+  }
+  const move = async (entry: FileEntry, to: string) => {
+    const openTabs = tabsUnder(entry)
+    if (!openTabs) return false
+    const done = await guard(() => window.ventriee.filesRename(project.id, entry.path, to))
+    if (done === null) return false
+    const wasActive = active
+    for (const path of openTabs) close(path)
+    // The file (or the active file inside a moved folder) reopens at its new path.
+    if (!entry.directory && openTabs.length) void open(to)
+    else if (entry.directory && wasActive && openTabs.includes(wasActive)) void open(`${to}${wasActive.slice(entry.path.length)}`)
+    setRevision((v) => v + 1)
+    return true
   }
   const showProposal = (p: Proposal) => {
     const tab = tabs.current.get(p.path)
@@ -198,6 +263,40 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     tab.model.pushStackElement()
     setProposal(null); setDiff(null); activate(proposal.path); changed()
   }
+  const askChange = async () => {
+    if (!question.trim() || asking) return
+    // Open tabs are the agent's context, the file being looked at first.
+    const paths = [...new Set([...(active ? [active] : []), ...tabs.current.keys()])]
+    setAsking('change'); setAskError(''); setReply(null); setProposal(null); setChanges([])
+    try {
+      const result = await window.ventriee.codeChange(project.id, { request: question, paths })
+      if (!mounted.current) return
+      setReply({ answer: result.answer, model: result.model, path: `${result.changes.length} file${result.changes.length === 1 ? '' : 's'}` })
+      setChanges(result.changes)
+      if (result.changes[0]) showChange(result.changes[0])
+    } catch (error) {
+      if (mounted.current) setAskError(String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, ''))
+    } finally { if (mounted.current) setAsking(null) }
+  }
+  const showChange = (c: Change) => setDiff({ path: c.path, original: c.original, modified: c.text, staged: false,
+    label: c.created ? 'New file proposed by the agent' : 'Agent change: current (left) / proposed (right)', change: c })
+  const dropChange = (c: Change) => { setChanges((list) => list.filter((x) => x !== c)); setDiff((d) => (d?.change === c ? null : d)) }
+  /** Puts one proposed file into an editor tab as an undoable, unsaved edit. */
+  const acceptChange = async (c: Change) => {
+    if (c.created && (await guard(() => window.ventriee.filesCreate(project.id, c.path, false))) === null) return false
+    await open(c.path)
+    const tab = tabs.current.get(c.path)
+    if (!tab || tab.model.isDisposed()) { setAskError(`Could not open ${c.path} to apply the change.`); return false }
+    if (tab.model.getValue() !== c.original && tab.model.getValue() !== '') {
+      setAskError(`${c.path} changed after you asked, so this change may not fit any more. Ask again.`); return false
+    }
+    tab.model.pushStackElement()
+    tab.model.pushEditOperations([], [{ range: tab.model.getFullModelRange(), text: c.text }], () => null)
+    tab.model.pushStackElement()
+    dropChange(c); changed()
+    return true
+  }
+  const acceptAll = async () => { for (const c of [...changes]) if (!(await acceptChange(c))) break }
   const save = async (all = false) => {
     if (saving.current) return
     saving.current = true; setBusy(true)
@@ -236,7 +335,10 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     const tab = tabs.current.get(path)!
     if (tab.saved !== tab.model.getValue() && !window.confirm(`Discard unsaved edits to ${path}?`)) return
     if (path === active) editor.current?.setModel(null)
-    tab.subscription.dispose(); tab.model.dispose(); tabs.current.delete(path)
+    tab.subscription.dispose(); tabs.current.delete(path)
+    // Background models stay for the TypeScript service, back at the saved text.
+    if (background.current.has(tab.model)) tab.model.setValue(tab.saved)
+    else tab.model.dispose()
     if (path === conflict) setConflict(null)
     if (path === active) {
       const next = [...tabs.current.keys()].at(-1)
@@ -255,6 +357,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   useEffect(() => {
     if (!visible) return
     const keys = (event: KeyboardEvent) => {
+      // F5: continue when paused, otherwise start debugging the open file.
+      if (event.key === 'F5' && !event.ctrlKey && !event.metaKey) { event.preventDefault(); if (debug.status === 'paused') debugCommand('continue'); else if (!debugLive) void startDebug(); return }
       if (!(event.ctrlKey || event.metaKey)) return
       const key = event.key.toLowerCase()
       if (key === 's') { event.preventDefault(); void save(event.shiftKey) }
@@ -289,6 +393,26 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     }, 5000)
     return () => clearInterval(timer)
   }, [project.id, visible, changed])
+  const completionModel = useStore((s) => s.snapshot?.settings.completionModel ?? '')
+  useEffect(() => {
+    if (!completionModel) return
+    // Ghost-text completions (Tab accepts). Waits for a pause in typing; a newer keystroke cancels the request.
+    const provider = monaco.languages.registerInlineCompletionsProvider('*', {
+      provideInlineCompletions: async (model, position, _context, token) => {
+        if (model.uri.authority !== project.id.toLowerCase()) return { items: [] }
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        if (token.isCancellationRequested) return { items: [] }
+        const all = model.getValue()
+        const offset = model.getOffsetAt(position)
+        const text = await window.ventriee.codeComplete(project.id, { path: model.uri.path.slice(1), language: model.getLanguageId(),
+          prefix: all.slice(Math.max(0, offset - 4000), offset), suffix: all.slice(offset, offset + 1500) }).catch(() => '')
+        if (!text || token.isCancellationRequested) return { items: [] }
+        return { items: [{ insertText: text, range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column) }] }
+      },
+      disposeInlineCompletions: () => {}
+    })
+    return () => provider.dispose()
+  }, [completionModel, project.id])
   useEffect(() => {
     // Monaco's own diagnostics (TypeScript, JSON, CSS, HTML) for the files open in tabs.
     const update = () => {
@@ -306,7 +430,121 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     const result = await guard(() => window.ventriee.gitDiff(project.id, path, staged))
     if (result && mounted.current && request === comparing.current) setDiff({ ...result, staged })
   }
+  // Gutter marks: how the saved file differs from the last commit. Refreshed with the explorer tick and on save.
+  const gutter = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
+  useEffect(() => {
+    if (!active || !editor.current) return
+    let alive = true
+    void window.ventriee.gitLineChanges(project.id, active).then((ranges) => {
+      if (!alive || selected.current !== active || !editor.current) return
+      gutter.current?.clear()
+      gutter.current = editor.current.createDecorationsCollection(ranges.map((r) => ({
+        range: new monaco.Range(r.start, 1, r.end, 1),
+        options: { isWholeLine: true, linesDecorationsClassName: `gutter-${r.kind}`, overviewRuler: { color: r.kind === 'added' ? '#79dcb4' : r.kind === 'deleted' ? '#f4796b' : '#8ab4f8', position: monaco.editor.OverviewRulerLane.Left } }
+      })))
+    }).catch(() => { gutter.current?.clear() })
+    return () => { alive = false }
+  }, [active, revision, project.id])
+  // Blame for the line the cursor rests on; only for a saved buffer, where line numbers match the commit.
+  const [blame, setBlame] = useState('')
+  useEffect(() => {
+    setBlame('')
+    const current = active ? tabs.current.get(active) : null
+    if (!active || !current || current.model.getValue() !== current.saved) return
+    let alive = true
+    const timer = setTimeout(() => {
+      void window.ventriee.gitBlame(project.id, active, cursor.lineNumber).then((b) => {
+        if (!alive || !b) return
+        const days = b.time ? Math.round((Date.now() - b.time) / 86_400_000) : -1
+        setBlame(`${b.author}${days >= 0 ? `, ${days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`}` : ''} · ${b.summary}`)
+      }).catch(() => {})
+    }, 500)
+    return () => { alive = false; clearTimeout(timer) }
+  }, [active, cursor.lineNumber, revision, project.id])
+  // ---------- debugger ----------
+  const debugLive = debug.status === 'running' || debug.status === 'paused' || debug.status === 'starting'
+  toggleBreakpoint.current = (path, line) => {
+    setBreakpoints((all) => {
+      const lines = all[path] ?? []
+      const next = lines.includes(line) ? lines.filter((l) => l !== line) : [...lines, line].sort((a, b) => a - b)
+      if (debugLive) void window.ventriee.debugBreakpoints(path, next).catch(() => {})
+      return { ...all, [path]: next }
+    })
+  }
+  useEffect(() => window.ventriee.onDebug((e) => {
+    if (!mounted.current) return
+    if (e.type === 'output') setDebug((d) => ({ ...d, output: (d.output + e.text).slice(-40_000) }))
+    else if (e.type === 'running') setDebug((d) => ({ ...d, status: 'running', frames: [], variables: [] }))
+    else if (e.type === 'exited') setDebug((d) => ({ ...d, status: 'exited', code: e.code, frames: [], variables: [] }))
+    else if (e.type === 'paused') {
+      setDebug((d) => ({ ...d, status: 'paused', frames: e.frames, variables: e.variables }))
+      setEvalResult('')
+      const top = e.frames.find((f) => !f.internal)
+      if (top) void openAt(top.path, top.line, top.column)
+    }
+  }), [])
+  const startDebug = async () => {
+    if (!active) return
+    if (!debuggable(active)) { useStore.getState().notify('The debugger runs JavaScript and TypeScript files with Node.js', 'info'); return }
+    setPanel('debug'); setEvalResult('')
+    setDebug({ status: 'starting', frames: [], variables: [], output: '' })
+    try { await window.ventriee.debugStart(project.id, active, breakpoints) } catch (error) {
+      if (mounted.current) setDebug({ status: 'idle', frames: [], variables: [], output: '', error: String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, '') })
+    }
+  }
+  const debugCommand = (action: 'continue' | 'over' | 'into' | 'out' | 'pause') => void window.ventriee.debugCommand(action).catch(() => {})
+  // Breakpoint dots in the margin and the line the program is paused on.
+  const debugMarks = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
+  useEffect(() => {
+    if (!editor.current || !active) return
+    const paused = debug.status === 'paused' ? debug.frames.find((f) => !f.internal && f.path === active) : undefined
+    debugMarks.current?.clear()
+    debugMarks.current = editor.current.createDecorationsCollection([
+      ...(breakpoints[active] ?? []).map((line) => ({ range: new monaco.Range(line, 1, line, 1), options: { glyphMarginClassName: 'bp-dot', glyphMarginHoverMessage: { value: 'Breakpoint (click to remove)' } } })),
+      ...(paused ? [{ range: new monaco.Range(paused.line, 1, paused.line, 1), options: { isWholeLine: true, className: 'debug-current-line', glyphMarginClassName: 'debug-arrow' } }] : [])
+    ])
+  }, [breakpoints, active, debug])
+  /** The project's Prettier (with its config) when installed, otherwise Monaco's own formatter. One undoable edit. */
+  const formatDocument = async () => {
+    const current = active ? tabs.current.get(active) : null
+    if (!active || !current || !editor.current) return
+    const text = current.model.getValue()
+    let formatted: string | null
+    try { formatted = await window.ventriee.toolsFormat(project.id, active, text) } catch (error) {
+      // Prettier's own message (usually a syntax error in the file), not a silent fallback.
+      useStore.getState().notify(String(error).replace(/^Error invoking remote method '[^']+':\s*(Error: )?/, ''), 'error'); return
+    }
+    if (formatted === null) { void editor.current?.getAction('editor.action.formatDocument')?.run(); return }
+    if (current.model.isDisposed() || current.model.getValue() !== text || formatted === text) return
+    current.model.pushStackElement()
+    current.model.pushEditOperations([], [{ range: current.model.getFullModelRange(), text: formatted }], () => null)
+    current.model.pushStackElement()
+    changed()
+  }
+  // ESLint findings on open and after each save, from the project's own ESLint and config.
+  const activeVersion = active ? tabs.current.get(active)?.file.version : undefined
+  useEffect(() => {
+    const current = active ? tabs.current.get(active) : null
+    if (!active || !current || !/\.(m|c)?(j|t)sx?$|\.vue$/.test(active)) return
+    let alive = true
+    void window.ventriee.toolsLint(project.id, active, current.model.getValue()).then((found) => {
+      if (!alive || current.model.isDisposed()) return
+      monaco.editor.setModelMarkers(current.model, 'eslint', found.map((m) => ({ startLineNumber: m.line, startColumn: m.column, endLineNumber: m.endLine, endColumn: m.endColumn, message: m.message, source: 'eslint',
+        severity: m.severity === 'error' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning })))
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [active, activeVersion, project.id])
   const tab = active ? tabs.current.get(active) : null
+  // The merge conflict under the cursor, if any, with one-click resolutions.
+  const conflictHere = tab && !diff ? findConflicts(tab.model.getValue()).find((c) => cursor.lineNumber >= c.start && cursor.lineNumber <= c.end) : undefined
+  const resolveHere = (choice: 'current' | 'incoming' | 'both') => {
+    if (!tab || !conflictHere) return
+    const text = resolveConflict(tab.model.getValue(), conflictHere, choice)
+    tab.model.pushStackElement()
+    tab.model.pushEditOperations([], [{ range: new monaco.Range(conflictHere.start, 1, conflictHere.end, tab.model.getLineMaxColumn(conflictHere.end)), text }], () => null)
+    tab.model.pushStackElement()
+    changed()
+  }
   const errors = problems.filter((p) => p.severity === monaco.MarkerSeverity.Error).length
   const commands: Command[] = [
     { label: 'File: Save', keys: 'Ctrl+S', run: () => void save(), disabled: !tab },
@@ -326,7 +564,9 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     { label: `View: ${preview ? 'Hide' : 'Show'} preview`, run: () => { setPreview(!preview); setAsk(false) } },
     { label: 'Agent: Ask about this code', run: () => { setAsk(true); setPreview(false); setTimeout(() => document.querySelector<HTMLTextAreaElement>('[aria-label="Question for the agent"]')?.focus()) }, disabled: !tab },
     { label: 'Editor: Find in file', keys: 'Ctrl+F', run: () => { editor.current?.focus(); void editor.current?.getAction('actions.find')?.run() }, disabled: !tab },
-    { label: 'Editor: Format document', run: () => { void editor.current?.getAction('editor.action.formatDocument')?.run() }, disabled: !tab },
+    { label: 'Editor: Reload project types', run: () => void loadTypes() },
+    { label: 'Debug: Start debugging this file', keys: 'F5', run: () => void startDebug(), disabled: !active },
+    { label: 'Editor: Format document', keys: 'Shift+Alt+F', run: () => void formatDocument(), disabled: !tab },
     ...(onNavigate ? [{ label: 'Studio: Go to Plan', run: () => onNavigate('plan') }, { label: 'Studio: Go to Office', run: () => onNavigate('office') }] : [])
   ]
   const shownCommands = commands.filter((c) => !c.disabled && c.label.toLowerCase().includes(command.trim().toLowerCase()))
@@ -336,7 +576,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     <aside className="code-sidebar"><div className="code-sidebar-tabs"><button className={sidebar === 'files' ? 'on' : ''} onClick={() => setSidebar('files')}>Explorer</button><button className={sidebar === 'search' ? 'on' : ''} onClick={() => setSidebar('search')}>Search</button><button className={sidebar === 'git' ? 'on' : ''} onClick={() => setSidebar('git')} aria-label="Source Control" title="Source Control">Git</button><button className={sidebar === 'agents' ? 'on' : ''} onClick={() => setSidebar('agents')} aria-label="Agent changes" title="Files changed by agent tasks">Agents</button></div>
       {sidebar === 'files' ? <><div className="code-section-head"><strong title={project.path}>{project.name}</strong><button className="btn tiny" onClick={() => setRevision((v) => v + 1)}>Refresh</button></div>
         <div className="code-file-actions"><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('file') }}>New file</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('folder') }}>New folder</button><button className="btn tiny" onClick={() => setQuick(true)}>Find file</button></div>
-        <div className="file-tree" aria-label="Project files"><Directory projectId={project.id} path="" depth={0} revision={revision} onOpen={(path) => void open(path)} /></div></>
+        <div className="file-tree" aria-label="Project files"><Directory projectId={project.id} path="" depth={0} revision={revision} onOpen={(path) => void open(path)} onRename={(entry) => { setNewPath(entry.path); setMoving(entry) }} onDelete={(entry) => void trash(entry)} /></div></>
         : sidebar === 'search' ? <div className="code-search">
           <form onSubmit={(event) => { event.preventDefault(); void runSearch() }}>
             <input className="input" autoFocus aria-label="Search text in project files" placeholder="Search in files" value={findText} onChange={(e) => setFindText(e.target.value)} maxLength={200} />
@@ -354,11 +594,14 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <div className="code-tabs" role="tablist" aria-label="Open files">{[...tabs.current].map(([path, value]) => <div className={`code-tab${path === active && !diff ? ' on' : ''}`} key={path}>
         <button role="tab" aria-selected={path === active && !diff} title={path} onClick={() => activate(path)}>{path.split('/').at(-1)}{value.saved !== value.model.getValue() ? <span aria-label="Unsaved"> ●</span> : null}</button><button className="tab-close" onClick={() => close(path)} aria-label={`Close ${path}`}><IconClose width={12} height={12} aria-hidden /></button></div>)}</div>
       <div className="code-toolbar"><span className="code-breadcrumb" title={diff?.path ?? active ?? project.path}>{diff ? `${diff.label ?? (diff.staged ? 'Staged' : 'Working tree')} / ${diff.path}` : active ?? 'Open a file to begin'}</span>
-        {diff?.proposal && proposal ? <><button className="btn tiny" onClick={() => { setProposal(null); setDiff(null) }}>Reject</button><button className="btn tiny primary" onClick={acceptProposal}>Accept into editor</button></>
+        {diff?.change ? <><button className="btn tiny" onClick={() => dropChange(diff.change!)}>Reject</button><button className="btn tiny primary" onClick={() => void acceptChange(diff.change!)}>Accept into editor</button></>
+          : diff?.proposal && proposal ? <><button className="btn tiny" onClick={() => { setProposal(null); setDiff(null) }}>Reject</button><button className="btn tiny primary" onClick={acceptProposal}>Accept into editor</button></>
           : diff ? <button className="btn tiny" onClick={() => setDiff(null)}>Back to editor</button> : <><button className="btn tiny" disabled={!tab || busy} onClick={() => void reload()}>Reload</button><button className="btn tiny" disabled={!tab || busy} onClick={() => { setNewPath(''); setCreate('copy') }}>Save copy</button><button className="btn tiny primary" disabled={!tab || busy || tab.saved === tab.model.getValue()} onClick={() => void save()}>Save</button></>}
         <button className="btn tiny" aria-pressed={ask} onClick={() => { setAsk(!ask); setPreview(false) }}>Ask agent</button>
         <button className="btn tiny" aria-pressed={preview} onClick={() => { setPreview(!preview); setAsk(false) }}>{preview ? 'Hide preview' : 'Show preview'}</button></div>
-      <div className="code-editor-body">{conflict && conflict === active && !diff ? <div className="editor-conflict" role="alert"><span>{conflict} changed on disk after you opened it. Your edits are kept here and were not saved.</span>
+      <div className="code-editor-body">{conflictHere ? <div className="editor-conflict merge" role="region" aria-label="Merge conflict"><span>Merge conflict at lines {conflictHere.start}–{conflictHere.end}. Keep which side?</span>
+        <button className="btn tiny" onClick={() => resolveHere('current')}>Accept current</button><button className="btn tiny" onClick={() => resolveHere('incoming')}>Accept incoming</button><button className="btn tiny" onClick={() => resolveHere('both')}>Accept both</button></div> : null}
+        {conflict && conflict === active && !diff ? <div className="editor-conflict" role="alert"><span>{conflict} changed on disk after you opened it. Your edits are kept here and were not saved.</span>
         <button className="btn tiny" onClick={() => void compareWithDisk()}>Compare with disk</button><button className="btn tiny" onClick={() => void reload()}>Reload from disk</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('copy') }}>Save a copy</button></div> : null}
         <div ref={host} className="monaco-surface" style={{ visibility: active && !diff ? 'visible' : 'hidden' }} />
         {diff ? <DiffView diff={diff} /> : !active ? <div className="code-welcome"><span className="code-welcome-symbol">{'{ }'}</span><h2>Your code, in one place</h2><p>Open a file in Explorer or press Ctrl+P.</p><p>Ctrl+S to save · Ctrl+F to find · Ctrl+H to replace</p><p>UTF-8 text files up to 2 MB. Language runtimes are installed separately.</p></div> : null}
@@ -366,8 +609,30 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       {panel ? <section className="code-panel" aria-label="Panel">
         <div className="code-panel-tabs" role="tablist"><button role="tab" aria-selected={panel === 'terminal'} className={panel === 'terminal' ? 'on' : ''} onClick={() => setPanel('terminal')}>Terminal</button>
           <button role="tab" aria-selected={panel === 'problems'} className={panel === 'problems' ? 'on' : ''} onClick={() => setPanel('problems')}>Problems <span className="badge">{problems.length}</span></button>
+          <button role="tab" aria-selected={panel === 'debug'} className={panel === 'debug' ? 'on' : ''} onClick={() => setPanel('debug')}>Debug{debugLive ? <span className="badge">{debug.status}</span> : null}</button>
           <span className="grow" /><button className="tab-close" aria-label="Close panel" onClick={() => setPanel(null)}><IconClose width={12} height={12} aria-hidden /></button></div>
         {panel === 'terminal' ? <TerminalView projectId={project.id} slot="panel" label="Terminal" />
+          : panel === 'debug' ? <div className="code-debug">
+            <div className="debug-bar">
+              {debugLive ? <button className="btn tiny" onClick={() => void window.ventriee.debugStop()}>Stop</button>
+                : <button className="btn tiny primary" disabled={!active || !debuggable(active)} onClick={() => void startDebug()} title="Run the open file with Node.js under the debugger">Debug {active?.split('/').pop() ?? 'file'}</button>}
+              <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('continue')}>Continue</button>
+              <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('over')}>Step over</button>
+              <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('into')}>Step into</button>
+              <button className="btn tiny" disabled={debug.status !== 'paused'} onClick={() => debugCommand('out')}>Step out</button>
+              <button className="btn tiny" disabled={debug.status !== 'running'} onClick={() => debugCommand('pause')}>Pause</button>
+              <span className="tree-note" role="status">{debug.error ? '' : debug.status === 'exited' ? `Exited with code ${debug.code}` : debug.status === 'idle' ? 'Click the margin left of a line number to set a breakpoint, then Debug. Runs JavaScript and TypeScript with your Node.js.' : debug.status === 'paused' ? 'Paused' : debug.status === 'starting' ? 'Starting…' : 'Running'}</span>
+            </div>
+            {debug.error ? <p className="editor-error" role="alert">{debug.error}</p> : null}
+            <div className="debug-columns">
+              <section aria-label="Call stack"><h4>Call stack</h4>{debug.frames.filter((f) => !f.internal).map((f, i) => <button key={i} onClick={() => void openAt(f.path, f.line, f.column)}><b>{f.name}</b> <span className="dim">{f.path}:{f.line}</span></button>)}</section>
+              <section aria-label="Variables"><h4>Variables</h4>{debug.variables.map((v) => <div key={`${v.scope}:${v.name}`} className="debug-var"><b>{v.name}</b> <span title={v.value}>{v.value}</span></div>)}
+                {debug.status === 'paused' ? <form onSubmit={(e) => { e.preventDefault(); void window.ventriee.debugEvaluate(evalText).then(setEvalResult, (err) => setEvalResult(String(err))) }}>
+                  <input className="input mono" aria-label="Expression to evaluate" placeholder="Evaluate an expression" value={evalText} onChange={(e) => setEvalText(e.target.value)} />
+                  {evalResult ? <div className="debug-var"><b>=</b> <span>{evalResult}</span></div> : null}</form> : null}</section>
+              <section aria-label="Program output"><h4>Output</h4><pre className="debug-output">{debug.output || ' '}</pre></section>
+            </div>
+          </div>
           : <div className="code-problems">{problems.length ? problems.map((p, i) => <button key={i} onClick={() => void openAt(p.path, p.line, p.column)}>
             <b className={p.severity === monaco.MarkerSeverity.Error ? 'problem-error' : 'problem-warn'}>{p.severity === monaco.MarkerSeverity.Error ? 'Error' : p.severity === monaco.MarkerSeverity.Warning ? 'Warning' : 'Info'}</b>
             <span>{p.message}</span><span className="dim">{p.path}:{p.line}</span></button>) : <p className="code-empty">No problems in open files. Diagnostics come from Monaco's built-in TypeScript, JavaScript, JSON, CSS and HTML support.</p>}</div>}
@@ -375,7 +640,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <footer className="code-status"><span>{busy ? 'Saving…' : tab && tab.saved !== tab.model.getValue() ? 'Unsaved changes' : 'Saved'}</span>
         <button className="status-btn" onClick={() => setPanel((open) => open === 'problems' ? null : 'problems')} aria-label={`${problems.length} problems`}>{errors} errors · {problems.length - errors} warnings</button>
         <button className="status-btn" onClick={() => setPanel((open) => open === 'terminal' ? null : 'terminal')}>Terminal</button>
-        <button className="status-btn" onClick={() => { setCommand(''); setPalette(true) }} title="Command palette (Ctrl+Shift+P)">Commands</button><span className="grow" /><span>Ln {cursor.lineNumber}, Col {cursor.column}</span><span>UTF-8{tab?.file.bom ? ' BOM' : ''}</span>
+        <button className="status-btn" onClick={() => { setCommand(''); setPalette(true) }} title="Command palette (Ctrl+Shift+P)">Commands</button><span className="grow" />{blame ? <span className="status-blame" title={blame}>{blame}</span> : null}{typesInfo ? <span title="Files and installed packages the TypeScript service knows about">{typesInfo}</span> : null}<span>Ln {cursor.lineNumber}, Col {cursor.column}</span><span>UTF-8{tab?.file.bom ? ' BOM' : ''}</span>
         <select aria-label="Editor language" value={tab?.model.getLanguageId() ?? 'plaintext'} disabled={!tab || Boolean(diff)} onChange={(e) => { if (tab) { monaco.editor.setModelLanguage(tab.model, e.target.value); changed() } }}>
           {editorLanguages().sort((a, b) => a.id.localeCompare(b.id)).map((lang) => <option value={lang.id} key={lang.id}>{lang.aliases?.[0] ?? lang.id}</option>)}
         </select></footer>
@@ -386,11 +651,16 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       <textarea className="textarea" aria-label="Question for the agent" rows={4} maxLength={4000} placeholder="Explain this, find the bug, add error handling…" value={question} onChange={(e) => setQuestion(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void askAgent('ask') } }} />
       <div className="code-ask-actions"><button className="btn" disabled={!tab || !question.trim() || Boolean(asking)} onClick={() => void askAgent('ask')}>{asking === 'ask' ? 'Asking…' : 'Ask'}</button>
-        <button className="btn primary" disabled={!tab || !question.trim() || Boolean(asking)} onClick={() => void askAgent('edit')}>{asking === 'edit' ? 'Writing edit…' : 'Propose edit'}</button></div>
+        <button className="btn" disabled={!tab || !question.trim() || Boolean(asking)} onClick={() => void askAgent('edit')}>{asking === 'edit' ? 'Writing edit…' : 'Propose edit'}</button>
+        <button className="btn primary" disabled={!question.trim() || Boolean(asking)} onClick={() => void askChange()} title="Change or create several files; your open tabs are the context">{asking === 'change' ? 'Changing files…' : 'Change files'}</button></div>
       {askError ? <p className="editor-error" role="alert">{askError}</p> : null}
       {asking ? <p className="tree-note" role="status">Waiting for the model. This can take a minute.</p> : null}
       {reply ? <div className="code-ask-reply"><small className="dim">{reply.model} · {reply.path}</small><div className="code-ask-text">{reply.answer || 'The agent sent only the edit.'}</div>
         {proposal ? <button className="btn tiny" onClick={() => showProposal(proposal)}>Review proposed edit</button> : null}</div> : null}
+      {changes.length ? <div className="code-ask-reply" aria-label="Proposed file changes"><b>{changes.length} file{changes.length === 1 ? '' : 's'} to review</b>
+        {changes.map((c) => <div className="change-row" key={c.path}><button className="change-path" onClick={() => showChange(c)} title={`Review ${c.path}`}>{c.created ? <span className="badge">new</span> : null} {c.path}</button>
+          <button className="btn tiny" onClick={() => dropChange(c)}>Reject</button><button className="btn tiny primary" onClick={() => void acceptChange(c)}>Accept</button></div>)}
+        <button className="btn tiny" onClick={() => void acceptAll()}>Accept all into the editor</button></div> : null}
     </aside> : preview ? <aside className="code-preview"><Preview /></aside> : null}
     {create ? <Modal title={create === 'copy' ? 'Save a copy' : `New ${create}`} onClose={() => setCreate(null)} narrow><form onSubmit={(event) => {
       event.preventDefault(); if (busy) return; setBusy(true)
@@ -415,6 +685,13 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         if (event.key === 'ArrowDown' && at < items.length - 1) { event.preventDefault(); items[at + 1].focus() }
         if (event.key === 'ArrowUp') { event.preventDefault(); if (at > 0) items[at - 1].focus(); else document.querySelector<HTMLInputElement>('[aria-label="Type a command"]')?.focus() }
       }}>{shownCommands.length ? shownCommands.map((c) => <button key={c.label} onClick={() => runCommand(c)}><span>{c.label}</span>{c.keys ? <kbd>{c.keys}</kbd> : null}</button>) : <p>No matching commands.</p>}</div></Modal> : null}
+    {moving ? <Modal title={`Rename or move ${moving.directory ? 'folder' : 'file'}`} onClose={() => setMoving(null)} narrow><form onSubmit={(event) => {
+      event.preventDefault(); if (busy) return; setBusy(true)
+      void move(moving, newPath.trim()).then((ok) => { if (ok) setMoving(null) }).finally(() => setBusy(false))
+    }}><label className="field-label" htmlFor="move-path">New path, relative to the project</label>
+      <input id="move-path" className="input" autoFocus value={newPath} onChange={(e) => setNewPath(e.target.value)} onFocus={(e) => { const name = e.target.value.lastIndexOf('/') + 1; e.target.setSelectionRange(name, e.target.value.length) }} required />
+      <p className="hint">Change the name to rename it. Change the folders in the path to move it; the destination folder must exist.</p>
+      <button className="btn primary" disabled={busy || !newPath.trim() || newPath.trim() === moving.path}>Rename</button></form></Modal> : null}
     {quick ? <Modal title="Go to file" onClose={() => setQuick(false)} narrow><input className="input" autoFocus aria-label="Find a file by path" placeholder="Search file paths…" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(event) => {
       if (event.key === 'Enter' && matches[0] && !searching) { event.preventDefault(); void open(matches[0].path); setQuick(false) }
       if (event.key === 'ArrowDown') { event.preventDefault(); document.querySelector<HTMLButtonElement>('.quick-files button')?.focus() }

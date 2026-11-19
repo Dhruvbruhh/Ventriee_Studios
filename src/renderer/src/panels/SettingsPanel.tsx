@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { guard, useStore } from '../store'
 import { Modal, Switch } from '../shell'
 import { ENGINE_LABELS, type Agent, type EngineKind } from '../../../shared/types'
+// CLI adapters spawn a process per request; mirrors isCliEngine in main.
+const isCliEngine = (engine: EngineKind) => engine.startsWith('cli-')
 import { IconClose, IconCheck, IconPlus, IconRefresh, IconTrash } from '../icons'
 import { ModelPicker, resolveModel } from '../components/ModelPicker'
 import { AddProviderDialog } from '../components/AddProviderDialog'
@@ -595,6 +597,22 @@ function RunPolicy() {
           onPick={(option) => { const r = resolveModel(option, snapshot.providerConfigs); void update({ optimizerEngine: r.engine, optimizerModel: r.model, optimizerEndpoint: r.endpoint }) }}
           onAddProvider={() => useStore.getState().notify('Add local models under Engines, or start Ollama and reopen Settings.', 'info')} />
         {settings.optimizerModel ? <button className="btn tiny" onClick={() => void update({ optimizerModel: '' })}>Use planner</button> : null}
+      </div>
+
+      <div className="section-label" style={{ marginTop: 14 }}>Inline completions</div>
+      <div className="kv-row">
+        <div className="kv-row-main">
+          <div className="kv-row-title">Suggest code as you type</div>
+          <div className="kv-row-sub">
+            {settings.completionModel
+              ? isCliEngine(settings.completionEngine) ? `${settings.completionModel} is a command-line agent, too slow to answer each keystroke. Pick an API or local model.` : `On: ${settings.completionModel} suggests code after a short pause in typing; Tab accepts.`
+              : 'Off.'} Code near the cursor is sent to this model. A small local Ollama coding model keeps it free and private.
+          </div>
+        </div>
+        <ModelPicker compact value={settings.completionModel ? { engine: settings.completionEngine, model: settings.completionModel, endpoint: settings.completionEndpoint, providerId: null } : null}
+          onPick={(option) => { const r = resolveModel(option, snapshot.providerConfigs); void update({ completionEngine: r.engine, completionModel: r.model, completionEndpoint: r.endpoint }) }}
+          onAddProvider={() => useStore.getState().notify('Add local models under Engines, or start Ollama and reopen Settings.', 'info')} />
+        {settings.completionModel ? <button className="btn tiny" onClick={() => void update({ completionModel: '' })}>Turn off</button> : null}
       </div>
 
       <div className="section-label" style={{ marginTop: 14 }}>Run</div>
