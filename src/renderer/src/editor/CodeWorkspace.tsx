@@ -502,6 +502,9 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   }, [vimMode])
   useEffect(() => { void loadExtensions(editorTheme) }, [editorTheme])
   const iconThemeId = useStore((s) => s.snapshot?.settings.iconTheme ?? '')
+  const terminalShell = useStore((s) => s.snapshot?.settings.terminalShell ?? 'default')
+  const [shellList, setShellList] = useState<Array<{ id: string; label: string }>>([])
+  useEffect(() => { void window.ventriee.termShells().then(setShellList, () => {}) }, [])
   useEffect(() => { void loadIconTheme(iconThemeId) }, [iconThemeId])
   const icons = useIconTheme()
   useEffect(() => {
@@ -856,9 +859,9 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
           <button role="tab" aria-selected={panel === 'problems'} className={panel === 'problems' ? 'on' : ''} onClick={() => setPanel('problems')}>Problems <span className="badge">{problems.length}</span></button>
           <button role="tab" aria-selected={panel === 'debug'} className={panel === 'debug' ? 'on' : ''} onClick={() => setPanel('debug')}>Debug{debugLive ? <span className="badge">{debug.status}</span> : null}</button>
           {run ? <button role="tab" aria-selected={panel === 'run'} className={panel === 'run' ? 'on' : ''} onClick={() => setPanel('run')} title={run.command}>{run.label}</button> : null}
-          <span className="grow" /><button className="tab-close" aria-label="Close panel" onClick={() => setPanel(null)}><IconClose width={12} height={12} aria-hidden /></button></div>
+          <span className="grow" />{panel === 'terminal' && shellList.length > 1 ? <select className="shell-pick" aria-label="Shell for the terminal" value={shellList.some((s) => s.id === terminalShell) ? terminalShell : 'default'} onChange={(e) => void guard(() => window.ventriee.saveSettings({ terminalShell: e.target.value }))}>{shellList.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select> : null}<button className="tab-close" aria-label="Close panel" onClick={() => setPanel(null)}><IconClose width={12} height={12} aria-hidden /></button></div>
         {run ? <div className="code-run" style={{ display: panel === 'run' ? undefined : 'none' }}><TerminalView key={run.key} projectId={project.id} slot={`run-${run.key}`} label={run.label} command={run.command} closeOnUnmount /></div> : null}
-        {panel === 'run' ? null : panel === 'terminal' ? <TerminalView projectId={project.id} slot="panel" label="Terminal" />
+        {panel === 'run' ? null : panel === 'terminal' ? <TerminalView key={terminalShell} projectId={project.id} slot={`panel-${terminalShell}`} label="Terminal" shell={terminalShell} />
           : panel === 'debug' ? <div className="code-debug">
             <div className="debug-bar">
               {debugLive ? <button className="btn tiny" onClick={() => void window.ventriee.debugStop()}>Stop</button>

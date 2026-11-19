@@ -407,6 +407,8 @@ export interface AppSettings {
   errorReports: boolean
   /** File icon theme from an installed extension (`<extension>/<theme>`); '' is the built-in look. */
   iconTheme: string
+  /** Shell for the Terminal panel, an id from the detected list ('default', 'pwsh', 'git-bash', 'wsl:Ubuntu', …). */
+  terminalShell: string
   /** Spending caps per day, across all projects and per project, in USD; 0 is off. */
   dailyBudgetUsd: number
   projectBudgetUsd: number

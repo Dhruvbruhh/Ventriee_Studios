@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { TerminalService } from '../src/main/terminal'
+import { TerminalService, shells, wslDistros } from '../src/main/terminal'
 
 const service = new TerminalService()
 const dir = mkdtempSync(join(tmpdir(), 'ventriee-term-'))
@@ -34,4 +34,24 @@ describe('terminal service', () => {
   it('refuses a missing folder', () => {
     expect(() => service.open(1, join(dir, 'missing'), 80, 24, () => {}, () => {})).toThrow('does not exist')
   })
+})
+
+describe('shells', () => {
+  it('reads WSL distro names from its UTF-16 output', () => {
+    expect(wslDistros(Buffer.from('Ubuntu\r\n\r\nDebian\r\n', 'utf16le'))).toEqual(['Ubuntu', 'Debian'])
+    expect(wslDistros(Buffer.alloc(0))).toEqual([])
+  })
+
+  it('opens a picked shell, and only one from the detected list', async () => {
+    const list = shells()
+    expect(list[0].id).toBe('default')
+    const bash = list.find((s) => s.id === 'git-bash')
+    if (!bash) return
+    let output = ''
+    const id = service.open(1, dir, 80, 24, (_id, data) => { output += data }, () => {}, 'git-bash')
+    service.write(1, id, 'echo "B_$((6*7))"\r')
+    for (let i = 0; i < 150 && !output.includes('B_42'); i++) await new Promise((r) => setTimeout(r, 100))
+    expect(output).toContain('B_42')
+    expect(() => service.open(1, dir, 80, 24, () => {}, () => {}, 'C:\evil.exe')).not.toThrow()
+  }, 40_000)
 })

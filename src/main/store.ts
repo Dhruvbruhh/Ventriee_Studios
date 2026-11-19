@@ -55,6 +55,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   keybindings: [],
   errorReports: false,
   iconTheme: '',
+  terminalShell: 'default',
   dailyBudgetUsd: 0,
   projectBudgetUsd: 0,
   completionEndpoint: '',

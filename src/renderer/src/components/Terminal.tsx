@@ -33,7 +33,7 @@ function closeOtherProjects(projectId: string) {
 }
 
 /** `closeOnUnmount` is for one-off terminals (sign-in, install): their shell ends with the view instead of living on. */
-export function TerminalView({ projectId, slot: name, label, command, closeOnUnmount }: { projectId: string; slot: string; label: string; command?: string; closeOnUnmount?: boolean }) {
+export function TerminalView({ projectId, slot: name, label, command, closeOnUnmount, shell }: { projectId: string; slot: string; label: string; command?: string; closeOnUnmount?: boolean; shell?: string }) {
   const host = useRef<HTMLDivElement>(null)
   const [error, setError] = useState('')
   const [exited, setExited] = useState(false)
@@ -59,7 +59,7 @@ export function TerminalView({ projectId, slot: name, label, command, closeOnUnm
       if (slot.id) { void window.ventriee.termResize(slot.id, term.cols, term.rows).catch(() => {}); return }
       slot.exited = null; setExited(false)
       try {
-        const id = await window.ventriee.termOpen(projectId, term.cols, term.rows)
+        const id = await window.ventriee.termOpen(projectId, term.cols, term.rows, shell)
         if (!alive && closeOnUnmount) { void window.ventriee.termClose(id).catch(() => {}); return }
         slot.id = id
         if (alive) setError('')
@@ -76,7 +76,7 @@ export function TerminalView({ projectId, slot: name, label, command, closeOnUnm
       alive = false; observer.disconnect(); input.dispose(); slot.listeners.delete(listener); term.dispose()
       if (closeOnUnmount) { if (slot.id) void window.ventriee.termClose(slot.id).catch(() => {}); slots.delete(key) }
     }
-  }, [projectId, name, generation, command, closeOnUnmount])
+  }, [projectId, name, generation, command, closeOnUnmount, shell])
   const restart = () => {
     const slot = slots.get(`${projectId}:${name}`)
     if (slot) { if (slot.id) void window.ventriee.termClose(slot.id).catch(() => {}); slot.id = null; slot.buffer = '' }

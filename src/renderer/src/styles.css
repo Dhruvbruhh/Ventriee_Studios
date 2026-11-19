@@ -1505,3 +1505,4 @@ button.gh-line { cursor: pointer; }
 button.gh-line:hover, button.gh-line:focus-visible { background: color-mix(in srgb, var(--accent) 14%, transparent); outline: none; }
 .gh-line.add { color: #79dcb4; } .gh-line.del { color: var(--err, #f4796b); } .gh-line.hunk { color: #8ab4f8; }
 .gh-comment.inline, .gh-inline-form { margin: 4px 8px 6px 24px; font-family: var(--sans, inherit); white-space: normal; }
+.shell-pick { font-size: 11px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; margin-right: 6px; }

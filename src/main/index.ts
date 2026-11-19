@@ -18,7 +18,7 @@ import { PlanningService } from './planning'
 import { isInside } from './paths'
 import { detectProviders, testEngine, defaultEndpoint, runEngine } from './engines'
 import { IPC } from '../shared/ipc'
-import { TerminalService } from './terminal'
+import { TerminalService, shells } from './terminal'
 import { DebugSession } from './debugger'
 import { DapSession, type Debugger } from './dap'
 import { debuggerFor, launchConfigs, substitute, currentFileLaunch } from './launch'
@@ -362,10 +362,11 @@ function registerIpc() {
   handle(IPC.graphifyStatus, (event, id: string) => graphify.status(projectRoot(event, id)))
   handle(IPC.graphifyBuild, (event, id: string) => graphify.build(projectRoot(event, id)))
   handle(IPC.graphifyQuery, (event, id: string, question: string) => graphify.query(projectRoot(event, id), String(question ?? '')))
-  handle(IPC.termOpen, (event, id: string, cols: number, rows: number) => {
+  handle(IPC.termShells, () => shells().map(({ id, label }) => ({ id, label })))
+  handle(IPC.termOpen, (event, id: string, cols: number, rows: number, shell?: string) => {
     const sender = event.sender
     const send = (channel: string, payload: unknown) => { if (!sender.isDestroyed()) sender.send(channel, payload) }
-    return terminals.open(sender.id, projectRoot(event, id), cols, rows, (term, data) => send(IPC.termData, { id: term, data }), (term, code) => send(IPC.termExit, { id: term, code }))
+    return terminals.open(sender.id, projectRoot(event, id), cols, rows, (term, data) => send(IPC.termData, { id: term, data }), (term, code) => send(IPC.termExit, { id: term, code }), typeof shell === 'string' ? shell : undefined)
   })
   handle(IPC.termWrite, (event, id: string, data: string) => terminals.write(event.sender.id, id, data))
   handle(IPC.termResize, (event, id: string, cols: number, rows: number) => terminals.resize(event.sender.id, id, cols, rows))
