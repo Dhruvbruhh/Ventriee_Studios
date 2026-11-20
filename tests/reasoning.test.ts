@@ -104,6 +104,8 @@ describe('reasoning effort on the wire', () => {
     const body = JSON.parse(server.bodies[0])
     expect(body.thinking).toEqual({ type: 'disabled' })
     expect(body.reasoning_effort).toBeUndefined()
+    // GLM/Qwen on vLLM-style hosts ignore `thinking`; their chat template reads this.
+    expect(body.chat_template_kwargs).toEqual({ enable_thinking: false })
   })
 
   it('omits the field entirely on auto, so the model keeps its own default', async () => {
