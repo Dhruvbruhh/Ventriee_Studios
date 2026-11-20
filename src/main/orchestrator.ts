@@ -853,7 +853,7 @@ JSON shape:
     }
 
     const after = await this.evidenceDigest(project.path)
-    const evidence = this.checkEvidence(task, before, after, text)
+    const evidence = this.checkEvidence(task, before, after, text, written)
     const outgoing = parseMessageBlocks(text).map((m) => ({ ...m, from: agent.name }))
     this.relayMail(project, outgoing, task.id)
     for (const mail of outgoing) { try { this.mailbox(project).deliver(mail) } catch { /* the Mail tab still has it */ } }
@@ -1025,21 +1025,24 @@ ${rules}
     task: Task,
     before: { files: Map<string, number>; git: string },
     after: { files: Map<string, number>; git: string },
-    output: string
+    output: string,
+    written: string[] = []
   ): { passed: boolean; summary: string; changed: string[]; removed: string[] } {
+    // Files the studio wrote from this task's own answer are this task's, whatever folder they are in.
+    const own = new Set(written.map((w) => w.replace(/\\/g, '/')))
     const changedAll: string[] = []
     for (const [file, mtime] of after.files) {
       const prev = before.files.get(file)
-      if (!prev || prev !== mtime) changedAll.push(file)
+      if (!prev || prev !== mtime) changedAll.push(file.replace(/\\/g, '/'))
     }
-    const removedAll = [...before.files.keys()].filter((f) => !after.files.has(f))
+    const removedAll = [...before.files.keys()].filter((f) => !after.files.has(f)).map((f) => f.replace(/\\/g, '/'))
     const writes = CODE_ROLES.has(task.role)
     // With concurrent writers on disjoint scopes, the workspace changes during this
     // task's window include other workers' files. Count only files this role owns,
     // plus root-level shared files (package.json, tsconfig, lockfiles).
     const scope = scopeFor(task.role)
     const inScope = (file: string) => {
-      if (scope.includes(STAR)) return true
+      if (scope.includes(STAR) || own.has(file.replace(/\\/g, '/'))) return true
       const sepIdx = file.search(/[\\/]/)
       if (sepIdx < 0) return true
       return scope.includes(file.slice(0, sepIdx))

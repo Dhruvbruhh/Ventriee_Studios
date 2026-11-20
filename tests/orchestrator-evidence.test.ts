@@ -53,19 +53,21 @@ function orchestrator(): Orchestrator {
   })
 }
 
-const check = (o: Orchestrator, task: Task, beforeFiles: Record<string, number>, afterFiles: Record<string, number>, output: string) =>
+const check = (o: Orchestrator, task: Task, beforeFiles: Record<string, number>, afterFiles: Record<string, number>, output: string, written: string[] = []) =>
   (o as unknown as {
     checkEvidence: (
       task: Task,
       before: { files: Map<string, number>; git: string },
       after: { files: Map<string, number>; git: string },
-      output: string
+      output: string,
+      written?: string[]
     ) => { passed: boolean; changed: string[]; removed: string[] }
   }).checkEvidence(
     task,
     { files: new Map(Object.entries(beforeFiles)), git: '' },
     { files: new Map(Object.entries(afterFiles)), git: '' },
-    output
+    output,
+    written
   )
 
 describe('evidence scoping', () => {
@@ -81,6 +83,13 @@ describe('evidence scoping', () => {
     const r = check(o, makeTask('frontend'), {}, { 'server/api.ts': 1 }, 'typed for an hour with nothing to show. summary summary summary summary')
     expect(r.passed).toBe(false)
     expect(r.changed).toEqual([])
+  })
+
+  it('counts a file the studio wrote from the task answer even outside its scope (a QA report in docs/)', () => {
+    const o = orchestrator()
+    const r = check(o, makeTask('frontend'), {}, { 'docs/qa-report.md': 3, 'server/other.ts': 3 }, 'wrote the report with every finding listed. summary summary summary summary', ['docs/qa-report.md'])
+    expect(r.passed).toBe(true)
+    expect(r.changed).toEqual(['docs/qa-report.md'])
   })
 
   it('counts root-level shared files for any writer', () => {
