@@ -401,6 +401,10 @@ export interface AppSettings {
   /** Monaco theme: 'ventriee' or an installed extension theme id. */
   editorTheme: string
   vimMode: boolean
+  /** Save edited files a second after typing stops. */
+  autoSave: boolean
+  /** Format with the project's Prettier (or the language's formatter) before each save. */
+  formatOnSave: boolean
   /** Owner keyboard shortcuts: a Monaco/studio command id and a key chord like "ctrl+shift+k"; '-' before the id removes a default. */
   keybindings: Array<{ key: string; command: string }>
   /** Opt-in: keep a local log of crashes and errors for "Report a problem". */

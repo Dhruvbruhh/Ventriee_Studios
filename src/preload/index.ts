@@ -8,6 +8,7 @@ const api: VentrieeApi = {
   filesSearch: (id, query, caseSensitive) => ipcRenderer.invoke(IPC.filesSearch, id, query, caseSensitive),
   projectTypes: (id) => ipcRenderer.invoke(IPC.projectTypes, id),
   toolsFormat: (id, path, text) => ipcRenderer.invoke(IPC.toolsFormat, id, path, text),
+  editorConfig: (id, path) => ipcRenderer.invoke(IPC.editorConfig, id, path),
   toolsLint: (id, path, text) => ipcRenderer.invoke(IPC.toolsLint, id, path, text),
   codeAsk: (id, input) => ipcRenderer.invoke(IPC.codeAsk, id, input),
   codeChange: (id, input) => ipcRenderer.invoke(IPC.codeChange, id, input),

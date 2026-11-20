@@ -23,11 +23,12 @@ import { TerminalView, terminalOutput } from '../components/Terminal'
 import { matchProblems, type MatchedProblem } from '../../../shared/problems'
 import { Modal } from '../shell'
 import { guard, useStore, cleanError } from '../store'
-import type { CodeChangeResult, ProjectTask, TestResult, DebugBreakpoint, DebugFrame, DebugVariable, FileEntry, SearchResult, TextFile } from '../../../shared/workspace'
+import type { CodeChangeResult, ProjectTask, TestResult, DebugBreakpoint, DebugFrame, DebugVariable, FileEntry, SearchResult, TextFile, EditorConfig } from '../../../shared/workspace'
+import { fixWhitespace } from '../../../shared/workspace'
 import type { Catalog } from '../../../shared/catalog'
 import type { Project } from '../../../shared/types'
 
-interface Tab { file: TextFile; model: monaco.editor.ITextModel; saved: string; subscription: monaco.IDisposable; view?: monaco.editor.ICodeEditorViewState | null; readOnly?: boolean }
+interface Tab { file: TextFile; model: monaco.editor.ITextModel; saved: string; subscription: monaco.IDisposable; view?: monaco.editor.ICodeEditorViewState | null; readOnly?: boolean; config?: EditorConfig }
 type Change = CodeChangeResult['changes'][number]
 interface Diff { path: string; original: string; modified: string; staged: boolean; label?: string; proposal?: boolean; change?: Change; restore?: string }
 interface Proposal { path: string; range: monaco.IRange; versionId: number; replacement: string }
@@ -108,7 +109,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const selected = useRef<string | null>(null)
   const [active, setActive] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
-  const [, setRender] = useState(0)
+  const [edits, setRender] = useState(0)
   const [sidebar, setSidebar] = useState<'files' | 'search' | 'git' | 'graph' | 'agents' | 'extensions' | 'tests' | 'outline' | 'history' | 'github'>('files')
   const [versions, setVersions] = useState<Array<{ id: string; time: number; size: number }>>([])
   const tests = useTests(project.id)
@@ -224,6 +225,12 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         if (existing && existing.getValue() !== file.text) existing.setValue(file.text)
         const model = existing ?? monaco.editor.createModel(file.text, languageFor(path), uri)
         tabs.current.set(path, { file, model, saved: model.getValue(), subscription: model.onDidChangeContent(changed) })
+        void window.ventriee.editorConfig(project.id, path).then((config) => {
+          const tab = tabs.current.get(path)
+          if (!tab || tab.model.isDisposed()) return
+          tab.config = config
+          tab.model.updateOptions({ ...(config.indentStyle ? { insertSpaces: config.indentStyle === 'space' } : {}), ...(config.indentSize ? { tabSize: config.indentSize, indentSize: config.indentSize } : {}) })
+        }, () => {})
       }
       if (focus && request === opening.current) activate(path)
       changed()
@@ -384,17 +391,46 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     return true
   }
   const acceptAll = async () => { for (const c of [...changes]) if (!(await acceptChange(c))) break }
-  const save = async (all = false) => {
+  /** Replace a tab's text as one undoable edit, keeping the cursor where it was. */
+  const rewrite = (model: monaco.editor.ITextModel, text: string) => {
+    const selections = editor.current?.getModel() === model ? editor.current.getSelections() : null
+    model.pushStackElement()
+    model.pushEditOperations([], [{ range: model.getFullModelRange(), text }], () => selections)
+    model.pushStackElement()
+  }
+  /** Format on save (when on), then the .editorconfig rules, as edits the owner can undo. */
+  const tidy = async (tab: Tab) => {
+    if (useStore.getState().snapshot?.settings.formatOnSave) {
+      const before = tab.model.getValue()
+      let formatted: string | null = before
+      try { formatted = await window.ventriee.toolsFormat(project.id, tab.file.path, before) } catch (error) { useStore.getState().notify(cleanError(error), 'error') }
+      if (tab.model.isDisposed()) return
+      if (formatted === null) { if (tab.file.path === selected.current) await editor.current?.getAction('editor.action.formatDocument')?.run() }
+      else if (formatted !== before && tab.model.getValue() === before) rewrite(tab.model, formatted)
+    }
+    const config = tab.config
+    if (!config || tab.model.isDisposed()) return
+    const text = tab.model.getValue()
+    const fixed = fixWhitespace(text, config)
+    if (fixed !== text) rewrite(tab.model, fixed)
+    const want = config.endOfLine === 'crlf' ? monaco.editor.EndOfLineSequence.CRLF : config.endOfLine === 'lf' ? monaco.editor.EndOfLineSequence.LF : null
+    if (want !== null && tab.model.getEndOfLineSequence() !== want) tab.model.pushEOL(want)
+  }
+  /** `auto` saves the text as typed: formatting and whitespace rules mid-typing would move the cursor (VS Code skips them too). */
+  const save = async (all = false, auto = false) => {
     if (saving.current) return
     saving.current = true; setBusy(true)
     let current = ''
     try {
       const targets = all ? [...tabs.current.values()] : active && tabs.current.has(active) ? [tabs.current.get(active)!] : []
       for (const tab of targets) {
-        if (tab.readOnly) continue
+        // Ctrl+S on the current file tidies it even when auto save already wrote it.
+        if (tab.readOnly || ((auto || all) && tab.model.getValue() === tab.saved)) continue
+        current = tab.file.path
+        if (!auto) await tidy(tab)
+        if (tab.model.isDisposed()) continue
         const text = tab.model.getValue()
         if (text === tab.saved) continue
-        current = tab.file.path
         const result = await window.ventriee.filesSave(project.id, { ...tab.file, text })
         if (!mounted.current || tab.model.isDisposed()) continue
         tab.file = result; tab.saved = text
@@ -495,6 +531,14 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   useEffect(() => { const rules = applyKeybindings(keybindings); return () => rules.dispose() }, [keybindingKey])
   const [keysOpen, setKeysOpen] = useState(false)
   const vimMode = useStore((s) => s.snapshot?.settings.vimMode ?? false)
+  const autoSave = useStore((s) => s.snapshot?.settings.autoSave ?? false)
+  const formatOnSave = useStore((s) => s.snapshot?.settings.formatOnSave ?? false)
+  // Auto save: a second after the last edit, while no save is running and no file is in conflict with the disk.
+  useEffect(() => {
+    if (!autoSave || conflict || ![...tabs.current.values()].some((t) => !t.readOnly && t.model.getValue() !== t.saved)) return
+    const timer = setTimeout(() => void save(true, true), 1000)
+    return () => clearTimeout(timer)
+  }, [edits, autoSave, conflict])
   const vimStatus = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     if (!vimMode || !editor.current || !vimStatus.current) return
@@ -794,6 +838,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
     { label: 'Tasks: Run task…', run: openTasks },
     { label: 'Preferences: Keyboard shortcuts', run: () => setKeysOpen(true) },
     { label: `Preferences: ${vimMode ? 'Turn off' : 'Turn on'} Vim mode`, run: () => void guard(() => window.ventriee.saveSettings({ vimMode: !vimMode })) },
+    { label: `Preferences: ${autoSave ? 'Turn off' : 'Turn on'} auto save`, run: () => void guard(() => window.ventriee.saveSettings({ autoSave: !autoSave })) },
+    { label: `Preferences: ${formatOnSave ? 'Turn off' : 'Turn on'} format on save`, run: () => void guard(() => window.ventriee.saveSettings({ formatOnSave: !formatOnSave })) },
     { label: 'Test: Run all tests', run: () => { setSidebar('tests'); tests.run() }, disabled: !tests.runner },
     { label: 'Test: Run tests in this file', run: () => { setSidebar('tests'); tests.run({ file: active! }) }, disabled: !tests.runner || !active },
     { label: 'Test: Run the test at the cursor', run: () => { const name = tab ? testAt(tab.model.getValue(), cursor.lineNumber) : null; if (name) { setSidebar('tests'); tests.run({ name }) } else useStore.getState().notify('No test found above the cursor', 'info') }, disabled: !tests.runner || !tab },

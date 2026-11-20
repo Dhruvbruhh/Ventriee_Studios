@@ -4,6 +4,7 @@ import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
 import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+import { emmetCSS, emmetHTML, emmetJSX } from 'emmet-monaco-es'
 
 ;(self as typeof self & { MonacoEnvironment: { getWorker(id: string, label: string): Worker } }).MonacoEnvironment = { getWorker(_id: string, label: string) {
   if (label === 'json') return new JsonWorker()
@@ -17,6 +18,10 @@ monaco.editor.defineTheme('ventriee', { base: 'vs-dark', inherit: true, rules: [
   'editor.selectionBackground': '#4a3c6c80', 'editor.inactiveSelectionBackground': '#34303f', 'editorLineNumber.activeForeground': '#d6c6fb'
 } })
 monaco.editor.setTheme('ventriee')
+// Emmet abbreviations (div.card>p*3) as completions in markup, styles and JSX.
+emmetHTML(monaco, ['html', 'php', 'handlebars', 'razor'])
+emmetCSS(monaco, ['css', 'scss', 'less'])
+emmetJSX(monaco, ['javascript', 'typescript'])
 export interface SupportedLanguage { id: string; filenames?: string[]; extensions?: string[]; aliases?: string[] }
 export function editorLanguages(): SupportedLanguage[] { return monaco.languages.getLanguages() }
 export function languageFor(path: string) {

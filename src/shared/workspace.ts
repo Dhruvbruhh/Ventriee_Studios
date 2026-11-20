@@ -52,3 +52,20 @@ export type GithubAction =
   | { kind: 'comment'; number: number; body: string; issue?: boolean } | { kind: 'merge'; number: number; method: 'merge' | 'squash' | 'rebase' }
   | { kind: 'lineComments'; number: number } | { kind: 'lineComment'; number: number; path: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }
 
+/** The .editorconfig properties the editor applies. */
+export interface EditorConfig {
+  indentStyle?: 'tab' | 'space'
+  indentSize?: number
+  trimTrailingWhitespace?: boolean
+  insertFinalNewline?: boolean
+  endOfLine?: 'lf' | 'crlf'
+}
+
+/** Apply an .editorconfig's whitespace rules to the text being saved. */
+export function fixWhitespace(text: string, config: EditorConfig): string {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n'
+  let out = config.trimTrailingWhitespace ? text.replace(/[ \t]+(?=\r?\n|$)/g, '') : text
+  if (config.insertFinalNewline === true && out && !out.endsWith('\n')) out += eol
+  if (config.insertFinalNewline === false) out = out.replace(/(\r?\n)+$/, '')
+  return out
+}
