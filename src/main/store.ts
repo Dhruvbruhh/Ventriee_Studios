@@ -52,6 +52,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   completionModel: '',
   editorTheme: 'ventriee',
   vimMode: false,
+  autoSave: false,
+  formatOnSave: false,
   keybindings: [],
   errorReports: false,
   iconTheme: '',

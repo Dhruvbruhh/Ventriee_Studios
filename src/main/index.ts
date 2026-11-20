@@ -33,6 +33,7 @@ import { baseCatalog, type Catalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
 import { projectTypes } from './typeindex'
 import { eslintFile, prettierFormat } from './projecttools'
+import { editorConfigFor } from './editorconfig'
 import { CheckpointService } from './checkpoint'
 import { summarizeRuns } from './runs'
 import { validMcpServers, writeMcpConfig } from './mcp'
@@ -313,6 +314,7 @@ function registerIpc() {
   handle(IPC.filesList, (event, id: string, path = '') => files.list(projectRoot(event, id), path))
   handle(IPC.filesFind, (event, id: string, query: string) => files.find(projectRoot(event, id), query))
   handle(IPC.toolsFormat, (event, id: string, path: string, text: string) => prettierFormat(projectRoot(event, id), path, String(text)))
+  handle(IPC.editorConfig, (event, id: string, path: string) => { const root = projectRoot(event, id); return editorConfigFor(root, workspacePath(root, path)) })
   handle(IPC.toolsLint, (event, id: string, path: string, text: string) => eslintFile(projectRoot(event, id), path, String(text)))
   handle(IPC.projectTypes, (event, id: string) => projectTypes(projectRoot(event, id), files))
   handle(IPC.filesSearch, (event, id: string, query: string, caseSensitive: boolean) => files.search(projectRoot(event, id), query, caseSensitive === true))
@@ -445,15 +447,15 @@ function registerIpc() {
   // Settings sync: editor preferences and the extension list only; never keys, endpoints or MCP settings.
   handle(IPC.syncPush, async () => {
     const s = store.settings()
-    const payload = { editorTheme: s.editorTheme, iconTheme: s.iconTheme, vimMode: s.vimMode, keybindings: s.keybindings, extensions: extensions.list().map((e) => e.id), syncedAt: Date.now() }
+    const payload = { editorTheme: s.editorTheme, iconTheme: s.iconTheme, vimMode: s.vimMode, autoSave: s.autoSave, formatOnSave: s.formatOnSave, keybindings: s.keybindings, extensions: extensions.list().map((e) => e.id), syncedAt: Date.now() }
     await auth.saveSyncedData({ ventrieeSync: payload })
     return payload.syncedAt
   })
   handle(IPC.syncPull, async () => {
-    const data = (await auth.syncedData()).ventrieeSync as { editorTheme?: unknown; iconTheme?: unknown; vimMode?: unknown; keybindings?: unknown; extensions?: unknown; syncedAt?: number } | undefined
+    const data = (await auth.syncedData()).ventrieeSync as { editorTheme?: unknown; iconTheme?: unknown; vimMode?: unknown; autoSave?: unknown; formatOnSave?: unknown; keybindings?: unknown; extensions?: unknown; syncedAt?: number } | undefined
     if (!data) return null
     const keybindings = Array.isArray(data.keybindings) ? data.keybindings.filter((b): b is { key: string; command: string } => typeof b?.key === 'string' && typeof b?.command === 'string').slice(0, 500) : []
-    store.saveSettings({ ...(typeof data.editorTheme === 'string' ? { editorTheme: data.editorTheme } : {}), ...(typeof data.iconTheme === 'string' ? { iconTheme: data.iconTheme } : {}), vimMode: data.vimMode === true, keybindings })
+    store.saveSettings({ ...(typeof data.editorTheme === 'string' ? { editorTheme: data.editorTheme } : {}), ...(typeof data.iconTheme === 'string' ? { iconTheme: data.iconTheme } : {}), vimMode: data.vimMode === true, autoSave: data.autoSave === true, formatOnSave: data.formatOnSave === true, keybindings })
     debouncedNotify()
     const have = new Set(extensions.list().map((e) => e.id))
     return { syncedAt: Number(data.syncedAt ?? 0), missingExtensions: (Array.isArray(data.extensions) ? data.extensions : []).filter((x): x is string => typeof x === 'string' && !have.has(x)).slice(0, 100) }

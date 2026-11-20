@@ -25,10 +25,10 @@ import type {
   Task
 } from './types'
 import type { Catalog, LspEvent, LspStatus } from './catalog'
-import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, GithubAction, ProjectTask, TestEvent, ExtensionContributions, FileIconTheme, NotebookEvent, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput } from './workspace'
+import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, GithubAction, ProjectTask, TestEvent, ExtensionContributions, FileIconTheme, NotebookEvent, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput, EditorConfig } from './workspace'
 
 export const IPC = {
-  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', projectTypes: 'files:project-types', toolsFormat: 'tools:format', toolsLint: 'tools:lint', codeAsk: 'code:ask', codeChange: 'code:change', codeComplete: 'code:complete', runsList: 'runs:list', spendToday: 'spend:today', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
+  filesList: 'files:list', filesRead: 'files:read', filesSave: 'files:save', filesCreate: 'files:create', filesRename: 'files:rename', filesTrash: 'files:trash', filesFind: 'files:find', filesSearch: 'files:search', projectTypes: 'files:project-types', toolsFormat: 'tools:format', editorConfig: 'editor:config', toolsLint: 'tools:lint', codeAsk: 'code:ask', codeChange: 'code:change', codeComplete: 'code:complete', runsList: 'runs:list', spendToday: 'spend:today', runChanges: 'runs:changes', runUndo: 'runs:undo', updateState: 'update:state', updateCheck: 'update:check', updateInstall: 'update:install', updateChanged: 'update:changed',
   gitStatus: 'git:status', gitDiff: 'git:diff', gitAction: 'git:action', gitLineChanges: 'git:line-changes', gitBlame: 'git:blame',
   termOpen: 'term:open', termShells: 'term:shells', termWrite: 'term:write', termResize: 'term:resize', termClose: 'term:close', termData: 'term:data', termExit: 'term:exit',
   debugStart: 'debug:start', debugConfigs: 'debug:configs', debugVariables: 'debug:variables', debugThread: 'debug:thread', debugCommand: 'debug:command', debugEvaluate: 'debug:evaluate', debugBreakpoints: 'debug:breakpoints', debugStop: 'debug:stop', debugEvent: 'debug:event',
@@ -127,6 +127,7 @@ export interface VentrieeApi {
   filesSearch(projectId: string, query: string, caseSensitive: boolean): Promise<SearchResult>
   projectTypes(projectId: string): Promise<ProjectTypes>
   toolsFormat(projectId: string, path: string, text: string): Promise<string | null>
+  editorConfig(projectId: string, path: string): Promise<EditorConfig>
   toolsLint(projectId: string, path: string, text: string): Promise<LintMessage[]>
   codeAsk(projectId: string, input: CodeAskInput): Promise<CodeAskResult>
   codeChange(projectId: string, input: CodeChangeInput): Promise<CodeChangeResult>
