@@ -218,3 +218,24 @@ describe('truncated replies', { timeout: 20_000 }, () => {
     expect(existsSync(join(workspace, 'tsconfig.json'))).toBe(false)
   })
 })
+
+// HHH project: GLM on Deploy spent the whole 16000 tokens thinking even with thinking
+// set to Off, and the retry (skipped for an Off worker, and at the same limit) could
+// not help. A probe showed it still thinks when told not to, so the retry gets room.
+const thinkingOnly = `${chunk({ reasoning: 'Let me plan the stylesheet carefully...' }, 'length')}data: [DONE]\n\n`
+describe('replies that are only thinking', { timeout: 20_000 }, () => {
+  it('retry once with thinking off and twice the room, even for a worker already set to Off', async () => {
+    const { bodies, store, task, workspace } = await runFrontend((attempt) =>
+      attempt === 1 ? thinkingOnly : complete('=== FILE: styles.css ===\nbody { margin: 0 }\n=== END FILE ===\n'))
+    expect(bodies.map((b) => b.max_tokens)).toEqual([16000, 32000])
+    expect(store.task(task.id)?.status).toBe('done')
+    expect(readFileSync(join(workspace, 'styles.css'), 'utf8')).toBe('body { margin: 0 }\n')
+  })
+
+  it('fail with the real limit when the bigger retry is only thinking too', async () => {
+    const { bodies, store, task } = await runFrontend(() => thinkingOnly)
+    expect(bodies.length).toBe(2)
+    expect(store.task(task.id)?.status).toBe('failed')
+    expect(store.task(task.id)?.review).toContain('32000-token output budget reasoning')
+  })
+})

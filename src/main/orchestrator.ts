@@ -721,10 +721,12 @@ JSON shape:
 
     let result = await runOnce(sessionId, effort, WORKER_MAX_TOKENS)
     // Probes on Deploy: 'none' delivers files in seconds, while low/minimal/absent all
-    // burn the whole budget thinking. One automatic retry with thinking off beats
-    // failing a task that only wanted an answer. CLI engines are skipped: they manage
-    // their own loop and the flag differs per tool.
-    if (result.ok && result.reasoningOnly && effort !== 'none' && !isCliEngine(run.engine)) {
+    // burn the whole budget thinking. Some models keep thinking even with it off (a
+    // probe of Deploy's GLM 5.3 flash: 50 of 53 tokens were reasoning), so the one
+    // automatic retry also gets twice the output room: the thinking fits and the answer
+    // still comes after it. It runs even when the worker is already set to Off. CLI
+    // engines are skipped: they manage their own loop and the flag differs per tool.
+    if (result.ok && result.reasoningOnly && !isCliEngine(run.engine)) {
       const retryId = newId('ses')
       this.deps.store.insertSession({ ...session, id: retryId, reasoning: 'none', startedAt: Date.now() })
       this.log(
@@ -732,7 +734,7 @@ JSON shape:
         agent.id,
         task.id,
         'note',
-        `${agent.name}'s model spent its budget reasoning; retrying once with thinking off`
+        `${agent.name}'s model spent its budget reasoning; retrying once with thinking off and ${WORKER_RETRY_TOKENS} tokens of room`
       )
       this.deps.store.addMessage({
         projectId: project.id,
@@ -740,10 +742,10 @@ JSON shape:
         sender: agent.id,
         recipient: 'orchestrator',
         type: 'note',
-        content: `${agent.name}'s first attempt produced only reasoning. Retried with reasoning effort set to off. Set "Off" on this worker in Settings to avoid the extra session.`,
+        content: `${agent.name}'s first attempt produced only reasoning. Retried with thinking off and a ${WORKER_RETRY_TOKENS}-token output limit.${effort === 'none' ? ' This model thinks even when told not to; a model without built-in thinking avoids the extra session.' : ' Set "Off" on this worker in Settings to avoid the extra session.'}`,
         status: 'read'
       })
-      result = await runOnce(retryId, 'none', WORKER_MAX_TOKENS)
+      result = await runOnce(retryId, 'none', WORKER_RETRY_TOKENS)
     }
     // A reply cut off at the cap is half a deliverable. Repeating the prompt just hits
     // the same wall, and a bigger budget only moves it: run #20 retried a designer at

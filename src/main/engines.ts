@@ -429,7 +429,8 @@ async function openaiCompatible(
     const thinkingDisable = thinkingOff
       ? input.engine === 'api-deepseek'
         ? { thinking: { type: 'disabled' } }
-        // Deploy hosts open models (GLM, Qwen) on vLLM-style servers: their chat template reads enable_thinking.
+        // Deploy hosts open models (GLM, Qwen); chat-template servers read enable_thinking. Deploy's GLM 5.3 flash
+        // accepts both fields and still thinks briefly, so the orchestrator's retry also gives it more room.
         : input.engine === 'api-deploy'
           ? { thinking: { type: 'disabled' }, chat_template_kwargs: { enable_thinking: false } }
           : {}
