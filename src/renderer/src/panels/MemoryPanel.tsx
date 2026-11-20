@@ -81,6 +81,8 @@ export function MemoryPanel({ onClose }: { onClose: () => void }) {
                 </button>
                 <button
                   className="btn tiny danger"
+                  aria-label={`Delete ${doc.title}`}
+                  title="Delete"
                   onClick={async () => {
                     if (!window.confirm(`Delete "${doc.title}"? The markdown file is removed too.`)) return
                     await guard(() => window.ventriee.deleteMemory(doc.id), 'Memory deleted')
@@ -115,22 +117,22 @@ function MemoryEditor({ doc, onClose }: { doc: Partial<MemoryDoc>; onClose: () =
       <div className="row">
         <div className="field">
           <label className="field-label">Title</label>
-          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+          <input aria-label="Title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
         </div>
         <div className="field">
           <label className="field-label">Scope</label>
-          <select className="select" value={scope} onChange={(e) => setScope(e.target.value as MemoryDoc['scope'])}>
+          <select aria-label="Scope" className="select" value={scope} onChange={(e) => setScope(e.target.value as MemoryDoc['scope'])}>
             {['global', 'project', 'agent', 'skill'].map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
       </div>
       <div className="field">
         <label className="field-label">File path (relative to the memory root)</label>
-        <input className="input mono" value={path} onChange={(e) => setPath(e.target.value)} placeholder={suggested} />
+        <input aria-label="File path (relative to the memory root)" className="input mono" value={path} onChange={(e) => setPath(e.target.value)} placeholder={suggested} />
       </div>
       <div className="field">
         <label className="field-label">Content (markdown)</label>
-        <textarea className="textarea mono" style={{ minHeight: 150 }} value={body} onChange={(e) => setBody(e.target.value)} />
+        <textarea aria-label="Content (markdown)" className="textarea mono" style={{ minHeight: 150 }} value={body} onChange={(e) => setBody(e.target.value)} />
       </div>
       <div className="flex gap-8">
         <button

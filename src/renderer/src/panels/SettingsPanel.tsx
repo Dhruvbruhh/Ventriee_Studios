@@ -297,17 +297,17 @@ function AgentForm({ agent }: { agent: Agent }) {
       <div className="row">
         <div className="field">
           <label className="field-label">Name</label>
-          <input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+          <input aria-label="Name" className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
         </div>
         <div className="field">
           <label className="field-label">Title</label>
-          <input className="input" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+          <input aria-label="Title" className="input" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
         </div>
       </div>
       <div className="row">
         <div className="field">
           <label className="field-label">Role</label>
-          <select className="select" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })}>
+          <select aria-label="Role" className="select" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })}>
             {['orchestrator', 'researcher', 'architect', 'designer', 'frontend', 'integration', 'backend', 'reviewer', 'fixer', 'qa', 'seo', 'aeo', 'deployment', 'monitoring'].map((r) => (
               <option key={r} value={r}>{r}</option>
             ))}
@@ -315,7 +315,7 @@ function AgentForm({ agent }: { agent: Agent }) {
         </div>
         <div className="field">
           <label className="field-label">Engine</label>
-          <select
+          <select aria-label="Engine"
             className="select"
             value={draft.engine}
             onChange={(e) => setDraft({ ...draft, engine: e.target.value as EngineKind })}
@@ -346,7 +346,7 @@ function AgentForm({ agent }: { agent: Agent }) {
         </div>
         <div className="field">
           <label className="field-label">Autonomy</label>
-          <select className="select" value={draft.autonomy} onChange={(e) => setDraft({ ...draft, autonomy: e.target.value as Agent['autonomy'] })}>
+          <select aria-label="Autonomy" className="select" value={draft.autonomy} onChange={(e) => setDraft({ ...draft, autonomy: e.target.value as Agent['autonomy'] })}>
             <option value="ask">Ask before acting</option>
             <option value="scoped">Scoped (recommended)</option>
             <option value="autonomous">Autonomous in workspace</option>
@@ -354,7 +354,7 @@ function AgentForm({ agent }: { agent: Agent }) {
         </div>
         <div className="field">
           <label className="field-label">Reasoning effort</label>
-          <select
+          <select aria-label="Reasoning effort"
             className="select"
             value={draft.reasoning}
             onChange={(e) => setDraft({ ...draft, reasoning: e.target.value as Agent['reasoning'] })}
@@ -370,7 +370,7 @@ function AgentForm({ agent }: { agent: Agent }) {
       </div>
       <div className="field">
         <label className="field-label">Endpoint / CLI arguments</label>
-        <input
+        <input aria-label="Endpoint / CLI arguments"
           className="input mono"
           value={draft.endpoint}
           placeholder="Leave empty for the provider default"
@@ -380,7 +380,7 @@ function AgentForm({ agent }: { agent: Agent }) {
       </div>
       <div className="field">
         <label className="field-label">Role instructions</label>
-        <textarea
+        <textarea aria-label="Role instructions"
           className="textarea mono"
           style={{ minHeight: 120 }}
           value={draft.instructions}
@@ -417,7 +417,7 @@ function AgentForm({ agent }: { agent: Agent }) {
       <div className="row" style={{ alignItems: 'flex-end' }}>
         <div className="field" style={{ maxWidth: 140 }}>
           <label className="field-label">Budget (USD)</label>
-          <input
+          <input aria-label="Budget (USD)"
             className="input"
             type="number"
             min={0}
@@ -473,17 +473,17 @@ function NewWorker({ engineDefault, onDone }: { engineDefault: EngineKind; onDon
       <div className="row">
         <div className="field">
           <label className="field-label">Name</label>
-          <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus />
+          <input aria-label="Name" className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus />
         </div>
         <div className="field">
           <label className="field-label">Title</label>
-          <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          <input aria-label="Title" className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         </div>
       </div>
       <div className="row">
         <div className="field">
           <label className="field-label">Role</label>
-          <select className="select" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+          <select aria-label="Role" className="select" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
             {['researcher', 'architect', 'designer', 'frontend', 'integration', 'backend', 'reviewer', 'fixer', 'qa', 'seo', 'aeo', 'deployment', 'monitoring', 'orchestrator'].map((r) => (
               <option key={r} value={r}>{r}</option>
             ))}
@@ -491,7 +491,7 @@ function NewWorker({ engineDefault, onDone }: { engineDefault: EngineKind; onDon
         </div>
         <div className="field">
           <label className="field-label">Engine</label>
-          <select className="select" value={form.engine} onChange={(e) => setForm({ ...form, engine: e.target.value as EngineKind })}>
+          <select aria-label="Engine" className="select" value={form.engine} onChange={(e) => setForm({ ...form, engine: e.target.value as EngineKind })}>
             {ENGINE_ORDER.map((e) => (
               <option key={e} value={e}>{ENGINE_LABELS[e]}</option>
             ))}
@@ -500,11 +500,11 @@ function NewWorker({ engineDefault, onDone }: { engineDefault: EngineKind; onDon
       </div>
       <div className="field">
         <label className="field-label">Model</label>
-        <input className="input mono" value={form.model} placeholder="engine default" onChange={(e) => setForm({ ...form, model: e.target.value })} />
+        <input aria-label="Model" className="input mono" value={form.model} placeholder="engine default" onChange={(e) => setForm({ ...form, model: e.target.value })} />
       </div>
       <div className="field">
         <label className="field-label">Instructions</label>
-        <textarea className="textarea mono" value={form.instructions} onChange={(e) => setForm({ ...form, instructions: e.target.value })} />
+        <textarea aria-label="Instructions" className="textarea mono" value={form.instructions} onChange={(e) => setForm({ ...form, instructions: e.target.value })} />
       </div>
       <button
         className="btn primary"

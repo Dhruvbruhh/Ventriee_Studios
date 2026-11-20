@@ -100,15 +100,15 @@ export function SkillsPanel({ onClose }: { onClose: () => void }) {
         <div style={{ border: '1px solid var(--line)', borderRadius: 9, padding: 12, marginBottom: 14, background: 'var(--panel)' }}>
           <div className="field">
             <label className="field-label">Name</label>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="playwright-smoke-test" />
+            <input aria-label="Name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="playwright-smoke-test" />
           </div>
           <div className="field">
             <label className="field-label">Description</label>
-            <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="One line on when to use this skill." />
+            <input aria-label="Description" className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="One line on when to use this skill." />
           </div>
           <div className="field">
             <label className="field-label">Instructions</label>
-            <textarea className="textarea mono" style={{ minHeight: 110 }} value={instructions} onChange={(e) => setInstructions(e.target.value)} />
+            <textarea aria-label="Instructions" className="textarea mono" style={{ minHeight: 110 }} value={instructions} onChange={(e) => setInstructions(e.target.value)} />
           </div>
           <button
             className="btn primary"
@@ -195,15 +195,15 @@ export function AutomationsPanel({ onClose }: { onClose: () => void }) {
       <div style={{ border: '1px solid var(--line)', borderRadius: 9, padding: 12, marginBottom: 14, background: 'var(--panel)' }}>
         <div className="field">
           <label className="field-label">Name</label>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Weekly SEO check" />
+          <input aria-label="Name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Weekly SEO check" />
         </div>
         <div className="field">
           <label className="field-label">Instruction sent to the orchestrator</label>
-          <textarea className="textarea" value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="Re-run the SEO audit and report anything that regressed." />
+          <textarea aria-label="Instruction sent to the orchestrator" className="textarea" value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="Re-run the SEO audit and report anything that regressed." />
         </div>
         <div className="field">
           <label className="field-label">Every N minutes</label>
-          <input className="input" type="number" min={5} value={interval} onChange={(e) => setInterval(Number(e.target.value))} />
+          <input aria-label="Every N minutes" className="input" type="number" min={5} value={interval} onChange={(e) => setInterval(Number(e.target.value))} />
         </div>
         <button
           className="btn primary"
