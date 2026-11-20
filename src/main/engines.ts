@@ -427,9 +427,12 @@ async function openaiCompatible(
     // the provider default, usually thinking on).
     const thinkingOff = input.reasoning === 'none'
     const thinkingDisable = thinkingOff
-      ? input.engine === 'api-deepseek' || input.engine === 'api-deploy'
+      ? input.engine === 'api-deepseek'
         ? { thinking: { type: 'disabled' } }
-        : {}
+        // Deploy hosts open models (GLM, Qwen) on vLLM-style servers: their chat template reads enable_thinking.
+        : input.engine === 'api-deploy'
+          ? { thinking: { type: 'disabled' }, chat_template_kwargs: { enable_thinking: false } }
+          : {}
       : {}
     const res = await fetch(url, {
       method: 'POST',

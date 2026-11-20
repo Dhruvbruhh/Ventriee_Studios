@@ -37,11 +37,11 @@ export function ProjectPanel({ onClose }: { onClose: () => void }) {
 
       <div className="field">
         <label className="field-label">Name</label>
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+        <input aria-label="Name" className="input" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <div className="field">
         <label className="field-label">Brief</label>
-        <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <textarea aria-label="Brief" className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
       <div className="flex gap-8">
         <button
