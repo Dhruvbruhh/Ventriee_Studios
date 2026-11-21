@@ -10,8 +10,8 @@ declare global {
 
 export type Panel = 'none' | 'settings' | 'memory' | 'skills' | 'automations' | 'project' | 'runs'
 export type RailTab = 'plan' | 'activity' | 'mail'
-/** Plan is the primary entry point; the office is where work happens. */
-export type Workspace = 'plan' | 'office' | 'code'
+/** The dashboard is the landing view; plan is where ideas start; the office is where work happens. */
+export type Workspace = 'home' | 'plan' | 'office' | 'code'
 
 interface UiState {
   snapshot: Snapshot | null
@@ -56,7 +56,7 @@ export const useStore = create<UiState>((set, get) => ({
   selectedAgentId: null,
   railTab: 'plan',
   panel: 'none',
-  workspace: 'plan',
+  workspace: 'home',
   editorDirty: false,
   output: {},
   chatStream: {},

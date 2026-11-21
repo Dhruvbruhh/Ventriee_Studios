@@ -442,7 +442,7 @@ function PromptPanel({
             </button>
           ))}
           {original && active.parentId ? (
-            <button className={`ver compare${compare ? ' on' : ''}`} onClick={() => setCompare((v) => !v)}>
+            <button className={`ver ver-compare${compare ? ' on' : ''}`} onClick={() => setCompare((v) => !v)}>
               {compare ? 'Editing' : 'Compare'}
             </button>
           ) : null}

@@ -1,7 +1,8 @@
 import {
-  AppWindow, ArrowClockwise, ArrowSquareOut, CaretDown, Check, Clock, Copy, DotsSixVertical, Folder, GearSix, Lightning,
-  ListBullets, MagnifyingGlass, Notebook, PaperPlaneRight, Pause, PencilSimple, Play, Plus, Pulse, PushPin, SidebarSimple,
-  Sparkle, SquaresFour, Star, Stop, TerminalWindow, Trash, Tray, X, type Icon, type IconProps
+  AppWindow, ArrowClockwise, ArrowSquareOut, CaretDown, Check, Clock, Coins, Copy, Cpu, Database, DotsSixVertical, Folder,
+  GearSix, Key, Lightning, ListBullets, ListChecks, MagnifyingGlass, Notebook, PaperPlaneRight, Pause, PencilSimple, Play,
+  Plug, Plus, Pulse, PushPin, SidebarSimple, SignOut, SlidersHorizontal, Sparkle, SquaresFour, Star, Stop, TerminalWindow,
+  Trash, Tray, UsersThree, X, type Icon, type IconProps
 } from '@phosphor-icons/react'
 
 // Phosphor's duotone style: a line plus a soft fill in the current colour, so accents read purple.
@@ -41,3 +42,12 @@ export const IconCopy = make(Copy)
 export const IconSearch = make(MagnifyingGlass)
 export const IconStar = make(Star)
 export const IconSidebar = make(SidebarSimple)
+export const IconUsers = make(UsersThree)
+export const IconTasks = make(ListChecks)
+export const IconCoins = make(Coins)
+export const IconPlug = make(Plug)
+export const IconDatabase = make(Database)
+export const IconSliders = make(SlidersHorizontal)
+export const IconKey = make(Key)
+export const IconCpu = make(Cpu)
+export const IconSignOut = make(SignOut)

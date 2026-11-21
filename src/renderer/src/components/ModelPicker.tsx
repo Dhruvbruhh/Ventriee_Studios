@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { guard, useStore } from '../store'
-import { IconChevron, IconPlus, IconRefresh, IconSearch, IconStar } from '../icons'
+import { IconChevron, IconPlus, IconRefresh, IconSearch, IconSpark, IconStar } from '../icons'
 import type { EngineKind, ModelOption, ProviderConfig } from '../../../shared/types'
 
 export interface ResolvedModel {
@@ -98,9 +98,8 @@ export function ModelPicker({
   }
 
   const current = value ? `${value.engine} ${shortName(value)}` : 'Choose model'
-  // .mp-pop is right-aligned and 330px wide, so a narrow trigger near the left edge
-  // pushes it off screen: the composer picker sat at x=192 and opened at x=-105.
-  // Measure once after it mounts and shift it back inside the window.
+  // .mp-pop is 360px wide and anchored to the trigger, so a trigger near a window edge
+  // can push it off screen. Measure once after it mounts and shift it back inside the window.
   useLayoutEffect(() => {
     if (!open) return setShift(0)
     const el = pop.current
@@ -146,15 +145,16 @@ export function ModelPicker({
           </div>
 
           {models.length === 0 ? (
-            <div className="mp-empty">
-              <span>No models discovered yet. Rescan, or add a provider.</span>
-              <button
-                className="btn tiny"
-                style={{ marginTop: 8 }}
-                onClick={() => void guard(() => window.ventriee.modelsDiscover(snapshot.activeProjectId))}
-              >
-                <IconRefresh width={10} height={10} /> Rescan models
-              </button>
+            <div className="mp-empty-state">
+              <span className="empty-glyph"><IconSpark /></span>
+              <strong>No models found yet</strong>
+              <p>Sign in to a subscription in Settings, or add an API provider. Then rescan.</p>
+              <div className="mp-empty-actions">
+                <button className="btn tiny" onClick={() => void guard(() => window.ventriee.modelsDiscover(snapshot.activeProjectId))}>
+                  <IconRefresh /> Rescan
+                </button>
+                <button className="btn tiny primary" onClick={onAddProvider}><IconPlus /> Add provider</button>
+              </div>
             </div>
           ) : null}
 

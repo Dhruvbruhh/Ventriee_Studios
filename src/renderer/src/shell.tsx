@@ -16,6 +16,7 @@ export function Modal({
   children,
   narrow,
   tabs,
+  nav,
   actions
 }: {
   title: string
@@ -24,6 +25,8 @@ export function Modal({
   children: ReactNode
   narrow?: boolean
   tabs?: ReactNode
+  /** A navigation column beside the body, for modals with many sections. */
+  nav?: ReactNode
   actions?: ReactNode
 }) {
   useEffect(() => {
@@ -36,13 +39,13 @@ export function Modal({
 
   return (
     <div className="scrim" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal${narrow ? ' narrow' : ''}`}>
+      <div className={`modal${narrow ? ' narrow' : ''}${nav ? ' with-nav' : ''}`}>
         <div className="modal-head">
-          <div>
+          <div className="grow">
             <div className="modal-title">{title}</div>
             {subtitle ? <div className="modal-sub">{subtitle}</div> : null}
           </div>
-          <div className="flex gap-4" style={{ marginLeft: 'auto' }}>
+          <div className="modal-actions">
             {actions}
             <button className="icon-btn" onClick={onClose} aria-label="Close">
               <IconClose />
@@ -50,7 +53,7 @@ export function Modal({
           </div>
         </div>
         {tabs}
-        <div className="modal-body">{children}</div>
+        {nav ? <div className="modal-split">{nav}<div className="modal-body">{children}</div></div> : <div className="modal-body">{children}</div>}
       </div>
     </div>
   )

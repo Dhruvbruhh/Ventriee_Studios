@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { guard, useStore, type Panel } from '../store'
 import { AccountButton } from '../auth'
-import { IconChevron, IconClock, IconFolder, IconMemory, IconPlus, IconPulse, IconSettings, IconSkill, IconWindow } from '../icons'
+import { IconChevron, IconClock, IconFolder, IconGrid, IconMemory, IconPlus, IconPulse, IconSettings, IconSkill, IconWindow } from '../icons'
 
 function NavItem({ icon, label, active, onClick }: { icon: ReactNode; label: string; active?: boolean; onClick: () => void }) {
   return <button className={`side-nav-item${active ? ' on' : ''}`} onClick={onClick} aria-current={active ? 'page' : undefined}>{icon}<span>{label}</span></button>
@@ -18,6 +18,7 @@ const switchProject = async (projectId: string) => {
 export function Sidebar({ onNewProject }: { onNewProject: () => void }) {
   const snapshot = useStore((s) => s.snapshot)!
   const panel = useStore((s) => s.panel)
+  const workspace = useStore((s) => s.workspace)
   const setPanel = useStore((s) => s.setPanel)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const open = (p: Panel) => setPanel(panel === p ? 'none' : p)
@@ -37,9 +38,12 @@ export function Sidebar({ onNewProject }: { onNewProject: () => void }) {
   return <nav className="sidebar" aria-label="Studio">
     <div className="side-brand"><div className="brand-mark" role="img" aria-label="" /><span>Ventriee Studios</span></div>
 
+    <div className="side-actions">
+      <button className="btn primary side-new" onClick={() => snapshot.activeProjectId ? void newSession(snapshot.activeProjectId) : onNewProject()}><IconPlus /> New session</button>
+      <button className="btn side-new-project" onClick={onNewProject} aria-label="New project" title="New project"><IconFolder /></button>
+    </div>
     <div className="side-nav">
-      <NavItem icon={<IconPlus width={15} height={15} />} label="New session" onClick={() => snapshot.activeProjectId ? void newSession(snapshot.activeProjectId) : onNewProject()} />
-      <NavItem icon={<IconFolder width={15} height={15} />} label="New project" onClick={onNewProject} />
+      <NavItem icon={<IconGrid width={15} height={15} />} label="Dashboard" active={workspace === 'home' && panel === 'none'} onClick={() => { setPanel('none'); useStore.getState().setWorkspace('home') }} />
       <NavItem icon={<IconPulse width={15} height={15} />} label="Runs" active={panel === 'runs'} onClick={() => open('runs')} />
       <NavItem icon={<IconSkill width={15} height={15} />} label="Skills" active={panel === 'skills'} onClick={() => open('skills')} />
       <NavItem icon={<IconMemory width={15} height={15} />} label="Memory" active={panel === 'memory'} onClick={() => open('memory')} />
@@ -47,6 +51,7 @@ export function Sidebar({ onNewProject }: { onNewProject: () => void }) {
     </div>
 
     <div className="side-projects" aria-label="Projects">
+      <div className="side-label">Projects <span>{snapshot.projects.length}</span></div>
       {snapshot.projects.length ? snapshot.projects.map((project) => {
         const active = project.id === snapshot.activeProjectId
         const sessions = snapshot.sessionIndex.filter((s) => s.projectId === project.id)
@@ -74,10 +79,15 @@ export function Sidebar({ onNewProject }: { onNewProject: () => void }) {
     </div>
 
     <div className="side-foot">
-      <button className={`side-icon${panel === 'project' ? ' on' : ''}`} onClick={() => open('project')} aria-label="Project settings" title="Project settings"><IconFolder width={15} height={15} /></button>
-      <button className={`side-icon${panel === 'settings' ? ' on' : ''}`} onClick={() => open('settings')} aria-label="Studio settings" title="Studio settings"><IconSettings width={15} height={15} /></button>
-      <span className="grow" />
-      <AccountButton />
+      <div className="side-foot-row">
+        <button className={`side-foot-link${panel === 'project' ? ' on' : ''}`} onClick={() => open('project')} aria-label="Project settings" title="Project settings"><IconFolder width={15} height={15} /><span>Project</span></button>
+        <button className={`side-foot-link${panel === 'settings' ? ' on' : ''}`} onClick={() => open('settings')} aria-label="Studio settings" title="Studio settings"><IconSettings width={15} height={15} /><span>Settings</span></button>
+      </div>
+      <div className="side-account">
+        <span className="side-account-mark" aria-hidden>V</span>
+        <span className="side-account-text"><b>Your studio</b><small>{snapshot.running ? 'Team is working' : 'Signed in'}</small></span>
+        <AccountButton />
+      </div>
     </div>
   </nav>
 }
