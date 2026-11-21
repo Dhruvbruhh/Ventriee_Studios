@@ -30,7 +30,19 @@ jobs:
           node-version: 26
           cache: npm
       - run: npm ci
-      - run: npm run build
+      # The sign-in config is baked into the app at build time (electron.vite.config.ts reads
+      # VITE_SUPABASE_* from the environment), so installers need these repository secrets.
+      - run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_PUBLISHABLE_KEY$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::Set the VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or _PUBLISHABLE_KEY) repository secrets, or the app ships without sign-in."
+            exit 1
+          fi
+          npm run build
+        shell: bash
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       - run: npx electron-builder ${{ matrix.target }} --publish never
         env:
           # Unsigned macOS build until signing secrets exist (see electron-builder.yml).
