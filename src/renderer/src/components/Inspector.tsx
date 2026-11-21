@@ -115,6 +115,7 @@ export function Inspector({ agentId }: { agentId: string }) {
               />
               <button
                 className="btn"
+                data-fx="send"
                 disabled={!instruction.trim()}
                 onClick={() => {
                   void guard(() => window.ventriee.instructAgent(agentId, instruction.trim()), 'Instruction queued')

@@ -314,7 +314,7 @@ function ChatComposer({
             <button className="btn" onClick={createPrompt} disabled={!canCreate || creating} title="Turn the conversation into a structured development prompt">
               <IconSpark width={12} height={12} /> {creating ? 'Writing…' : 'Create prompt'}
             </button>
-            <button className="btn primary" onClick={submit} disabled={!draft.trim() || sending}>
+            <button className="btn primary" data-fx="send" onClick={submit} disabled={!draft.trim() || sending}>
               <IconSend width={12} height={12} /> {sending ? 'Thinking…' : 'Send'}
             </button>
           </div>

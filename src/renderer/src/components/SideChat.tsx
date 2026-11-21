@@ -113,7 +113,7 @@ export function SideChat({ onClose }: { onClose: () => void }) {
             {...attach.handlers}
           />
           {attach.button}{mic}
-          <button className="btn primary" onClick={() => void send(draft)} disabled={!draft.trim() || busy || !project}>
+          <button className="btn primary" data-fx="send" onClick={() => void send(draft)} disabled={!draft.trim() || busy || !project}>
             <IconSend width={11} height={11} />
           </button>
         </div>

@@ -59,7 +59,7 @@ function Plan({ tasks, agents, onSelect }: { tasks: Task[]; agents: Agent[]; onS
     <>
       <div className="section-label">
         <span>Tasks</span>
-        <span>{tasks.filter((t) => t.status === 'done').length}/{tasks.length}</span>
+        <span data-fx-anchor="tasks">{tasks.filter((t) => t.status === 'done').length}/{tasks.length}</span>
       </div>
       {sorted.map((task) => {
         const agent = task.agentId ? agents.find((a) => a.id === task.agentId) ?? null : null

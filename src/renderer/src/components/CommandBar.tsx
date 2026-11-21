@@ -75,7 +75,7 @@ export function CommandBar() {
               <IconStop /> Stop
             </button>
           ) : (
-            <button className="send-btn" onClick={submit} disabled={!project || !draft.trim() || busy}>
+            <button className="send-btn" data-fx="send" onClick={submit} disabled={!project || !draft.trim() || busy}>
               <IconSend /> Run
             </button>
           )}

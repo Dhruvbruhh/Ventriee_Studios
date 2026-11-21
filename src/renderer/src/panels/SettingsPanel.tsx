@@ -571,6 +571,15 @@ function SyncAndReports() {
       <label className="budget-field">Each project <input className="input" type="number" min={0} step={1} aria-label="Daily limit per project in dollars" defaultValue={settings.projectBudgetUsd} onBlur={(e) => void guard(() => window.ventriee.saveSettings({ projectBudgetUsd: Number(e.target.value) }))} /></label>
     </div>
 
+    <div className="section-label" style={{ marginTop: 14 }}>Look and feel</div>
+    <div className="kv-row">
+      <div className="kv-row-main">
+        <div className="kv-row-title">Anime effects</div>
+        <div className="kv-row-sub">Impact bursts, puffs and manga lettering when you send, confirm, finish a task or pass your tests. Off automatically when your system asks for reduced motion.</div>
+      </div>
+      <Switch on={settings.effects !== false} onClick={() => void guard(() => window.ventriee.saveSettings({ effects: settings.effects === false }))} label="Anime effects" />
+    </div>
+
     <div className="section-label" style={{ marginTop: 14 }}>Problems and crashes</div>
     <div className="kv-row">
       <div className="kv-row-main">

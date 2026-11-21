@@ -23,6 +23,7 @@ import { TerminalView, terminalOutput } from '../components/Terminal'
 import { matchProblems, type MatchedProblem } from '../../../shared/problems'
 import { Modal } from '../shell'
 import { guard, useStore, cleanError } from '../store'
+import { twinkle } from '../fx'
 import type { CodeChangeResult, ProjectTask, TestResult, DebugBreakpoint, DebugFrame, DebugVariable, FileEntry, SearchResult, TextFile, EditorConfig } from '../../../shared/workspace'
 import { fixWhitespace } from '../../../shared/workspace'
 import type { Catalog } from '../../../shared/catalog'
@@ -437,6 +438,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         setConflict((path) => path === current ? null : path)
       }
       changed(); setRevision((value) => value + 1)
+      if (!auto) twinkle(document.querySelector('.code-tab.on'))
     } catch (error) {
       if (/changed on disk/i.test(String(error)) && tabs.current.has(current)) { setConflict(current); if (current !== selected.current) activate(current) }
       else useStore.getState().notify(String(error), 'error')
