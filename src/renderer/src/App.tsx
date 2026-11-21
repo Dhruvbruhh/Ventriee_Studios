@@ -198,7 +198,7 @@ export function App() {
       {panel === 'project' ? <ProjectPanel onClose={() => setPanel('none')} /> : null}
       {!project && snapshot.projects.length > 0 ? (
         <Modal title="No active project" onClose={() => setPanel('none')} narrow>
-          <p className="dim" style={{ fontSize: 12 }}>
+          <p className="dim text-sm">
             Pick a project in the sidebar, or create a new one.
           </p>
         </Modal>
@@ -234,9 +234,9 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
           <div className="kv-row-sub">Add a provider and API key in Settings → Providers (OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, Mistral, local Ollama/LM Studio).</div>
         </div>
       </div>
-      <div className="section-label" style={{ marginTop: 14 }}>Your coding tools</div>
+      <div className="section-label space-above">Your coding tools</div>
       <Toolchains />
-      <div className="flex gap-8" style={{ marginTop: 14 }}>
+      <div className="flex gap-8 space-above">
         <button className="btn primary" onClick={onClose}>I'll set it up</button>
         <button className="btn" onClick={() => void guard(() => window.ventriee.openExternal('https://github.com/Euforia-dhruv/Ventriee_Studios#engines'))}>
           Read the guide

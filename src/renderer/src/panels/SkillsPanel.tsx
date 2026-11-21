@@ -83,15 +83,15 @@ export function SkillsPanel({ onClose }: { onClose: () => void }) {
             report.findings.map((f, i) => (
               <div key={i} style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px', marginBottom: 6, background: 'var(--panel)' }}>
                 <div className="mem-head">
-                  <span className="mem-title" style={{ fontSize: 12 }}>{f.id} · {f.title}</span>
+                  <span className="mem-title text-sm">{f.id} · {f.title}</span>
                   <span className="badge danger">{f.severity}</span>
                 </div>
-                <div className="faint mono" style={{ fontSize: 11 }}>{f.location}</div>
+                <div className="faint mono text-xs">{f.location}</div>
                 <div className="dim" style={{ fontSize: 11.5, marginTop: 4 }}>{f.detail}</div>
               </div>
             ))
           ) : (
-            <p className="ok-text" style={{ fontSize: 12 }}>No suspicious patterns found.</p>
+            <p className="ok-text text-sm">No suspicious patterns found.</p>
           )}
         </Modal>
       ) : null}
@@ -171,7 +171,7 @@ export function SkillsPanel({ onClose }: { onClose: () => void }) {
         </div>
       ))}
       {!snapshot.skills.length ? (
-        <p className="faint" style={{ fontSize: 12 }}>
+        <p className="faint text-sm">
           No skills yet. Verified workflows are added automatically after a run, or create one above.
         </p>
       ) : null}
@@ -254,7 +254,7 @@ export function AutomationsPanel({ onClose }: { onClose: () => void }) {
         </div>
       ))}
       {!snapshot.automations.length ? (
-        <p className="faint" style={{ fontSize: 12 }}>No automations configured.</p>
+        <p className="faint text-sm">No automations configured.</p>
       ) : null}
     </Modal>
   )

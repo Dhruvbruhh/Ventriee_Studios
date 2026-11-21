@@ -330,14 +330,14 @@ function ApiExplorer({ baseUrl, onClose }: { baseUrl: string; onClose: () => voi
           spellCheck={false}
         />
       ) : null}
-      {!validJson ? <div className="err-text faint" style={{ fontSize: 11 }}>Request body is not valid JSON.</div> : null}
+      {!validJson ? <div className="err-text faint text-xs">Request body is not valid JSON.</div> : null}
       {result ? (
         <div className="api-result">
           <div className="api-result-head">
             <span className={`badge ${result.ok ? (result.status! >= 400 ? 'warn' : 'ok') : 'err'}`}>
               {result.ok ? `${result.status} ${result.statusText}` : 'error'}
             </span>
-            <span className="faint mono" style={{ fontSize: 11 }}>{result.contentType ?? ''}</span>
+            <span className="faint mono text-xs">{result.contentType ?? ''}</span>
           </div>
           <pre className="preview-log">{result.error ?? (result.body ?? '(empty response)')}</pre>
         </div>

@@ -66,7 +66,7 @@ function McpTools() {
   const save = (next: typeof servers, done?: string) => guard(() => window.ventriee.saveSettings({ mcpServers: next }), done)
   const nameOk = /^[A-Za-z0-9_-]{1,40}$/.test(name) && !servers.some((s) => s.name === name)
   return <>
-    <p className="hint" style={{ marginBottom: 12 }}>
+    <p className="hint space-below">
       MCP servers give workers extra tools (a browser, a database, GitHub…). Enabled servers are passed to <b>Claude Code</b> workers on every run.
       Codex and Gemini CLI read MCP servers from their own config files (<code>~/.codex/config.toml</code>, <code>~/.gemini/settings.json</code>), so add them there for those engines.
       A server runs as a program on this computer with your permissions: add only ones you trust.
@@ -96,7 +96,7 @@ function Subscriptions() {
   const [checked, setChecked] = useState<Record<string, { ok: boolean; detail: string }>>({})
   const sub = running ? SUBSCRIPTIONS.find((s) => s.engine === running.engine)! : null
   return <>
-    <p className="hint" style={{ marginBottom: 12 }}>
+    <p className="hint space-below">
       Use a subscription you already pay for. Each one signs in through the vendor's own command-line tool, in a terminal below; Ventriee never sees your password.
       After signing in, <b>Check</b> sends one tiny request to prove it works, and <b>Use everywhere</b> makes it the default for the planner and new workers.
     </p>
@@ -146,7 +146,7 @@ function Engines() {
 
   return (
     <>
-      <p className="hint" style={{ marginBottom: 12 }}>
+      <p className="hint space-below">
         CLI adapters run real local processes. API adapters call the provider directly. Nothing here is
         faked: unavailable engines stay marked unavailable until they actually respond.
       </p>
@@ -258,7 +258,7 @@ function Workers() {
         ) : agent ? (
           <AgentForm agent={agent} key={agent.id} />
         ) : (
-          <p className="faint" style={{ fontSize: 12 }}>Select a worker.</p>
+          <p className="faint text-sm">Select a worker.</p>
         )}
       </div>
     </div>
@@ -544,7 +544,7 @@ function SyncAndReports() {
   const [log, setLog] = useState<string | null>(null)
   if (!settings) return null
   return <>
-    <div className="section-label" style={{ marginTop: 14 }}>Settings sync</div>
+    <div className="section-label space-above">Settings sync</div>
     <div className="kv-row">
       <div className="kv-row-main">
         <div className="kv-row-title">Editor theme, Vim mode, shortcuts and extensions</div>
@@ -561,7 +561,7 @@ function SyncAndReports() {
     {missing.length ? <div className="kv-row"><div className="kv-row-main"><div className="kv-row-sub">Extensions from your other computer: {missing.join(', ')}</div></div>
       <button className="btn tiny primary" onClick={() => void (async () => { for (const id of missing) await guard(() => window.ventriee.extInstall(id)); setMissing([]) })()}>Install them</button></div> : null}
 
-    <div className="section-label" style={{ marginTop: 14 }}>Spending limits</div>
+    <div className="section-label space-above">Spending limits</div>
     <div className="kv-row">
       <div className="kv-row-main">
         <div className="kv-row-title">Daily limits in USD (0 = no limit)</div>
@@ -571,7 +571,7 @@ function SyncAndReports() {
       <label className="budget-field">Each project <input className="input" type="number" min={0} step={1} aria-label="Daily limit per project in dollars" defaultValue={settings.projectBudgetUsd} onBlur={(e) => void guard(() => window.ventriee.saveSettings({ projectBudgetUsd: Number(e.target.value) }))} /></label>
     </div>
 
-    <div className="section-label" style={{ marginTop: 14 }}>Look and feel</div>
+    <div className="section-label space-above">Look and feel</div>
     <div className="kv-row">
       <div className="kv-row-main">
         <div className="kv-row-title">Anime effects</div>
@@ -580,7 +580,7 @@ function SyncAndReports() {
       <Switch on={settings.effects !== false} onClick={() => void guard(() => window.ventriee.saveSettings({ effects: settings.effects === false }))} label="Anime effects" />
     </div>
 
-    <div className="section-label" style={{ marginTop: 14 }}>Problems and crashes</div>
+    <div className="section-label space-above">Problems and crashes</div>
     <div className="kv-row">
       <div className="kv-row-main">
         <div className="kv-row-title">Keep a local error log</div>
@@ -646,7 +646,7 @@ function RunPolicy() {
         </select>
       </div>
 
-      <div className="section-label" style={{ marginTop: 14 }}>Prompt optimizer</div>
+      <div className="section-label space-above">Prompt optimizer</div>
       <div className="kv-row">
         <div className="kv-row-main">
           <div className="kv-row-title">Model for Enhance</div>
@@ -660,7 +660,7 @@ function RunPolicy() {
         {settings.optimizerModel ? <button className="btn tiny" onClick={() => void update({ optimizerModel: '' })}>Use planner</button> : null}
       </div>
 
-      <div className="section-label" style={{ marginTop: 14 }}>Inline completions</div>
+      <div className="section-label space-above">Inline completions</div>
       <div className="kv-row">
         <div className="kv-row-main">
           <div className="kv-row-title">Suggest code as you type</div>
@@ -676,12 +676,12 @@ function RunPolicy() {
         {settings.completionModel ? <button className="btn tiny" onClick={() => void update({ completionModel: '' })}>Turn off</button> : null}
       </div>
 
-      <div className="section-label" style={{ marginTop: 14 }}>Languages and tools</div>
+      <div className="section-label space-above">Languages and tools</div>
       <Toolchains />
 
       <SyncAndReports />
 
-      <div className="section-label" style={{ marginTop: 14 }}>Run</div>
+      <div className="section-label space-above">Run</div>
       <div className="kv-row">
         <div className="kv-row-main">
           <div className="kv-row-title">Parallel sessions</div>
@@ -766,7 +766,7 @@ function DataTab() {
               onClick={async () => { setChecking(true); await guard(() => window.ventriee.updateCheck()); setChecking(false) }}>{checking ? 'Checking…' : 'Check now'}</button>}
       </div>
 
-      <div className="section-label" style={{ marginTop: 14 }}>Current project</div>
+      <div className="section-label space-above">Current project</div>
       <dl>
         <div className="kv"><dt>Name</dt><dd>{project?.name ?? '—'}</dd></div>
         <div className="kv"><dt>Workspace</dt><dd className="mono">{project?.path ?? '—'}</dd></div>
@@ -776,7 +776,7 @@ function DataTab() {
         <div className="kv"><dt>Memory docs</dt><dd>{snapshot.memories.length}</dd></div>
         <div className="kv"><dt>Skills</dt><dd>{snapshot.skills.length}</dd></div>
       </dl>
-      <div className="section-label" style={{ marginTop: 14 }}>Local storage</div>
+      <div className="section-label space-above">Local storage</div>
       <p className="hint" style={{ lineHeight: 1.65 }}>
         Everything lives on this machine: SQLite at <span className="mono">%APPDATA%/ventriee-studios/ventriee.db</span>,
         human-readable memory under <span className="mono">%APPDATA%/ventriee-studios/memory</span>, and skills under

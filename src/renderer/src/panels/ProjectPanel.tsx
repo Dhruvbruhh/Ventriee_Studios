@@ -76,14 +76,14 @@ export function ProjectPanel({ onClose }: { onClose: () => void }) {
               {snapshot.agents.find((a) => a.id === s.agentId)?.name ?? s.agentId.slice(0, 6)}
               <span className={`badge ${s.status === 'done' ? 'ok' : s.status === 'failed' ? 'err' : ''}`}>{s.status}</span>
             </div>
-            <div className="kv-row-sub mono" style={{ fontSize: 11 }}>
+            <div className="kv-row-sub mono text-xs">
               {s.engine} · {s.model || 'default'} · {new Date(s.startedAt).toLocaleTimeString()}
               {s.outputTokens ? ` · ${s.outputTokens.toLocaleString()} out` : ''}
             </div>
           </div>
         </div>
       ))}
-      {!sessions.length ? <p className="faint" style={{ fontSize: 12 }}>No sessions yet.</p> : null}
+      {!sessions.length ? <p className="faint text-sm">No sessions yet.</p> : null}
     </Modal>
   )
 }

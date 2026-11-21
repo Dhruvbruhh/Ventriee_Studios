@@ -45,11 +45,10 @@ export function MemoryPanel({ onClose }: { onClose: () => void }) {
       }
     >
       <input
-        className="input"
+        className="input space-below"
         placeholder="Search memory…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        style={{ marginBottom: 12 }}
       />
       {editing ? (
         <MemoryEditor
@@ -98,7 +97,7 @@ export function MemoryPanel({ onClose }: { onClose: () => void }) {
           ))}
         </div>
       ))}
-      {!docs.length ? <p className="faint" style={{ fontSize: 12 }}>Nothing matches.</p> : null}
+      {!docs.length ? <p className="faint text-sm">Nothing matches.</p> : null}
     </Modal>
   )
 }

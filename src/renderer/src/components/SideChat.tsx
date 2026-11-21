@@ -65,7 +65,7 @@ export function SideChat({ onClose }: { onClose: () => void }) {
 
       <div className="sidechat-body">
         {!project ? (
-          <p className="faint" style={{ fontSize: 12 }}>Open a project to talk with the advisor.</p>
+          <p className="faint text-sm">Open a project to talk with the advisor.</p>
         ) : !msgs.length ? (
           <p className="faint" style={{ fontSize: 12, lineHeight: 1.6 }}>
             Ask things like:
@@ -78,8 +78,8 @@ export function SideChat({ onClose }: { onClose: () => void }) {
             <div key={i} className={`sidechat-msg ${m.role}`}>
               <div className="sidechat-msg-head">
                 <span>{m.role === 'user' ? 'You' : 'Advisor'}</span>
-                {m.model ? <span className="faint mono" style={{ fontSize: 11 }}>{m.model}</span> : null}
-                <span className="faint" style={{ fontSize: 11 }}>{new Date(m.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                {m.model ? <span className="faint mono text-xs">{m.model}</span> : null}
+                <span className="faint text-xs">{new Date(m.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
               <div className="sidechat-msg-body">{m.role === 'assistant' ? <RichText text={m.text} /> : m.text}</div>
             </div>

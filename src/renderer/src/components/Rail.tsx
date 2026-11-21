@@ -80,8 +80,7 @@ function Plan({ tasks, agents, onSelect }: { tasks: Task[]; agents: Agent[]; onS
               <span className="task-phase">{task.phase}</span>
               {agent ? (
                 <button
-                  className="ghost-link"
-                  style={{ fontSize: 11 }}
+                  className="ghost-link text-xs"
                   onClick={(e) => {
                     e.stopPropagation()
                     onSelect(agent.id)
@@ -207,7 +206,7 @@ function Mail() {
         <>
           <div className="section-label">Needs your approval</div>
           {approvals.map((task) => (
-            <div key={task.id} className="mail" style={{ borderColor: '#4a3f28' }}>
+            <div key={task.id} className="mail approval">
               <div className="mail-head">
                 <span className="mail-type owner">approval</span>
                 <span className="truncate">{task.title}</span>
@@ -240,7 +239,7 @@ function Mail() {
           <div key={m.id} className="mail">
             <div className="mail-head">
               <span className={`mail-type ${m.type}`}>{m.type}</span>
-              <button className="ghost-link" style={{ fontSize: 11 }} onClick={() => m.sender !== 'owner' && m.sender !== 'orchestrator' && select(m.sender)}>
+              <button className="ghost-link text-xs" onClick={() => m.sender !== 'owner' && m.sender !== 'orchestrator' && select(m.sender)}>
                 {name(m.sender)}
               </button>
               <span>→ {name(m.recipient)}</span>
