@@ -405,6 +405,8 @@ export interface AppSettings {
   autoSave: boolean
   /** Format with the project's Prettier (or the language's formatter) before each save. */
   formatOnSave: boolean
+  /** Anime impact effects (Sakuga VFX) on sends, confirms, finished tasks and notices. */
+  effects: boolean
   /** Owner keyboard shortcuts: a Monaco/studio command id and a key chord like "ctrl+shift+k"; '-' before the id removes a default. */
   keybindings: Array<{ key: string; command: string }>
   /** Opt-in: keep a local log of crashes and errors for "Report a problem". */

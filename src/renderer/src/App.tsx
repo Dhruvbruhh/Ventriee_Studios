@@ -18,6 +18,7 @@ import { IconSidebar, IconSpark } from './icons'
 import { Sidebar } from './components/Sidebar'
 import { UpdateNotice } from './components/UpdateNotice'
 import { Toolchains } from './components/Toolchains'
+import { impact } from './fx'
 const CodeWorkspace = lazy(() => import('./editor/CodeWorkspace'))
 
 export function App() {
@@ -34,6 +35,17 @@ export function App() {
   const [newProject, setNewProject] = useState(false)
   const [showAdvisor, setShowAdvisor] = useState(false)
   const [sidebar, setSidebar] = useState(true)
+  // A task that turns done while you watch gets the impact effect, on the task counter or the open view's tab.
+  const statuses = useRef(new Map<string, string>())
+  useEffect(() => {
+    let finished = false
+    for (const task of snapshot?.tasks ?? []) {
+      const before = statuses.current.get(task.id)
+      if (task.status === 'done' && before && before !== 'done') finished = true
+      statuses.current.set(task.id, task.status)
+    }
+    if (finished) impact(document.querySelector('[data-fx-anchor="tasks"]') ?? document.querySelector('.ws-tab.on'))
+  }, [snapshot?.tasks])
   useEffect(() => {
     const keys = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'b' && useStore.getState().workspace !== 'code') { event.preventDefault(); setSidebar((v) => !v) } }
     window.addEventListener('keydown', keys)
@@ -120,7 +132,7 @@ export function App() {
           event.preventDefault(); buttons[next]?.focus(); buttons[next]?.click()
         }}>
           <button
-            className={`ws-tab${workspace === 'plan' ? ' on' : ''}`}
+            data-fx="tab" className={`ws-tab${workspace === 'plan' ? ' on' : ''}`}
             onClick={() => setWorkspace('plan')}
             role="tab"
             aria-selected={workspace === 'plan'}
@@ -128,9 +140,9 @@ export function App() {
           >
             Plan
           </button>
-          <button className={`ws-tab${workspace === 'code' ? ' on' : ''}`} role="tab" aria-selected={workspace === 'code'} onClick={() => setWorkspace('code')} title="Edit project files and manage Git">Code</button>
+          <button data-fx="tab" className={`ws-tab${workspace === 'code' ? ' on' : ''}`} role="tab" aria-selected={workspace === 'code'} onClick={() => setWorkspace('code')} title="Edit project files and manage Git">Code</button>
           <button
-            className={`ws-tab${workspace === 'office' ? ' on' : ''}`}
+            data-fx="tab" className={`ws-tab${workspace === 'office' ? ' on' : ''}`}
             onClick={() => setWorkspace('office')}
             role="tab"
             aria-selected={workspace === 'office'}

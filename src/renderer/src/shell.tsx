@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useStore } from './store'
 import { IconChevron, IconClose, IconFolder, IconPlus, IconSettings, IconWindow } from './icons'
 import { guard } from './store'
+import { notice } from './fx'
 import type { Project } from '../../shared/types'
 
 export function AppShell() {
@@ -70,9 +71,11 @@ export function Switch({ on, onClick, label }: { on: boolean; onClick: () => voi
 export function Toast() {
   const toast = useStore((s) => s.toast)
   const dismiss = useStore((s) => s.dismissToast)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => { if (toast) notice(box.current, toast.kind === 'error') }, [toast])
   if (!toast) return null
   return (
-    <div className={`toast${toast.kind === 'error' ? ' error' : ''}`} role="status" onClick={dismiss}>
+    <div ref={box} className={`toast${toast.kind === 'error' ? ' error' : ''}`} role="status" onClick={dismiss}>
       <span>{toast.text}</span>
     </div>
   )

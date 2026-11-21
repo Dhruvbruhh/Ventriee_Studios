@@ -54,6 +54,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   vimMode: false,
   autoSave: false,
   formatOnSave: false,
+  effects: true,
   keybindings: [],
   errorReports: false,
   iconTheme: '',
