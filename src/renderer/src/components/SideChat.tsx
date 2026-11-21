@@ -67,7 +67,7 @@ export function SideChat({ onClose }: { onClose: () => void }) {
         {!project ? (
           <p className="faint text-sm">Open a project to talk with the advisor.</p>
         ) : !msgs.length ? (
-          <p className="faint" style={{ fontSize: 12, lineHeight: 1.6 }}>
+          <p className="faint text-sm lh-relaxed">
             Ask things like:
             <br />• "Is my prompt specific enough?"
             <br />• "The architect keeps failing, what should it deliver?"
@@ -91,14 +91,14 @@ export function SideChat({ onClose }: { onClose: () => void }) {
 
       <div className="sidechat-foot">
         {msgs.some((m) => m.role === 'assistant') ? (
-          <button className="ghost-link" style={{ alignSelf: 'flex-end', marginBottom: 4 }} onClick={copyLast}>
+          <button className="ghost-link sidechat-copy" onClick={copyLast}>
             Copy last reply
           </button>
         ) : null}
         {attach.strip}
-        <div className="sidechat-input-row">
+        <div className="sidechat-box">
           <textarea
-            className="textarea sidechat-input"
+            className="sidechat-input"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -112,10 +112,12 @@ export function SideChat({ onClose }: { onClose: () => void }) {
             rows={2}
             {...attach.handlers}
           />
-          {attach.button}{mic}
-          <button className="btn primary" data-fx="send" onClick={() => void send(draft)} disabled={!draft.trim() || busy || !project}>
-            <IconSend width={11} height={11} />
-          </button>
+          <div className="sidechat-box-foot">
+            {attach.button}{mic}
+            <button className="btn primary" data-fx="send" onClick={() => void send(draft)} disabled={!draft.trim() || busy || !project}>
+              <IconSend /> Send
+            </button>
+          </div>
         </div>
       </div>
     </aside>

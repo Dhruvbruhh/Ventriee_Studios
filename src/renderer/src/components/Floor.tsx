@@ -59,7 +59,7 @@ export function Floor({ onNewProject }: { onNewProject: () => void }) {
             Create a project to open the office. Ventriee will seed fourteen specialist workers,
             a memory folder and an orchestrator ready to take a brief.
           </p>
-          <button className="btn primary" onClick={onNewProject} style={{ height: 30 }}>
+          <button className="btn primary" onClick={onNewProject}>
             <IconPlus /> New project
           </button>
         </div>
@@ -129,7 +129,7 @@ export function Floor({ onNewProject }: { onNewProject: () => void }) {
                   </span>
                   <span className="roster-task">{task?.title ?? agent.lastError ?? idleLine(agent)}</span>
                   <span className="roster-model">{shortModel(agent)}</span>
-                  <span className={`desk-state ${agent.status}`} style={{ justifySelf: 'start' }}>{agent.status}</span>
+                  <span className={`desk-state roster-state ${agent.status}`}>{agent.status}</span>
                 </button>
               )
             })}

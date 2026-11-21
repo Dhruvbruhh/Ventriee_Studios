@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { guard, useStore } from '../store'
 import { Modal } from '../shell'
-import { IconCheck, IconEdit, IconPin, IconPlus, IconTrash } from '../icons'
+import { IconCheck, IconEdit, IconPin, IconPlus, IconSearch, IconTrash } from '../icons'
 import type { MemoryDoc } from '../../../shared/types'
+
+const SCOPES: Record<string, string> = { global: 'Everywhere', project: 'This project', agent: 'Workers', skill: 'Skills' }
 
 export function MemoryPanel({ onClose }: { onClose: () => void }) {
   const snapshot = useStore((s) => s.snapshot)!
@@ -31,11 +33,11 @@ export function MemoryPanel({ onClose }: { onClose: () => void }) {
   return (
     <Modal
       title="Memory"
-      subtitle={`${snapshot.memories.length} documents · markdown on disk, indexed in SQLite`}
+      subtitle={`${snapshot.memories.length} documents: markdown on disk, indexed in SQLite`}
       onClose={onClose}
       actions={
         <button
-          className="btn"
+          className="btn primary"
           onClick={() =>
             setEditing({ path: '', title: '', body: '', scope: 'project', projectId: snapshot.activeProjectId })
           }
@@ -44,12 +46,12 @@ export function MemoryPanel({ onClose }: { onClose: () => void }) {
         </button>
       }
     >
-      <input
-        className="input space-below"
-        placeholder="Search memory…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      <div className="list-toolbar">
+        <label className="search-field">
+          <IconSearch width={14} height={14} />
+          <input placeholder={`Search ${snapshot.memories.length} documents`} aria-label="Search memory" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </label>
+      </div>
       {editing ? (
         <MemoryEditor
           doc={editing}
@@ -57,47 +59,48 @@ export function MemoryPanel({ onClose }: { onClose: () => void }) {
         />
       ) : null}
       {grouped.map(([scope, items]) => (
-        <div key={scope}>
+        <section key={scope} className="space-below">
           <div className="section-label">
-            <span>{scope}</span>
-            <span>{items.length}</span>
+            <span>{SCOPES[scope] ?? scope}</span>
+            <span className="faint">{items.length}</span>
           </div>
-          {items.map((doc) => (
-            <div key={doc.id} className="mem-row">
-              <div className="mem-head">
-                {doc.pinned ? <IconPin width={11} height={11} style={{ color: 'var(--accent)' }} /> : null}
-                <span className="mem-title">{doc.title}</span>
-                <span className="badge">{Math.round(doc.confidence * 100)}%</span>
-                <span className="mem-path">{doc.path}</span>
+          <div className="item-list">
+            {items.map((doc) => (
+              <div key={doc.id} className="item-row mem-item">
+                <div className="item-main">
+                  <div className="item-title">
+                    {doc.pinned ? <IconPin width={13} height={13} className="pin-mark" aria-label="Pinned" /> : null}
+                    <b>{doc.title}</b>
+                    <span className="item-meta mono truncate">{doc.path}</span>
+                  </div>
+                  <button className={`mem-body${open === doc.id ? ' open' : ''}`} onClick={() => setOpen(open === doc.id ? null : doc.id)} aria-expanded={open === doc.id} title={open === doc.id ? 'Collapse' : 'Show all'}>
+                    {doc.body.slice(0, 1200)}
+                  </button>
+                  <p className="item-meta">{Math.round(doc.confidence * 100)}% confidence, {doc.source}, updated {new Date(doc.updatedAt).toLocaleDateString()}</p>
+                </div>
+                <div className="item-actions">
+                  <button className="icon-btn" onClick={() => setEditing(doc)} aria-label={`Edit ${doc.title}`} title="Edit"><IconEdit /></button>
+                  <button className={`icon-btn${doc.pinned ? ' active' : ''}`} onClick={() => void guard(() => window.ventriee.pinMemory(doc.id), doc.pinned ? 'Unpinned' : 'Pinned')} aria-label={doc.pinned ? `Unpin ${doc.title}` : `Pin ${doc.title}`} title={doc.pinned ? 'Unpin' : 'Pin'}>
+                    <IconPin />
+                  </button>
+                  <button
+                    className="icon-btn danger"
+                    aria-label={`Delete ${doc.title}`}
+                    title="Delete"
+                    onClick={async () => {
+                      if (!window.confirm(`Delete "${doc.title}"? The markdown file is removed too.`)) return
+                      await guard(() => window.ventriee.deleteMemory(doc.id), 'Memory deleted')
+                    }}
+                  >
+                    <IconTrash />
+                  </button>
+                </div>
               </div>
-              <div className={`mem-body${open === doc.id ? ' open' : ''}`} onClick={() => setOpen(open === doc.id ? null : doc.id)}>
-                {doc.body.slice(0, 1200)}
-              </div>
-              <div className="mem-actions">
-                <button className="btn tiny" onClick={() => setEditing(doc)}><IconEdit width={10} height={10} /> Edit</button>
-                <button className="btn tiny" onClick={() => void guard(() => window.ventriee.pinMemory(doc.id), doc.pinned ? 'Unpinned' : 'Pinned')}>
-                  <IconPin width={10} height={10} /> {doc.pinned ? 'Unpin' : 'Pin'}
-                </button>
-                <button
-                  className="btn tiny danger"
-                  aria-label={`Delete ${doc.title}`}
-                  title="Delete"
-                  onClick={async () => {
-                    if (!window.confirm(`Delete "${doc.title}"? The markdown file is removed too.`)) return
-                    await guard(() => window.ventriee.deleteMemory(doc.id), 'Memory deleted')
-                  }}
-                >
-                  <IconTrash width={10} height={10} />
-                </button>
-                <span className="faint" style={{ fontSize: 11, marginLeft: 'auto', alignSelf: 'center' }}>
-                  {doc.source} · {new Date(doc.updatedAt).toLocaleDateString()}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </section>
       ))}
-      {!docs.length ? <p className="faint text-sm">Nothing matches.</p> : null}
+      {!docs.length ? <p className="settings-empty">{query ? 'Nothing matches.' : 'No memory yet. Workers write lessons here after accepted tasks.'}</p> : null}
     </Modal>
   )
 }
@@ -112,28 +115,29 @@ function MemoryEditor({ doc, onClose }: { doc: Partial<MemoryDoc>; onClose: () =
   const suggested = path || (doc.scope === 'global' ? 'global/notes.md' : `projects/${snapshot.activeProjectId}/notes.md`)
 
   return (
-    <div style={{ border: '1px solid var(--line)', borderRadius: 9, padding: 12, marginBottom: 14, background: 'var(--panel)' }}>
+    <div className="inset-form space-below">
       <div className="row">
         <div className="field">
-          <label className="field-label">Title</label>
-          <input aria-label="Title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+          <label className="field-label" htmlFor="mem-title">Title</label>
+          <input id="mem-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
         </div>
-        <div className="field">
-          <label className="field-label">Scope</label>
-          <select aria-label="Scope" className="select" value={scope} onChange={(e) => setScope(e.target.value as MemoryDoc['scope'])}>
-            {['global', 'project', 'agent', 'skill'].map((s) => <option key={s} value={s}>{s}</option>)}
+        <div className="field field-narrow">
+          <label className="field-label" htmlFor="mem-scope">Scope</label>
+          <select id="mem-scope" className="select" value={scope} onChange={(e) => setScope(e.target.value as MemoryDoc['scope'])}>
+            {['global', 'project', 'agent', 'skill'].map((s) => <option key={s} value={s}>{SCOPES[s]}</option>)}
           </select>
         </div>
       </div>
       <div className="field">
-        <label className="field-label">File path (relative to the memory root)</label>
-        <input aria-label="File path (relative to the memory root)" className="input mono" value={path} onChange={(e) => setPath(e.target.value)} placeholder={suggested} />
+        <label className="field-label" htmlFor="mem-path">File path (relative to the memory root)</label>
+        <input id="mem-path" className="input mono" value={path} onChange={(e) => setPath(e.target.value)} placeholder={suggested} />
       </div>
       <div className="field">
-        <label className="field-label">Content (markdown)</label>
-        <textarea aria-label="Content (markdown)" className="textarea mono" style={{ minHeight: 150 }} value={body} onChange={(e) => setBody(e.target.value)} />
+        <label className="field-label" htmlFor="mem-body">Content (markdown)</label>
+        <textarea id="mem-body" className="textarea mono textarea-tall" value={body} onChange={(e) => setBody(e.target.value)} />
       </div>
-      <div className="flex gap-8">
+      <div className="form-foot">
+        <button className="btn ghost" onClick={onClose}>Cancel</button>
         <button
           className="btn primary"
           disabled={!title.trim() || !body.trim()}
@@ -155,7 +159,6 @@ function MemoryEditor({ doc, onClose }: { doc: Partial<MemoryDoc>; onClose: () =
         >
           <IconCheck /> Save
         </button>
-        <button className="btn" onClick={onClose}>Cancel</button>
       </div>
     </div>
   )

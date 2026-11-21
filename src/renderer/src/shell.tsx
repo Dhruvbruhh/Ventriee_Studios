@@ -1,13 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useStore } from './store'
-import { IconChevron, IconClose, IconFolder, IconPlus, IconSettings, IconWindow } from './icons'
+import { IconClose } from './icons'
 import { guard } from './store'
 import { notice } from './fx'
 import type { Project } from '../../shared/types'
-
-export function AppShell() {
-  return null
-}
 
 export function Modal({
   title,
@@ -84,93 +80,6 @@ export function Toast() {
   )
 }
 
-export function ProjectSwitcher({ onOpen }: { onOpen: () => void }) {
-  const snapshot = useStore((s) => s.snapshot)
-  const [open, setOpen] = useState(false)
-  const project = snapshot?.projects.find((p) => p.id === snapshot.activeProjectId) ?? null
-
-  useEffect(() => {
-    if (!open) return
-    const close = () => setOpen(false)
-    window.addEventListener('click', close)
-    return () => window.removeEventListener('click', close)
-  }, [open])
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <button
-        className="project-btn"
-        onClick={(e) => {
-          e.stopPropagation()
-          setOpen((v) => !v)
-        }}
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        <span className="project-dot" style={{ background: project ? 'var(--ok)' : 'var(--faint)' }} />
-        <span className="project-name">{project?.name ?? 'No project selected'}</span>
-        <IconChevron className="project-caret" width={12} height={12} />
-      </button>
-      {open ? (
-        <div className="popover" role="menu" onClick={(e) => e.stopPropagation()}>
-          {snapshot?.projects.length ? (
-            snapshot.projects.map((p) => (
-              <div key={p.id} className="popover-item-row">
-                <button
-                  className="popover-item"
-                  onClick={() => {
-                    if (p.id !== snapshot.activeProjectId && useStore.getState().editorDirty && !window.confirm('Discard unsaved code edits and switch projects?')) return
-                    setOpen(false)
-                    void guard(() => window.ventriee.selectProject(p.id))
-                  }}
-                >
-                  <IconFolder width={13} height={13} style={{ color: 'var(--muted)' }} />
-                  <span className="grow truncate">{p.name}</span>
-                  {p.id === snapshot.activeProjectId ? <span className="badge accent">active</span> : null}
-                </button>
-                <button
-                  className="popover-row-action"
-                  title="Open this project in its own window"
-                  aria-label={`Open ${p.name} in a new window`}
-                  onClick={() => {
-                    setOpen(false)
-                    void guard(() => window.ventriee.openProjectWindow(p.id), `${p.name} opened in a new window`)
-                  }}
-                >
-                  <IconWindow width={13} height={13} />
-                </button>
-              </div>
-            ))
-          ) : (
-            <div className="popover-item faint" style={{ cursor: 'default' }}>No projects yet</div>
-          )}
-          <div className="popover-sep" />
-          <button
-            className="popover-item"
-            onClick={() => {
-              setOpen(false)
-              onOpen()
-            }}
-          >
-            <IconPlus width={13} height={13} style={{ color: 'var(--accent)' }} />
-            New project
-          </button>
-          <button
-            className="popover-item"
-            onClick={() => {
-              setOpen(false)
-              useStore.getState().setPanel('project')
-            }}
-          >
-            <IconSettings width={13} height={13} style={{ color: 'var(--muted)' }} />
-            Project settings
-          </button>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
 export function NewProjectDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
   const [path, setPath] = useState('')
@@ -196,11 +105,6 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
       subtitle="A workspace folder and a squad are created for you."
       onClose={onClose}
       narrow
-      actions={
-        <button className="btn primary" onClick={submit} disabled={!name.trim() || !path.trim() || busy}>
-          {busy ? 'Creating…' : 'Create project'}
-        </button>
-      }
     >
       <div className="field">
         <label className="field-label" htmlFor="proj-name">Project name</label>
@@ -222,8 +126,7 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
         <div className="row">
           <input id="proj-path" className="input mono" value={path} onChange={(e) => setPath(e.target.value)} placeholder={'D:\\Work\\client-site'} />
           <button
-            className="btn"
-            style={{ flex: 'none' }}
+            className="btn flex-none"
             onClick={async () => {
               const picked = await guard(() => window.ventriee.pickFolder())
               if (picked) {
@@ -247,8 +150,12 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
           placeholder="What this project is, who it is for, and what counts as done."
         />
       </div>
-      <div className="hint">
-        Creating a project seeds the 14 default workers and the memory files for this project.
+      <div className="modal-foot">
+        <p className="hint">Creating a project seeds the 14 default workers and the memory files for this project.</p>
+        <button className="btn ghost" onClick={onClose}>Cancel</button>
+        <button className="btn primary" onClick={submit} disabled={!name.trim() || !path.trim() || busy}>
+          {busy ? 'Creating…' : 'Create project'}
+        </button>
       </div>
     </Modal>
   )

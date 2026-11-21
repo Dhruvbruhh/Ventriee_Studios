@@ -1226,6 +1226,8 @@ app.whenReady().then(async () => {
   })
   await refreshProviders()
   createWindow()
+  // Discover models in the background: without this the picker stayed empty until a manual Rescan.
+  void refreshModels(store.activeProjectId()).catch((error: Error) => errors?.record('models', error.message, error.stack))
   updater.start()
   createTray()
   startScheduler()

@@ -221,10 +221,10 @@ export function App() {
 function OnboardingModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="Set up an engine to start" onClose={onClose} narrow>
-      <p className="dim" style={{ fontSize: 12, lineHeight: 1.6 }}>
+      <p className="dim text-sm lh-relaxed">
         Ventriee runs agents through CLI tools or API providers. None are ready on this machine yet. Pick one path:
       </p>
-      <div className="kv-row" style={{ marginTop: 10 }}>
+      <div className="kv-row space-above">
         <div className="kv-row-main">
           <div className="kv-row-title">CLI agent (recommended)</div>
           <div className="kv-row-sub">

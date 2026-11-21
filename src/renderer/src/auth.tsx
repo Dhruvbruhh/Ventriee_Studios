@@ -54,7 +54,7 @@ export function AuthRoot() {
     <p>Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> in <code>.env</code>, then restart.</p>
     <p>See <code>docs/supabase-authentication.md</code>. Use a public publishable or legacy anon key.</p></Screen>
   if (!ready) return <Screen><h2>Opening your studio</h2><p role="status">Restoring your account…</p></Screen>
-  return <>{hadSession ? <div className="authenticated-studio" style={{ display: signedIn ? undefined : 'none' }}><App /></div> : null}
+  return <>{hadSession ? <div className="authenticated-studio" hidden={!signedIn}><App /></div> : null}
   {!signedIn ? <Screen><h2>{signup ? 'Create your account' : 'Sign in to your studio'}</h2>
     <form onSubmit={(event) => void submit(event)} className="auth-form">
       <label className="field">Email<input className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={busy} /></label>

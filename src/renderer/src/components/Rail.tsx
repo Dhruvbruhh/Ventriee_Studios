@@ -47,7 +47,7 @@ function Plan({ tasks, agents, onSelect }: { tasks: Task[]; agents: Agent[]; onS
   if (!tasks.length) {
     return (
       <div className="empty-mini">
-        <p className="faint" style={{ fontSize: 11.5, lineHeight: 1.6 }}>
+        <p className="faint text-sm lh-relaxed">
           No plan yet. Describe what you want to build in the command bar and the orchestrator will
           break it into tasks.
         </p>
@@ -93,15 +93,15 @@ function Plan({ tasks, agents, onSelect }: { tasks: Task[]; agents: Agent[]; onS
             </div>
             {open ? (
               <>
-                <div className="task-evidence" style={{ WebkitLineClamp: 8, marginTop: 7 }}>
+                <div className="task-evidence clamp-8">
                   {task.description}
                 </div>
-                <div className="task-evidence" style={{ WebkitLineClamp: 6 }}>
-                  <strong style={{ color: 'var(--muted)' }}>Acceptance:</strong> {task.acceptance}
+                <div className="task-evidence clamp-6">
+                  <strong className="muted">Acceptance:</strong> {task.acceptance}
                 </div>
                 {task.review ? (
-                  <div className="task-evidence" style={{ WebkitLineClamp: 6 }}>
-                    <strong style={{ color: 'var(--muted)' }}>Review:</strong> {task.review}
+                  <div className="task-evidence clamp-6">
+                    <strong className="muted">Review:</strong> {task.review}
                   </div>
                 ) : null}
                 <div className="task-actions" onClick={(e) => e.stopPropagation()}>
@@ -159,7 +159,7 @@ function useStoreForAgent(id: string) {
 
 function Activity({ snapshot, onSelect }: { snapshot: NonNullable<ReturnType<typeof useStore.getState>['snapshot']>; onSelect: (id: string) => void }) {  const events = [...snapshot.events].reverse().slice(0, 160)
   if (!events.length) {
-    return <p className="faint" style={{ fontSize: 11.5, padding: 4 }}>No activity yet.</p>
+    return <p className="rail-empty">No activity yet.</p>
   }
   return (
     <div className="log">
@@ -171,8 +171,7 @@ function Activity({ snapshot, onSelect }: { snapshot: NonNullable<ReturnType<typ
             <span className="log-msg">
               {agent ? (
                 <button
-                  className="ghost-link"
-                  style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 550 }}
+                  className="ghost-link log-who"
                   onClick={() => onSelect(agent.id)}
                 >
                   {agent.name}
@@ -211,7 +210,7 @@ function Mail() {
                 <span className="mail-type owner">approval</span>
                 <span className="truncate">{task.title}</span>
               </div>
-              <div className="mail-body" style={{ WebkitLineClamp: 3 }}>{task.review}</div>
+              <div className="mail-body clamp-3">{task.review}</div>
               <div className="task-actions">
                 <button className="btn tiny primary" onClick={() => void guard(() => window.ventriee.approveTask(task.id), 'Approved')}>Approve</button>
                 <button
@@ -233,7 +232,7 @@ function Mail() {
         <span>{snapshot.messages.length}</span>
       </div>
       {messages.length === 0 ? (
-        <p className="faint" style={{ fontSize: 11.5, padding: 4 }}>No messages yet.</p>
+        <p className="rail-empty">No messages yet.</p>
       ) : (
         messages.map((m) => (
           <div key={m.id} className="mail">
