@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyBrief, heuristicPlan, orderTasks, parsePlanAnswer } from '../src/main/planner'
+import { classifyBrief, heuristicPlan, orderTasks, parsePlanAnswer, pickSpecialists } from '../src/main/planner'
 
 const roles = (plan: ReturnType<typeof heuristicPlan>) => plan.tasks.map((t) => t.role)
 
@@ -107,5 +107,22 @@ describe('parsePlanAnswer', () => {
     })
     const plan = parsePlanAnswer(answer, ['frontend'])
     expect(plan?.tasks[0].dependsOnKeys).toEqual([])
+  })
+})
+
+describe('specialist skills', () => {
+  it('keeps up to 3 string skill ids from the plan', () => {
+    const answer = '{"tasks":[{"title":"SEO pass","role":"seo","skills":["marketing-seo-specialist",7,"a","b","c"]}]}'
+    expect(parsePlanAnswer(answer, ['seo'])?.tasks[0].skills).toEqual(['marketing-seo-specialist', 'a', 'b'])
+  })
+
+  it('ranks installed skills by overlap with the brief', () => {
+    const skills = [
+      { id: 'marketing-seo-specialist', description: 'Technical SEO and organic search growth' },
+      { id: 'engineering-frontend-developer', description: 'React frontend developer' },
+      { id: 'sales-coach', description: 'Coaching reps' }
+    ]
+    const picked = pickSpecialists('Build a React landing page with strong SEO for organic search', skills)
+    expect(picked.map((s) => s.id)).toEqual(['marketing-seo-specialist', 'engineering-frontend-developer'])
   })
 })

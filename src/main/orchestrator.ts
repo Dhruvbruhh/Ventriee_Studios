@@ -15,7 +15,7 @@ import type { CheckpointService } from './checkpoint'
 import { parseVerdict } from './review'
 import { ROLE_TEMPLATES, roleByName, MANDATORY_SKILLS, type Phase } from './roles'
 import { scopeToRole, DELIVERABLE_BY_ROLE } from './brief'
-import { heuristicPlan, orderTasks, parsePlanAnswer, type Plan } from './planner'
+import { heuristicPlan, orderTasks, parsePlanAnswer, pickSpecialists, type Plan } from './planner'
 import { promotable } from './queue'
 import { routeModel } from './routing'
 import { newId } from './store'
@@ -276,6 +276,8 @@ export class Orchestrator {
   private planningPrompt(project: Project, instruction: string, roster: Agent[], memoryBlock: string) {
     const roles = this.plannableRoles(roster).filter((role) => role !== 'orchestrator')
       .map((role) => `${role} (${roster.find((a) => a.role === role)?.title ?? roleByName(role)?.title ?? role})`).join(', ')
+    const specialists = pickSpecialists(instruction, this.deps.store.skills().filter((s) => s.enabled))
+      .map((s) => `- ${s.id}: ${s.description.slice(0, 140)}`).join('\n')
     return `You are planning work for a real software project. Respond with JSON only, no prose.
 
 Project: ${project.name}
@@ -293,12 +295,16 @@ Rules:
 - 4 to 12 tasks. Each description is an instruction to a worker, concrete and self-contained.
 - Do not include a task for the owner.
 - difficulty: "low" for small or mechanical work (copy, docs, simple pages, renames), "high" for architecture, tricky logic, security or review, otherwise "medium". Low tasks may run on cheaper models.
+- skills: optional, up to 3 specialist ids from the list below that fit the task; the worker gets their playbooks. Use [] when none fit.
+
+Specialists matching this brief (id: what it does):
+${specialists || '(none installed)'}
 
 Relevant stored memory:
 ${memoryBlock}
 
 JSON shape:
-{"summary":"one line","tasks":[{"key":"t1","title":"...","description":"...","acceptance":"...","role":"researcher","phase":"research","difficulty":"low","dependsOn":[]}]}`
+{"summary":"one line","tasks":[{"key":"t1","title":"...","description":"...","acceptance":"...","role":"researcher","phase":"research","difficulty":"low","skills":[],"dependsOn":[]}]}`
   }
 
   private async makePlan(project: Project, instruction: string, roster: Agent[]): Promise<Plan> {
@@ -460,6 +466,7 @@ JSON shape:
         endpoint: null,
         routedBy: null,
         difficulty: planned.difficulty ?? null,
+        skills: planned.skills ?? [],
         createdAt: Date.now(),
         updatedAt: Date.now()
       })
@@ -620,7 +627,7 @@ JSON shape:
     // Offer this worker the skills bound to it, not the first N of the registry.
     // An empty binding means "use the role template's list", so a new worker is
     // useful before the owner touches its config.
-    const wanted = new Set([...MANDATORY_SKILLS, ...(agent.skills.length ? agent.skills : roleByName(agent.role)?.skills ?? [])])
+    const wanted = new Set([...MANDATORY_SKILLS, ...(agent.skills.length ? agent.skills : roleByName(agent.role)?.skills ?? []), ...(task.skills ?? [])])
     const skills = this.deps.store.skills().filter((s) => s.enabled && wanted.has(s.id))
     const before = await this.evidenceDigest(project.path)
     const sessionId = newId('ses')

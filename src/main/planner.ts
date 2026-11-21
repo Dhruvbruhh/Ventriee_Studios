@@ -11,6 +11,8 @@ export interface PlannedTask {
   dependsOnKeys: string[]
   /** How hard the task is; routing sends low ones to cheaper models. */
   difficulty?: Difficulty
+  /** Specialist skill ids for this task; unknown ids are dropped at run time. */
+  skills?: string[]
 }
 
 export interface Plan {
@@ -420,6 +422,7 @@ export function parsePlanAnswer(raw: string, validRoles: string[]): Plan | null 
         role?: string
         phase?: string
         difficulty?: string
+        skills?: unknown
         dependsOn?: string[] | string
         dependsOnKeys?: string[] | string
       }>
@@ -446,7 +449,8 @@ export function parsePlanAnswer(raw: string, validRoles: string[]): Plan | null 
         role: normalizeRole(String(t.role ?? 'frontend'), validRoles),
         phase: (String(t.phase ?? 'build').toLowerCase() as Phase) ?? 'build',
         dependsOnKeys: dependsRaw.map((d) => String(d)),
-        ...(['low', 'medium', 'high'].includes(String(t.difficulty).toLowerCase()) ? { difficulty: String(t.difficulty).toLowerCase() as Difficulty } : {})
+        ...(['low', 'medium', 'high'].includes(String(t.difficulty).toLowerCase()) ? { difficulty: String(t.difficulty).toLowerCase() as Difficulty } : {}),
+        ...(Array.isArray(t.skills) ? { skills: t.skills.filter((s): s is string => typeof s === 'string').slice(0, 3) } : {})
       })
     })
     if (!tasks.length) return null
@@ -503,4 +507,23 @@ export function orderTasks<T extends { key: string; dependsOnKeys: string[] }>(t
     }
   }
   return out
+}
+
+/**
+ * Installed skills whose id or description share the most words with the brief,
+ * so the planner sees a short relevant list instead of hundreds of entries.
+ * shortcut: plain word overlap, upgrade to embeddings if picks get noisy.
+ */
+export function pickSpecialists<T extends { id: string; description: string }>(brief: string, skills: T[], limit = 20): T[] {
+  const words = new Set(brief.toLowerCase().match(/[a-z0-9]{4,}/g) ?? [])
+  if (!words.size) return []
+  return skills
+    .map((s) => {
+      const text = `${s.id} ${s.description}`.toLowerCase()
+      return { s, score: [...words].filter((w) => text.includes(w)).length }
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((x) => x.s)
 }

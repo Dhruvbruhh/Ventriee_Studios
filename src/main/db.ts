@@ -126,6 +126,10 @@ const MIGRATIONS: string[] = [
   // Planner's difficulty estimate, used to route easy tasks to cheaper models.
   `
   ALTER TABLE tasks ADD COLUMN difficulty TEXT;
+  `,
+  // Specialist skills the planner attached to one task, on top of the worker's own.
+  `
+  ALTER TABLE tasks ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';
   `
 ]
 

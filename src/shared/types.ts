@@ -264,6 +264,8 @@ export interface Task {
   changedFiles?: Array<{ path: string; removed: boolean }>
   /** Planner's estimate; null when the plan did not say. */
   difficulty?: Difficulty | null
+  /** Specialist skill ids the planner picked for this task, added to the worker's own. */
+  skills?: string[]
   createdAt: number
   updatedAt: number
 }
