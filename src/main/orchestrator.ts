@@ -291,6 +291,7 @@ Rules:
 - Every task must have testable acceptance criteria.
 - Frontend and backend may run in parallel only after the architecture/contract task completes.
 - Always end with review, then QA. Add deployment only when the brief implies shipping.
+- For a website or web app use this order: researcher, then architect (stack recommendation, folder structure, contract), then designer, then database (when there is persistent data), then backend and frontend, then integration, then security, then reviewer, qa and fixer, then seo, then deployment.
 - dependsOn uses the task "key" values you define (t1, t2, ...).
 - 4 to 12 tasks. Each description is an instruction to a worker, concrete and self-contained.
 - Do not include a task for the owner.
