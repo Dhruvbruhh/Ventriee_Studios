@@ -15,6 +15,7 @@ export function CommandBar() {
   const setDraft = useStore((s) => s.setDraft)
   const notify = useStore((s) => s.notify)
   const [busy, setBusy] = useState(false)
+  const [profile, setProfile] = useState<'' | 'website'>('')
   const ref = useRef<HTMLTextAreaElement>(null)
 
   const project = snapshot.projects.find((p) => p.id === snapshot.activeProjectId) ?? null
@@ -33,7 +34,7 @@ export function CommandBar() {
   const submit = async () => {
     if (!project || busy || running || !draft.trim()) return
     setBusy(true)
-    const result = await guard(() => window.ventriee.startRun({ projectId: project.id, instruction: draft.trim(), attachments: attach.paths }))
+    const result = await guard(() => window.ventriee.startRun({ projectId: project.id, instruction: draft.trim(), attachments: attach.paths, profile: profile || undefined }))
     setBusy(false)
     if (result) {
       setDraft('')
@@ -70,6 +71,10 @@ export function CommandBar() {
             {...attach.handlers}
           />
           {attach.button}{mic}
+          <select className="select" value={profile} onChange={(e) => setProfile(e.target.value as typeof profile)} aria-label="Run profile" title="Client website: research, stack pick, folders, database, backend, frontend, security, review, QA, ship">
+            <option value="">Auto</option>
+            <option value="website">Client website</option>
+          </select>
           {running ? (
             <button className="stop-btn" onClick={() => void guard(() => window.ventriee.stopRun(project!.id), 'Run stopped')}>
               <IconStop /> Stop

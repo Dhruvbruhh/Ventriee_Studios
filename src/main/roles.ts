@@ -311,6 +311,9 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
 
 export const roleByName = (role: string) => ROLE_TEMPLATES.find((r) => r.role === role)
 
+/** Roles only the Client website profile schedules; a normal run never hires them. */
+export const WEBSITE_ROLES = new Set(['database', 'security'])
+
 export const PIPELINE = [
   'research',
   'requirements',

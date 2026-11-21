@@ -90,7 +90,7 @@ const DESIGN_CATEGORIES = new Set<ProjectCategory>(['web', 'saas', 'desktop', 'm
  * Deterministic fallback planner. Used when no model is reachable, so the
  * studio still produces a real, runnable plan instead of stalling.
  */
-export function heuristicPlan(instruction: string): Plan {
+export function heuristicPlan(instruction: string, website = false): Plan {
   const p = classifyBrief(instruction)
   const tasks: PlannedTask[] = []
   const add = (t: Omit<PlannedTask, 'dependsOnKeys'> & { dependsOnKeys?: string[] }) => {
@@ -132,7 +132,7 @@ export function heuristicPlan(instruction: string): Plan {
 
   const build: string[] = []
   if (p.category === 'web' || p.category === 'saas') {
-    if (p.api || p.category === 'saas') {
+    if ((p.api || p.category === 'saas') && website) {
       const db = add({
         key: 'database',
         title: 'Build the database schema, migrations and seed data',
@@ -150,6 +150,16 @@ export function heuristicPlan(instruction: string): Plan {
         role: 'backend',
         phase: 'build',
         dependsOnKeys: [...deps, db]
+      }))
+    } else if (p.api || p.category === 'saas') {
+      build.push(add({
+        key: 'backend',
+        title: 'Implement backend, API and persistence',
+        description: 'Implement the server side of the agreed contract with validation and tests.',
+        acceptance: 'API runs, tests pass, every input validated at the boundary.',
+        role: 'backend',
+        phase: 'build',
+        dependsOnKeys: deps
       }))
     }
     build.push(add({
@@ -280,7 +290,7 @@ export function heuristicPlan(instruction: string): Plan {
     }))
   }
 
-  if (build.length && ['web', 'saas', 'backend', 'ai'].includes(p.category)) {
+  if (website && build.length && ['web', 'saas', 'backend', 'ai'].includes(p.category)) {
     build.push(add({
       key: 'security',
       title: 'Security audit and fixes',
