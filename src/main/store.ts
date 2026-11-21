@@ -233,7 +233,8 @@ export class Store {
       endpoint: (r.endpoint as Task['endpoint']) ?? null,
       routedBy: (r.routedBy as Task['routedBy']) ?? null,
       changedFiles: safeJson<NonNullable<Task['changedFiles']>>(r.changedFiles as string, []),
-      difficulty: (r.difficulty as Task['difficulty']) ?? null
+      difficulty: (r.difficulty as Task['difficulty']) ?? null,
+      skills: safeJson<string[]>(r.skills as string, [])
     }))
   }
 
@@ -244,11 +245,12 @@ export class Store {
   insertTask(t: Task) {
     this.db.run(
       `INSERT INTO tasks(id,projectId,parentId,title,description,acceptance,role,agentId,status,
-        dependsOn,output,review,attempts,phase,engine,model,endpoint,routedBy,difficulty,createdAt,updatedAt)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        dependsOn,output,review,attempts,phase,engine,model,endpoint,routedBy,difficulty,skills,createdAt,updatedAt)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       t.id, t.projectId, t.parentId, t.title, t.description, t.acceptance, t.role, t.agentId, t.status,
       JSON.stringify(t.dependsOn), t.output, t.review, t.attempts, t.phase,
       t.engine ?? null, t.model ?? null, t.endpoint ?? null, t.routedBy ?? null, t.difficulty ?? null,
+      JSON.stringify(t.skills ?? []),
       t.createdAt, t.updatedAt
     )
   }
