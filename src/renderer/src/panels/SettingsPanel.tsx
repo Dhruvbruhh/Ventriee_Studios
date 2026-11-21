@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { guard, useStore } from '../store'
 import { Modal, Switch } from '../shell'
 import { ENGINE_LABELS, type Agent, type EngineKind } from '../../../shared/types'
 // CLI adapters spawn a process per request; mirrors isCliEngine in main.
 const isCliEngine = (engine: EngineKind) => engine.startsWith('cli-')
-import { IconClose, IconCheck, IconPlus, IconRefresh, IconTrash } from '../icons'
+import { IconClose, IconCheck, IconCpu, IconDatabase, IconKey, IconPlug, IconPlus, IconRefresh, IconSliders, IconTrash, IconUsers } from '../icons'
 import { ModelPicker, resolveModel } from '../components/ModelPicker'
 import { AddProviderDialog } from '../components/AddProviderDialog'
 import { TerminalView } from '../components/Terminal'
@@ -29,6 +29,15 @@ const ENGINE_ORDER: EngineKind[] = [
   'api-ollama', 'api-lmstudio', 'api-vllm', 'api-custom'
 ]
 
+const TABS: Array<[Tab, string, ReactNode]> = [
+  ['subscriptions', 'Subscriptions', <IconKey key="i" />],
+  ['engines', 'Engines', <IconCpu key="i" />],
+  ['workers', 'Workers', <IconUsers key="i" />],
+  ['run', 'Run policy', <IconSliders key="i" />],
+  ['tools', 'MCP tools', <IconPlug key="i" />],
+  ['data', 'Data', <IconDatabase key="i" />]
+]
+
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('subscriptions')
   return (
@@ -36,15 +45,13 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       title="Studio settings"
       subtitle="Engines, workers and run policy. Keys are stored in the OS keychain."
       onClose={onClose}
-      tabs={
-        <div className="modal-tabs" role="tablist">
-          {([['subscriptions', 'Subscriptions'], ['engines', 'Engines'], ['workers', 'Workers'], ['run', 'Run policy'], ['tools', 'MCP tools'], ['data', 'Data']] as Array<[Tab, string]>).map(
-            ([id, label]) => (
-              <button key={id} className={`modal-tab${tab === id ? ' on' : ''}`} onClick={() => setTab(id)} role="tab" aria-selected={tab === id}>
-                {label}
-              </button>
-            )
-          )}
+      nav={
+        <div className="modal-nav" role="tablist" aria-orientation="vertical" aria-label="Settings sections">
+          {TABS.map(([id, label, icon]) => (
+            <button key={id} className={`modal-nav-item${tab === id ? ' on' : ''}`} onClick={() => setTab(id)} role="tab" aria-selected={tab === id}>
+              {icon}{label}
+            </button>
+          ))}
         </div>
       }
     >
@@ -58,6 +65,10 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   )
 }
 
+function PaneHead({ title, children }: { title: string; children?: ReactNode }) {
+  return <header className="pane-head"><h3>{title}</h3>{children ? <p>{children}</p> : null}</header>
+}
+
 function McpTools() {
   const servers = useStore((s) => s.snapshot)!.settings.mcpServers ?? []
   const [name, setName] = useState('')
@@ -66,17 +77,17 @@ function McpTools() {
   const save = (next: typeof servers, done?: string) => guard(() => window.ventriee.saveSettings({ mcpServers: next }), done)
   const nameOk = /^[A-Za-z0-9_-]{1,40}$/.test(name) && !servers.some((s) => s.name === name)
   return <>
-    <p className="hint space-below">
+    <PaneHead title="MCP tools">
       MCP servers give workers extra tools (a browser, a database, GitHub…). Enabled servers are passed to <b>Claude Code</b> workers on every run.
       Codex and Gemini CLI read MCP servers from their own config files (<code>~/.codex/config.toml</code>, <code>~/.gemini/settings.json</code>), so add them there for those engines.
       A server runs as a program on this computer with your permissions: add only ones you trust.
-    </p>
-    {!servers.length ? <p className="hint">No MCP servers yet.</p> : servers.map((s, i) => <div className="provider-line" key={s.name}>
+    </PaneHead>
+    {!servers.length ? <p className="settings-empty">No MCP servers yet. Add one below.</p> : <div className="settings-list">{servers.map((s, i) => <div className="provider-line" key={s.name}>
       <span className="prov-name">{s.name}</span>
       <span className="prov-detail mono" title={`${s.command} ${s.args.join(' ')}`}>{s.command} {s.args.join(' ')}</span>
       <Switch on={s.enabled} onClick={() => void save(servers.map((x, j) => (j === i ? { ...x, enabled: !x.enabled } : x)))} label={`Enable ${s.name}`} />
       <button className="btn tiny" onClick={() => void save(servers.filter((_, j) => j !== i), `Removed ${s.name}`)} aria-label={`Remove ${s.name}`}><IconTrash /></button>
-    </div>)}
+    </div>)}</div>}
     <form className="mcp-add" onSubmit={(e) => { e.preventDefault(); if (!nameOk || !command.trim()) return
       void save([...servers, { name, command: command.trim(), args: args.trim() ? args.trim().split(/\s+/) : [], enabled: true }], `Added ${name}`).then(() => { setName(''); setCommand(''); setArgs('') }) }}>
       <input className="input" aria-label="Server name" placeholder="name, e.g. filesystem" value={name} onChange={(e) => setName(e.target.value)} />
@@ -96,29 +107,40 @@ function Subscriptions() {
   const [checked, setChecked] = useState<Record<string, { ok: boolean; detail: string }>>({})
   const sub = running ? SUBSCRIPTIONS.find((s) => s.engine === running.engine)! : null
   return <>
-    <p className="hint space-below">
+    <PaneHead title="Subscriptions">
       Use a subscription you already pay for. Each one signs in through the vendor's own command-line tool, in a terminal below; Ventriee never sees your password.
       After signing in, <b>Check</b> sends one tiny request to prove it works, and <b>Use everywhere</b> makes it the default for the planner and new workers.
-    </p>
+    </PaneHead>
+    <div className="sub-grid">
     {SUBSCRIPTIONS.map((s) => {
       const provider = snapshot.providers.find((p) => p.engine === s.engine)
       const result = checked[s.engine]
       const isDefault = snapshot.settings.plannerEngine === s.engine && snapshot.settings.orchestratorEngine === s.engine
-      return <div key={s.engine} className="provider-line">
-        <span className="prov-name">{s.name}<small className="dim" style={{ display: 'block', fontSize: 11 }}>{s.plan}</small></span>
-        <span className={`badge ${provider?.available ? 'ok' : 'err'}`}>{provider?.available ? 'installed' : 'not installed'}</span>
-        <span className="prov-detail" title={result?.detail}>{result ? <>{result.ok ? <IconCheck width={12} height={12} aria-hidden /> : <IconClose width={12} height={12} aria-hidden />} {result.ok ? 'Signed in and answering' : result.detail}</> : isDefault ? 'Default for planner and new workers' : ''}</span>
-        {!provider?.available ? <button className="btn tiny" disabled={!project} onClick={() => setRunning({ engine: s.engine, action: 'install' })}>Install</button> : null}
-        <button className="btn tiny" disabled={!project || !provider?.available} onClick={() => setRunning({ engine: s.engine, action: 'login' })}>Sign in</button>
-        <button className="btn tiny" disabled={!provider?.available || checking === s.engine} onClick={async () => {
-          setChecking(s.engine)
-          const r = await guard(() => window.ventriee.testEngine(s.engine, '', ''))
-          setChecking(null)
-          if (r) setChecked((c) => ({ ...c, [s.engine]: r }))
-        }}>{checking === s.engine ? 'Checking…' : 'Check'}</button>
-        <button className="btn tiny" disabled={!provider?.available || isDefault} onClick={() => void guard(() => window.ventriee.saveSettings({ plannerEngine: s.engine, plannerModel: '', plannerEndpoint: '', orchestratorEngine: s.engine, orchestratorModel: '' }), `${s.name} is now the default`)}>Use everywhere</button>
-      </div>
+      return <article key={s.engine} className={`sub-card${isDefault ? ' is-default' : ''}${provider?.available ? '' : ' is-missing'}`}>
+        <div className="sub-card-head">
+          <span className="sub-mark" aria-hidden>{s.name.slice(0, 1)}</span>
+          <span className="sub-name"><b>{s.name}</b><small>{s.plan}</small></span>
+          {isDefault ? <span className="badge accent">Default</span> : <span className={`badge ${provider?.available ? 'ok' : 'warn'}`}>{provider?.available ? 'Installed' : 'Not installed'}</span>}
+        </div>
+        <p className={`sub-status${result ? (result.ok ? ' ok-text' : ' err-text') : ''}`} title={result?.detail}>
+          {result ? <>{result.ok ? <IconCheck width={13} height={13} aria-hidden /> : <IconClose width={13} height={13} aria-hidden />} {result.ok ? 'Signed in and answering' : result.detail}</>
+            : isDefault ? 'Default for the planner and new workers'
+            : provider?.available ? 'Sign in, then check it answers' : `Installs with ${s.install.split(' ').slice(-1)[0]}`}
+        </p>
+        <div className="sub-actions">
+          {!provider?.available ? <button className="btn tiny primary" disabled={!project} onClick={() => setRunning({ engine: s.engine, action: 'install' })}>Install</button> : null}
+          <button className="btn tiny" disabled={!project || !provider?.available} onClick={() => setRunning({ engine: s.engine, action: 'login' })}>Sign in</button>
+          <button className="btn tiny" disabled={!provider?.available || checking === s.engine} onClick={async () => {
+            setChecking(s.engine)
+            const r = await guard(() => window.ventriee.testEngine(s.engine, '', ''))
+            setChecking(null)
+            if (r) setChecked((c) => ({ ...c, [s.engine]: r }))
+          }}>{checking === s.engine ? 'Checking…' : 'Check'}</button>
+          <button className="btn tiny ghost" disabled={!provider?.available || isDefault} onClick={() => void guard(() => window.ventriee.saveSettings({ plannerEngine: s.engine, plannerModel: '', plannerEndpoint: '', orchestratorEngine: s.engine, orchestratorModel: '' }), `${s.name} is now the default`)}>Use everywhere</button>
+        </div>
+      </article>
     })}
+    </div>
     {!project ? <p className="hint">Open a project first: the sign-in terminal starts in its folder.</p> : null}
     {running && sub && project ? <div className="subscription-terminal">
       <p className="hint"><b>{running.action === 'install' ? `Installing ${sub.name} (needs Node.js)` : `Signing in to ${sub.name}`}.</b> {running.action === 'install' ? 'When it finishes, close this and press Sign in.' : sub.hint}
@@ -146,10 +168,11 @@ function Engines() {
 
   return (
     <>
-      <p className="hint space-below">
+      <PaneHead title="Engines">
         CLI adapters run real local processes. API adapters call the provider directly. Nothing here is
         faked: unavailable engines stay marked unavailable until they actually respond.
-      </p>
+      </PaneHead>
+      <div className="settings-list">
       {ENGINE_ORDER.map((engine) => {
         const provider = snapshot.providers.find((p) => p.engine === engine)
         const isCli = provider?.kind === 'cli'
@@ -211,7 +234,8 @@ function Engines() {
           </div>
         )
       })}
-      <div className="hint" style={{ marginTop: 12 }}>
+      </div>
+      <div className="hint space-above">
         Env vars are also honoured (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY,
         DEEPSEEK_API_KEY, MISTRAL_API_KEY). A key set here overrides the environment.
       </div>
@@ -225,19 +249,19 @@ function Workers() {
   const agent = snapshot.agents.find((a) => a.id === selected) ?? null
   const [creaing, setCreating] = useState(false)
 
-  return (
+  return (<>
+    <PaneHead title="Workers">Who is on the team, which model each one runs, and how much it may do on its own.</PaneHead>
     <div className="agents-editor">
       <div className="agents-list">
         {snapshot.agents.map((a) => (
           <button key={a.id} className={`agent-pick${a.id === selected ? ' on' : ''}`} onClick={() => setSelected(a.id)}>
             <span className="avatar" style={{ ['--who' as string]: a.color }}>{a.name.slice(0, 2).toUpperCase()}</span>
             <span className="agent-pick-name">{a.name}</span>
-            <span className="badge" style={{ marginLeft: 'auto' }}>{a.role.slice(0, 4)}</span>
+            <span className="badge agent-pick-role">{a.role.slice(0, 4)}</span>
           </button>
         ))}
         <button
-          className="agent-pick"
-          style={{ color: 'var(--accent)', marginTop: 6 }}
+          className="agent-pick agent-pick-new"
           onClick={() => {
             setCreating(true)
             setSelected(null)
@@ -246,7 +270,7 @@ function Workers() {
           <IconPlus width={12} height={12} /> New worker
         </button>
       </div>
-      <div style={{ minWidth: 0 }}>
+      <div className="agents-form">
         {creaing ? (
           <NewWorker
             engineDefault={snapshot.settings.orchestratorEngine}
@@ -262,7 +286,7 @@ function Workers() {
         )}
       </div>
     </div>
-  )
+  </>)
 }
 
 function AgentForm({ agent }: { agent: Agent }) {
@@ -609,7 +633,8 @@ function RunPolicy() {
   }
 
   return (
-    <div style={{ opacity: busy ? 0.6 : 1 }}>
+    <div className={busy ? 'is-busy' : undefined}>
+      <PaneHead title="Run policy">How the orchestrator routes models, how many workers run at once, and what waits for your approval.</PaneHead>
       <div className="section-label">Model routing</div>
       <div className="assign-modes">
         {([
@@ -754,6 +779,7 @@ function DataTab() {
   }
   return (
     <>
+      <PaneHead title="Data">Updates, sync across your computers, spending limits and local logs.</PaneHead>
       <div className="section-label">Updates</div>
       <div className="kv-row">
         <div className="kv-row-main">

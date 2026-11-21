@@ -7,6 +7,7 @@ import { Preview } from './components/Preview'
 import { CommandBar } from './components/CommandBar'
 import { Inspector } from './components/Inspector'
 import { Workspace } from './components/Workspace'
+import { Dashboard } from './components/Dashboard'
 import { SideChat } from './components/SideChat'
 import { TerminalView } from './components/Terminal'
 import { SettingsPanel } from './panels/SettingsPanel'
@@ -120,7 +121,7 @@ export function App() {
           <IconSidebar />
         </button>
         <div className="tb-title" title={project?.path}>
-          <span className="tb-session">{workspace === 'plan' ? sessionTitle : workspace === 'code' ? 'Code' : 'Office'}</span>
+          <span className="tb-session">{workspace === 'plan' ? sessionTitle : workspace === 'code' ? 'Code' : workspace === 'home' ? 'Dashboard' : 'Office'}</span>
           {project ? <span className="tb-project">{project.name}</span> : null}
         </div>
         <div className="tb-spacer" />
@@ -131,6 +132,7 @@ export function App() {
           const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
           event.preventDefault(); buttons[next]?.focus(); buttons[next]?.click()
         }}>
+          <button data-fx="tab" className={`ws-tab${workspace === 'home' ? ' on' : ''}`} role="tab" aria-selected={workspace === 'home'} onClick={() => setWorkspace('home')} title="Project overview">Dashboard</button>
           <button
             data-fx="tab" className={`ws-tab${workspace === 'plan' ? ' on' : ''}`}
             onClick={() => setWorkspace('plan')}
@@ -164,7 +166,9 @@ export function App() {
         </button>
       </header>
 
-      {workspace === 'plan' ? (
+      {workspace === 'home' ? (
+        <Dashboard onNewProject={() => setNewProject(true)} />
+      ) : workspace === 'plan' ? (
         <Workspace />
       ) : workspace === 'office' ? (
         <>

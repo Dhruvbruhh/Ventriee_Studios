@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { App } from './App'
 import { guard, resetStudio, useStore, cleanError } from './store'
 import { supabaseUrl, supabaseKey } from '../../shared/auth-config'
+import { IconSignOut } from './icons'
 
 function Screen({ children }: { children: ReactNode }) {
   return <main className="auth-screen"><section className="auth-intro">
@@ -66,9 +67,9 @@ export function AuthRoot() {
 }
 export function AccountButton() {
   const [busy, setBusy] = useState(false)
-  return <button className="btn" disabled={busy} onClick={() => {
+  return <button className="btn ghost tiny side-signout" disabled={busy} title="Sign out of Ventriee" onClick={() => {
     if (useStore.getState().editorDirty && !window.confirm('You have unsaved edits. Sign out and discard them?')) return
     setBusy(true)
     void guard(() => window.ventriee.authClear()).finally(() => setBusy(false))
-  }}>{busy ? 'Signing out…' : 'Sign out'}</button>
+  }}><IconSignOut />{busy ? 'Signing out…' : 'Sign out'}</button>
 }
