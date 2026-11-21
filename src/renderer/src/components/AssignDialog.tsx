@@ -166,7 +166,7 @@ export function AssignDialog({
           })}
         </div>
 
-        <div className="field" style={{ marginTop: 14 }}>
+        <div className="field space-above">
           <label className="field-label" htmlFor="asg-note">Note for every worker (optional)</label>
           <input
             id="asg-note"
@@ -202,7 +202,7 @@ export function RecentAssignments({ assignments }: { assignments: Assignment[] }
             </span>
             <span className="kv-row-sub">{a.agents.map((x) => x.name).join(', ')}</span>
           </span>
-          <span className="faint" style={{ fontSize: 11 }}>{new Date(a.createdAt).toLocaleString()}</span>
+          <span className="faint text-xs">{new Date(a.createdAt).toLocaleString()}</span>
         </div>
       ))}
     </div>

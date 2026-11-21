@@ -602,7 +602,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
       gutter.current?.clear()
       gutter.current = editor.current.createDecorationsCollection(ranges.map((r) => ({
         range: new monaco.Range(r.start, 1, r.end, 1),
-        options: { isWholeLine: true, linesDecorationsClassName: `gutter-${r.kind}`, overviewRuler: { color: r.kind === 'added' ? '#79dcb4' : r.kind === 'deleted' ? '#f4796b' : '#8ab4f8', position: monaco.editor.OverviewRulerLane.Left } }
+        options: { isWholeLine: true, linesDecorationsClassName: `gutter-${r.kind}`, overviewRuler: { color: getComputedStyle(document.documentElement).getPropertyValue(r.kind === 'added' ? '--ok' : r.kind === 'deleted' ? '--err' : '--info').trim(), position: monaco.editor.OverviewRulerLane.Left } }
       })))
     }).catch(() => { gutter.current?.clear() })
     return () => { alive = false }

@@ -45,7 +45,7 @@ export function TerminalView({ projectId, slot: name, label, command, closeOnUnm
     slots.set(key, slot)
     const styles = getComputedStyle(document.documentElement)
     const term = new XTerm({ cursorBlink: true, fontFamily: styles.getPropertyValue('--mono').trim() || 'Consolas, monospace', fontSize: 12, scrollback: 5000,
-      theme: { background: '#0b0d10', foreground: '#e9ebee', cursor: '#a78bfa', selectionBackground: '#3b2f5c' } })
+      theme: { background: styles.getPropertyValue('--bg-deep').trim(), foreground: styles.getPropertyValue('--text').trim(), cursor: styles.getPropertyValue('--accent').trim(), selectionBackground: styles.getPropertyValue('--selection').trim() } })
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(host.current!)

@@ -165,13 +165,13 @@ export function Inspector({ agentId }: { agentId: string }) {
               </dl>
               {task.output ? (
                 <>
-                  <div className="section-label" style={{ marginTop: 14 }}>Worker report</div>
+                  <div className="section-label space-above">Worker report</div>
                   <div className="term" style={{ maxHeight: 260, minHeight: 100 }}>{task.output}</div>
                 </>
               ) : null}
             </>
           ) : (
-            <p className="faint" style={{ fontSize: 12 }}>No task assigned right now.</p>
+            <p className="faint text-sm">No task assigned right now.</p>
           )
         ) : null}
 
@@ -188,7 +188,7 @@ export function Inspector({ agentId }: { agentId: string }) {
               </div>
             ))
           ) : (
-            <p className="faint" style={{ fontSize: 12 }}>No messages exchanged yet.</p>
+            <p className="faint text-sm">No messages exchanged yet.</p>
           )
         ) : null}
 
@@ -205,7 +205,7 @@ export function Inspector({ agentId }: { agentId: string }) {
             <ConfigRow label="Tokens" value={tokens ? tokens.toLocaleString() : 'not reported'} />
             <ConfigRow label="Cost" value={cost ? `$${cost.toFixed(4)}` : 'not reported'} />
             {agent.lastError ? <ConfigRow label="Last error" value={agent.lastError} danger /> : null}
-            <div className="section-label" style={{ marginTop: 14 }}>Standing instructions</div>
+            <div className="section-label space-above">Standing instructions</div>
             <div className="term" style={{ minHeight: 90, maxHeight: 200 }}>{agent.instructions}</div>
 
             <div className="flex gap-8" style={{ marginTop: 14, flexWrap: 'wrap' }}>

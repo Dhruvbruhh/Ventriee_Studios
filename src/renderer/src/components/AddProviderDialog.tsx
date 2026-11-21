@@ -64,7 +64,7 @@ export function AddProviderDialog({ onClose }: { onClose: () => void }) {
       ) : null}
 
       {!picked && tab === 'custom' ? (
-        <p className="faint" style={{ fontSize: 12 }}>
+        <p className="faint text-sm">
           Pick any OpenAI-compatible base URL above to start. {snapshot.providerConfigs.length} custom
           provider{snapshot.providerConfigs.length === 1 ? '' : 's'} configured.
         </p>
@@ -220,12 +220,12 @@ function ProviderForm({
           <div className="hint">Encrypted with the OS keychain. Never shown in the UI, logs or project files.</div>
         </div>
       ) : (
-        <div className="hint" style={{ marginBottom: 12 }}>
+        <div className="hint space-below">
           A local server needs no key. Start it, then test the connection.
         </div>
       )}
 
-      <div className="flex gap-8" style={{ marginBottom: 12 }}>
+      <div className="flex gap-8 space-below">
         <button className="btn" onClick={test} disabled={busy !== null || (!baseUrl && !LOCAL.includes(engine))}>
           {busy === 'test' ? 'Testing…' : 'Test connection'}
         </button>
