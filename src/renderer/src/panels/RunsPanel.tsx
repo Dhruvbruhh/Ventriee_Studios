@@ -7,6 +7,13 @@ type Change = { path: string; status: 'added' | 'modified' | 'deleted' }
 const tokens = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 const money = (run: { costUsd: number; costReported?: boolean }) => run.costUsd > 0 ? `$${run.costUsd.toFixed(run.costUsd < 1 ? 3 : 2)}` : run.costReported === false ? 'not reported' : '$0'
 const time = (seconds: number) => seconds >= 3600 ? `${(seconds / 3600).toFixed(1)} h` : seconds >= 60 ? `${Math.round(seconds / 60)} min` : `${Math.round(seconds)} s`
+/** Instructions are often markdown prompts: skip bare headings like "## Objective" and show the first real line. */
+export function runTitle(instruction: string) {
+  const lines = instruction.split('\n').map((l) => l.replace(/^#+\s*/, '').replace(/\*\*/g, '').trim()).filter(Boolean)
+  const first = lines[0] ?? ''
+  const line = /^(objective|goal|task|brief|overview|summary)$/i.test(first) && lines[1] ? lines[1] : first
+  return line.slice(0, 120) || 'Run'
+}
 
 function Usage({ title, rows }: { title: string; rows: UsageRow[] }) {
   return <table className="runs-table"><caption>{title}</caption><thead><tr><th>Name</th><th>Sessions</th><th>Tokens in / out</th><th>Time</th><th>Cost</th></tr></thead>
@@ -44,19 +51,26 @@ export function RunsPanel({ onClose }: { onClose: () => void }) {
     if (count !== null) { setChanges((c) => ({ ...c, [run.jobId]: [] })); void load() }
   }
   const total = runs?.reduce((n, r) => n + r.costUsd, 0) ?? 0
+  const allTokens = runs?.reduce((n, r) => n + r.inputTokens + r.outputTokens, 0) ?? 0
+  const succeeded = runs?.filter((r) => r.status === 'done').length ?? 0
   return <Modal title="Runs" subtitle={project ? `${project.name}: usage, cost and undo for each run` : 'No project open'} onClose={onClose}>
     {error ? <p className="editor-error" role="alert">{error}</p> : null}
-    {spend ? <p className="hint">Today: ${spend.all.toFixed(2)} reported{spend.dailyBudgetUsd > 0 ? ` of your $${spend.dailyBudgetUsd.toFixed(2)} daily limit` : ''} · this project ${spend.project.toFixed(2)}{spend.projectBudgetUsd > 0 ? ` of $${spend.projectBudgetUsd.toFixed(2)}` : ''}. Limits are in Settings.</p> : null}
-    {!runs ? <p className="hint" role="status">Loading runs…</p> : !runs.length ? <p className="hint">No runs yet. Assign a prompt or brief the orchestrator to start one.</p> : <>
-      <p className="hint">{runs.length} run{runs.length === 1 ? '' : 's'} · reported cost {total > 0 ? `$${total.toFixed(2)}` : 'none'}. Cost is only what an engine reports (API usage); subscription CLIs usually report none. Sessions are matched to a run by when they started.</p>
+    {runs?.length ? <div className="metrics space-below">
+      <div className="metric"><div className="metric-value">{runs.length}</div><div className="metric-label">Runs</div></div>
+      <div className="metric"><div className="metric-value">{succeeded}<small>/{runs.length}</small></div><div className="metric-label">Finished cleanly</div></div>
+      <div className="metric"><div className="metric-value">{tokens(allTokens)}</div><div className="metric-label">Tokens</div></div>
+      <div className="metric"><div className="metric-value">{total > 0 ? `$${total.toFixed(2)}` : '$0'}</div><div className="metric-label">{spend ? `Today $${spend.all.toFixed(2)}${spend.dailyBudgetUsd > 0 ? ` of $${spend.dailyBudgetUsd.toFixed(2)}` : ''}` : 'Reported cost'}</div></div>
+    </div> : null}
+    {!runs ? <p className="hint" role="status">Loading runs…</p> : !runs.length ? <p className="settings-empty">No runs yet. Assign a prompt or brief the orchestrator to start one.</p> : <>
+      <p className="hint space-below">Cost is only what an engine reports (API usage); subscription CLIs usually report none. Sessions are matched to a run by when they started. Daily and project limits are in Settings.</p>
       {runs.map((run) => {
         const list = changes[run.jobId]
-        return <section className="run-card" key={run.jobId}>
+        return <section className={`run-card${open === run.jobId ? ' open' : ''}`} key={run.jobId}>
           <button className="run-head" aria-expanded={open === run.jobId} onClick={() => setOpen(open === run.jobId ? null : run.jobId)}>
-            <span className="run-title" title={run.instruction}>{run.instruction.split('\n')[0].slice(0, 120) || 'Run'}</span>
-            <span className={`badge ${run.status === 'done' ? 'ok' : run.status === 'failed' ? 'err' : ''}`}>{run.status}</span>
-            <span className="dim">{new Date(run.startedAt).toLocaleString()}</span>
-            <span>{run.sessions} sessions · {tokens(run.inputTokens + run.outputTokens)} tokens · {money(run)}{run.endedAt ? ` · ${time((run.endedAt - run.startedAt) / 1000)}` : ''}</span>
+            <span className="run-title" title={run.instruction}>{runTitle(run.instruction)}</span>
+            <span className={`badge ${run.status === 'done' ? 'ok' : run.status === 'failed' ? 'err' : run.status === 'running' ? 'accent' : ''}`}>{run.status}</span>
+            <span className="dim">{new Date(run.startedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>
+            <span className="run-stats">{run.sessions} {run.sessions === 1 ? 'session' : 'sessions'}<i />{tokens(run.inputTokens + run.outputTokens)} tokens<i />{money(run)}{run.endedAt ? <><i />{time((run.endedAt - run.startedAt) / 1000)}</> : null}</span>
           </button>
           {open === run.jobId ? <div className="run-body">
             {run.byModel.length ? <><Usage title="By model" rows={run.byModel} /><Usage title="By worker" rows={run.byAgent} /></> : <p className="hint">No worker sessions recorded for this run.</p>}

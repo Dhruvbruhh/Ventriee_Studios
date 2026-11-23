@@ -104,7 +104,7 @@ export function AssignDialog({
         </div>
 
         {mode === 'orchestrator' ? <div className="run-modes" role="radiogroup" aria-label="How tasks run">
-          <span className="section-label" style={{ margin: 0 }}>How tasks run</span>
+          <span className="section-label m-0">How tasks run</span>
           {([['sequential', 'One at a time', 'Plan order, one worker at a time. Slowest, easiest to follow.'],
             ['hybrid', 'Hybrid', 'Parallel where tasks are independent, chained where one needs another. Recommended.'],
             ['parallel', 'All at once', 'Every task starts together and teammates coordinate by message. Fastest; later tasks may start before what they need exists.']] as const)
@@ -113,7 +113,7 @@ export function AssignDialog({
         </div> : null}
 
         <div className="assign-head">
-          <span className="section-label" style={{ margin: 0 }}>Team</span>
+          <span className="section-label m-0">Team</span>
           <div className="flex gap-4">
             <button className="ghost-link" onClick={() => setSelected(workers.map((a) => a.id))}>Select all</button>
             <button className="ghost-link" onClick={() => setSelected([])}>Clear</button>
@@ -129,7 +129,7 @@ export function AssignDialog({
                 <button className="assign-check" onClick={() => toggle(agent.id)} aria-pressed={on} aria-label={`${on ? 'Deselect' : 'Select'} ${agent.name}`}>
                   <span className={`check-box${on ? ' on' : ''}`}>{on ? <IconCheck width={12} height={12} aria-hidden /> : null}</span>
                 </button>
-                <span className="avatar tiny" style={{ background: agent.color }}>{agent.name.slice(0, 1)}</span>
+                <span className="avatar tiny" style={{ ['--who' as string]: agent.color }}>{agent.name.slice(0, 1)}</span>
                 <button className="assign-who" onClick={() => toggle(agent.id)}>
                   <span className="assign-name">{agent.name}</span>
                   <span className="assign-title">{agent.title}</span>

@@ -405,15 +405,14 @@ function AgentForm({ agent }: { agent: Agent }) {
       <div className="field">
         <label className="field-label">Role instructions</label>
         <textarea aria-label="Role instructions"
-          className="textarea mono"
-          style={{ minHeight: 120 }}
+          className="textarea mono textarea-tall"
           value={draft.instructions}
           onChange={(e) => setDraft({ ...draft, instructions: e.target.value })}
         />
       </div>
       <div className="field">
         <label className="field-label">Skills</label>
-        <div className="flex gap-8" style={{ flexWrap: 'wrap' }}>
+        <div className="flex gap-8 flex-wrap">
           {snapshot.skills.filter((s) => s.enabled).map((skill) => {
             const on = draft.skills.includes(skill.id)
             return (
@@ -438,8 +437,8 @@ function AgentForm({ agent }: { agent: Agent }) {
             : 'No skills picked, so this worker uses the defaults for its role.'}
         </div>
       </div>
-      <div className="row" style={{ alignItems: 'flex-end' }}>
-        <div className="field" style={{ maxWidth: 140 }}>
+      <div className="row items-end">
+        <div className="field field-narrow">
           <label className="field-label">Budget (USD)</label>
           <input aria-label="Budget (USD)"
             className="input"
@@ -450,13 +449,13 @@ function AgentForm({ agent }: { agent: Agent }) {
             onChange={(e) => setDraft({ ...draft, budgetUsd: Number(e.target.value) })}
           />
         </div>
-        <div className="field" style={{ flex: 'none' }}>
+        <div className="field flex-none">
           <label className="field-label">Enabled</label>
           <Switch on={draft.enabled} onClick={() => setDraft({ ...draft, enabled: !draft.enabled })} label="Worker enabled" />
         </div>
-        <div style={{ flex: 1 }} />
+        <div className="grow" />
       </div>
-      <div className="flex gap-8" style={{ flexWrap: 'wrap' }}>
+      <div className="flex gap-8 flex-wrap">
         <button className="btn primary" onClick={save}><IconCheck /> Save worker</button>
         <button className="btn" onClick={() => void guard(() => window.ventriee.duplicateAgent(agent.id), 'Worker duplicated')}>
           Duplicate
@@ -470,7 +469,7 @@ function AgentForm({ agent }: { agent: Agent }) {
         >
           <IconTrash /> Remove
         </button>
-        <span className="faint" style={{ fontSize: 11, marginLeft: 'auto', alignSelf: 'center' }}>
+        <span className="faint text-xs ml-auto">
           {snapshot.settings.requireDeployApproval ? 'Deploys require your approval' : 'Deploys run without approval'}
         </span>
       </div>
@@ -617,7 +616,7 @@ function SyncAndReports() {
       <button className="btn tiny" onClick={() => void guard(() => window.ventriee.errorLog()).then((t) => t !== null && setLog(t || 'The log is empty.'))}>View log</button>
       <button className="btn tiny" onClick={() => void guard(() => window.ventriee.reportProblem())}>Report a problem</button>
     </div>
-    {log !== null ? <pre className="debug-output" style={{ maxHeight: 200 }} aria-label="Error log">{log}</pre> : null}
+    {log !== null ? <pre className="debug-output max-h-sm" aria-label="Error log">{log}</pre> : null}
   </>
 }
 
@@ -660,8 +659,7 @@ function RunPolicy() {
           <div className="kv-row-sub">What the orchestrator optimises for. Ignored in manual mode.</div>
         </div>
         <select
-          className="select"
-          style={{ width: 130 }}
+          className="select w-sm"
           value={settings.costPreference}
           onChange={(e) => void update({ costPreference: e.target.value as typeof settings.costPreference })}
         >
@@ -713,8 +711,7 @@ function RunPolicy() {
           <div className="kv-row-sub">Maximum workers executing at the same time. Code-writing roles are serialized per project.</div>
         </div>
         <input
-          className="input"
-          style={{ width: 70 }}
+          className="input w-xs"
           type="number"
           min={1}
           max={8}
@@ -728,8 +725,7 @@ function RunPolicy() {
           <div className="kv-row-sub">Minutes before a hung worker process is killed.</div>
         </div>
         <input
-          className="input"
-          style={{ width: 70 }}
+          className="input w-xs"
           type="number"
           min={2}
           max={240}
@@ -803,12 +799,12 @@ function DataTab() {
         <div className="kv"><dt>Skills</dt><dd>{snapshot.skills.length}</dd></div>
       </dl>
       <div className="section-label space-above">Local storage</div>
-      <p className="hint" style={{ lineHeight: 1.65 }}>
+      <p className="hint lh-relaxed">
         Everything lives on this machine: SQLite at <span className="mono">%APPDATA%/ventriee-studios/ventriee.db</span>,
         human-readable memory under <span className="mono">%APPDATA%/ventriee-studios/memory</span>, and skills under
         <span className="mono"> %APPDATA%/ventriee-studios/skills</span>. Nothing is uploaded.
       </p>
-      <div className="flex gap-8" style={{ marginTop: 12 }}>
+      <div className="flex gap-8 space-above">
         <button className="btn" onClick={() => void guard(() => window.ventriee.refreshSkills(), 'Skill registry rescanned')}>
           <IconRefresh /> Rescan skills
         </button>

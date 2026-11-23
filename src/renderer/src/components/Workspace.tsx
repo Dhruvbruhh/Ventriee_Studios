@@ -360,7 +360,7 @@ function PromptPanel({
     return (
       <div className="prompt-panel empty">
         <div className="section-label">Development prompt</div>
-        <p className="faint" style={{ fontSize: 12, lineHeight: 1.65 }}>
+        <p className="faint text-sm lh-relaxed">
           Nothing generated yet. Talk through the idea, then press <strong>Create prompt</strong>. The prompt
           is built from this project's conversation and stays editable.
         </p>
@@ -419,7 +419,7 @@ function PromptPanel({
     <div className="prompt-panel">
       <div className="prompt-head">
         <div>
-          <div className="section-label" style={{ margin: 0 }}>Development prompt</div>
+          <div className="section-label m-0">Development prompt</div>
           <div className="prompt-title">{active.title || 'Untitled prompt'}</div>
         </div>
         <span className={`badge${active.source === 'enhanced' ? ' ok' : active.source === 'generated' ? ' accent' : ''}`}>
@@ -493,7 +493,7 @@ function PromptPanel({
       </div>
       {dirty ? <p className="hint">Unsaved edit. Save it as a revision before assigning, or the approved text stays unchanged.</p> : null}
       {!dirty && active.body.trim() ? <p className="hint">Nothing is overwritten: every edit, enhancement and restore is a new version.</p> : null}
-      <button className="ghost-link" style={{ marginTop: 6, alignSelf: 'flex-start' }} onClick={onAddProvider}>
+      <button className="ghost-link self-start space-above" onClick={onAddProvider}>
         Change which model writes prompts
       </button>
     </div>

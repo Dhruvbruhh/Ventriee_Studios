@@ -107,7 +107,7 @@ function BuiltinList({
 
       {snapshot.providerConfigs.length ? (
         <>
-          <div className="section-label" style={{ marginTop: 16 }}>Your providers</div>
+          <div className="section-label space-above">Your providers</div>
           {snapshot.providerConfigs.map((config) => (
             <div key={config.id} className="kv-row">
               <span className="kv-row-main">
@@ -235,7 +235,7 @@ function ProviderForm({
       </div>
 
       {result ? (
-        <div className={`hint${result.ok ? '' : ' error-text'}`} style={{ marginBottom: 10 }}>
+        <div className={`hint space-below${result.ok ? '' : ' error-text'}`}>
           {result.ok ? '✓ ' : '✕ '}{result.detail}
         </div>
       ) : null}
@@ -268,10 +268,10 @@ function ProviderForm({
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addManual() } }}
             placeholder="model-id"
           />
-          <button className="btn" style={{ flex: 'none' }} onClick={addManual} disabled={!manual.trim()}>Add</button>
+          <button className="btn flex-none" onClick={addManual} disabled={!manual.trim()}>Add</button>
         </div>
         {models.length ? (
-          <div className="model-chips" style={{ marginTop: 8 }}>
+          <div className="model-chips space-above">
             {models.map((m) => (
               <button key={m} className="chip on" onClick={() => setModels(models.filter((x) => x !== m))} title="Remove">
                 {m} ×
@@ -281,7 +281,7 @@ function ProviderForm({
         ) : null}
       </div>
 
-      <div className="flex gap-8" style={{ justifyContent: 'flex-end', marginTop: 4 }}>
+      <div className="form-foot-plain">
         <button className="btn" onClick={onCancel}>Cancel</button>
         <button className="btn primary" onClick={save} disabled={busy !== null || !label.trim() || !baseUrl.trim()}>
           {busy === 'save' ? 'Saving…' : existing ? 'Save changes' : 'Save provider'}

@@ -57,7 +57,7 @@ export function Inspector({ agentId }: { agentId: string }) {
             {agent.name.slice(0, 2).toUpperCase()}
             <span className={`status-pip ${agent.status}`} />
           </div>
-          <div style={{ minWidth: 0 }}>
+          <div className="min-w-0">
             <div className="drawer-name">
               {agent.name}
               <span className={`desk-state ${agent.status}`}>{agent.status}</span>
@@ -89,10 +89,10 @@ export function Inspector({ agentId }: { agentId: string }) {
             <div className="term-head">
               {agent.status === 'working' ? <span className="live-pip" /> : null}
               <span>{agent.status === 'working' ? 'streaming stdout' : 'session output'}</span>
-              <span style={{ marginLeft: 'auto' }}>{live.length.toLocaleString()} chars</span>
+              <span className="ml-auto">{live.length.toLocaleString()} chars</span>
               <button className="btn tiny" onClick={() => clearOutput(agentId)}>Clear</button>
             </div>
-            <div className="term" ref={termRef} style={{ height: 'calc(100% - 74px)', maxHeight: 420 }}>
+            <div className="term term-fill" ref={termRef}>
               {live || (
                 <span className="term-empty">
                   {agent.status === 'working'
@@ -132,15 +132,14 @@ export function Inspector({ agentId }: { agentId: string }) {
           task ? (
             <>
               <div className="section-label">Assigned task</div>
-              <div style={{ fontSize: 13, fontWeight: 550, marginBottom: 6 }}>{task.title}</div>
-              <div className="task-meta" style={{ marginBottom: 10 }}>
+              <div className="inspector-task-title">{task.title}</div>
+              <div className="task-meta space-below">
                 <span className="task-phase">{task.phase}</span>
                 <span className={`task-status ${task.status}`}>{task.status}</span>
                 <span className="faint">attempt {task.attempts}</span>
                 {['failed', 'rework', 'blocked'].includes(task.status) ? (
                   <button
-                    className="btn tiny"
-                    style={{ marginLeft: 'auto' }}
+                    className="btn tiny ml-auto"
                     onClick={() => void guard(() => window.ventriee.retryTask(task.id), 'Task queued for retry')}
                   >
                     Retry
@@ -148,10 +147,10 @@ export function Inspector({ agentId }: { agentId: string }) {
                 ) : null}
               </div>
               <dl>
-                <div className="kv"><dt>Runs as</dt><dd className="mono" style={{ fontSize: 11.5 }}>{task.engine ? `${task.engine} · ${task.model || 'default'}` : `${agent.engine} · ${agent.model || 'default'}`}</dd></div>
-                <div className="kv"><dt>Brief</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{task.description}</dd></div>
-                <div className="kv"><dt>Acceptance</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{task.acceptance}</dd></div>
-                {task.review ? <div className="kv"><dt>Review</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{task.review}</dd></div> : null}
+                <div className="kv"><dt>Runs as</dt><dd className="mono">{task.engine ? `${task.engine} · ${task.model || 'default'}` : `${agent.engine} · ${agent.model || 'default'}`}</dd></div>
+                <div className="kv"><dt>Brief</dt><dd className="pre-wrap">{task.description}</dd></div>
+                <div className="kv"><dt>Acceptance</dt><dd className="pre-wrap">{task.acceptance}</dd></div>
+                {task.review ? <div className="kv"><dt>Review</dt><dd className="pre-wrap">{task.review}</dd></div> : null}
                 {project ? <Screens projectId={project.id} since={task.createdAt} /> : null}
                 {task.routedBy && task.routedBy !== 'manual' ? (
                   <div className="kv"><dt>Model chosen by</dt><dd>{task.routedBy === 'automatic' ? 'Orchestrator (automatic routing)' : 'Orchestrator (hybrid, worker default kept)'}</dd></div>
@@ -166,7 +165,7 @@ export function Inspector({ agentId }: { agentId: string }) {
               {task.output ? (
                 <>
                   <div className="section-label space-above">Worker report</div>
-                  <div className="term" style={{ maxHeight: 260, minHeight: 100 }}>{task.output}</div>
+                  <div className="term term-md">{task.output}</div>
                 </>
               ) : null}
             </>
@@ -184,7 +183,7 @@ export function Inspector({ agentId }: { agentId: string }) {
                   <span>{m.sender === agentId ? 'out' : 'in'}</span>
                   <span className="mail-route">{new Date(m.createdAt).toLocaleTimeString()}</span>
                 </div>
-                <div className="mail-body" style={{ WebkitLineClamp: 10 }}>{m.content}</div>
+                <div className="mail-body clamp-10">{m.content}</div>
               </div>
             ))
           ) : (
@@ -206,9 +205,9 @@ export function Inspector({ agentId }: { agentId: string }) {
             <ConfigRow label="Cost" value={cost ? `$${cost.toFixed(4)}` : 'not reported'} />
             {agent.lastError ? <ConfigRow label="Last error" value={agent.lastError} danger /> : null}
             <div className="section-label space-above">Standing instructions</div>
-            <div className="term" style={{ minHeight: 90, maxHeight: 200 }}>{agent.instructions}</div>
+            <div className="term term-sm">{agent.instructions}</div>
 
-            <div className="flex gap-8" style={{ marginTop: 14, flexWrap: 'wrap' }}>
+            <div className="flex gap-8 flex-wrap space-above">
               {agent.status === 'working' ? (
                 <button className="btn danger" onClick={() => void guard(() => window.ventriee.stopAgent(agentId), 'Session stopped')}>
                   <IconStop /> Stop session
@@ -248,7 +247,7 @@ function ConfigRow({ label, value, mono, danger }: { label: string; value: strin
     <dl>
       <div className="kv">
         <dt>{label}</dt>
-        <dd className={mono ? 'mono' : ''} style={{ color: danger ? 'var(--err)' : undefined }}>{value}</dd>
+        <dd className={`${mono ? 'mono' : ''}${danger ? ' danger' : ''}`}>{value}</dd>
       </div>
     </dl>
   )
