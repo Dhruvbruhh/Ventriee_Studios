@@ -115,6 +115,8 @@ const api: VentrieeApi = {
   authStatus: () => ipcRenderer.invoke(IPC.authStatus),
   authSignIn: (input, signup) => ipcRenderer.invoke(IPC.authSignIn, input, signup),
   authClear: () => ipcRenderer.invoke(IPC.authClear),
+  authRecover: (email) => ipcRenderer.invoke(IPC.authRecover, email),
+  authReset: (input) => ipcRenderer.invoke(IPC.authReset, input),
   onAuthLocked: (cb) => {
     const listener = () => cb()
     ipcRenderer.on(IPC.authLocked, listener)

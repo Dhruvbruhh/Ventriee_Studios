@@ -42,27 +42,44 @@ export function AuthRoot() {
     const timer = setInterval(() => void restore(), 30_000)
     return () => clearInterval(timer)
   }, [signedIn])
-  async function submit(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError(''); setMessage('')
+  const [resetting, setResetting] = useState(false)
+  const [code, setCode] = useState('')
+  async function run(work: () => Promise<{ session?: unknown; message: string }>) {
+    setBusy(true); setError(''); setMessage('')
     try {
-      const result = await window.ventriee.authSignIn({ email, password }, signup)
-      setPassword(''); setSignedIn(Boolean(result.session)); if (result.session) setHadSession(true); setMessage(result.message)
+      const result = await work()
+      setPassword(''); if (result.session) { setSignedIn(true); setHadSession(true); setResetting(false); setCode('') }
+      setMessage(result.message)
     } catch (reason) { setError(cleanError(reason)) }
     finally { setBusy(false) }
   }
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    void run(() => resetting ? window.ventriee.authReset({ email, code, password }) : window.ventriee.authSignIn({ email, password }, signup))
+  }
+  const switchTo = (next: 'signin' | 'signup' | 'reset') => { setSignup(next === 'signup'); setResetting(next === 'reset'); setError(''); setMessage('') }
   if (!supabaseUrl || !supabaseKey) return <Screen><h2>Connect Supabase</h2>
     <p>Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> in <code>.env</code>, then restart.</p>
     <p>See <code>docs/supabase-authentication.md</code>. Use a public publishable or legacy anon key.</p></Screen>
   if (!ready) return <Screen><h2>Opening your studio</h2><p role="status">Restoring your account…</p></Screen>
   return <>{hadSession ? <div className="authenticated-studio" hidden={!signedIn}><App /></div> : null}
-  {!signedIn ? <Screen><h2>{signup ? 'Create your account' : 'Sign in to your studio'}</h2>
-    <form onSubmit={(event) => void submit(event)} className="auth-form">
+  {!signedIn ? <Screen><h2>{resetting ? 'Reset your password' : signup ? 'Create your account' : 'Sign in to your studio'}</h2>
+    <form onSubmit={submit} className="auth-form">
       <label className="field">Email<input className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={busy} /></label>
-      <label className="field">Password<input className="input" type="password" autoComplete={signup ? 'new-password' : 'current-password'} value={password} onChange={(e) => setPassword(e.target.value)} minLength={signup ? 8 : 1} required disabled={busy} /></label>
+      {resetting ? <>
+        <button className="btn" type="button" disabled={busy || !email.includes('@')} onClick={() => void run(() => window.ventriee.authRecover(email))}>Send reset email</button>
+        <label className="field">Reset link or code from the email<input className="input" value={code} onChange={(e) => setCode(e.target.value)} required disabled={busy} /></label>
+      </> : null}
+      <label className="field">{resetting ? 'New password' : 'Password'}<input className="input" type="password" autoComplete={signup || resetting ? 'new-password' : 'current-password'} value={password} onChange={(e) => setPassword(e.target.value)} minLength={signup || resetting ? 8 : 1} required disabled={busy} /></label>
       {error ? <p className="editor-error" role="alert">{error}</p> : null}{message ? <p role="status">{message}</p> : null}
-      <button className="btn primary" disabled={busy} type="submit">{busy ? 'Please wait…' : signup ? 'Create account' : 'Sign in'}</button>
-      <button className="btn" type="button" disabled={busy} onClick={() => { setSignup(!signup); setError(''); setMessage('') }}>{signup ? 'Already have an account? Sign in' : 'Create an account'}</button>
-      <button className="btn" type="button" disabled={busy} onClick={() => void restore()}>Retry saved session</button>
+      <button className="btn primary" disabled={busy} type="submit">{busy ? 'Please wait…' : resetting ? 'Set new password' : signup ? 'Create account' : 'Sign in'}</button>
+      {resetting || signup
+        ? <button className="btn" type="button" disabled={busy} onClick={() => switchTo('signin')}>Back to sign in</button>
+        : <>
+          <button className="btn" type="button" disabled={busy} onClick={() => switchTo('signup')}>Create an account</button>
+          <button className="btn" type="button" disabled={busy} onClick={() => switchTo('reset')}>Forgot password?</button>
+          <button className="btn" type="button" disabled={busy} onClick={() => void restore()}>Retry saved session</button>
+        </>}
     </form></Screen> : null}</>
 }
 export function AccountButton() {

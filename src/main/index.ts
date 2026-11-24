@@ -307,7 +307,7 @@ function registerIpc() {
       if (!windows.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame || originOf(event.senderFrame?.url ?? '') !== rendererOrigin) {
         throw new Error('IPC is only available to the studio window')
       }
-      if (![IPC.authStatus, IPC.authSignIn, IPC.authClear].includes(channel as any)) auth.requireSession(event.sender.id)
+      if (![IPC.authStatus, IPC.authSignIn, IPC.authClear, IPC.authRecover, IPC.authReset].includes(channel as any)) auth.requireSession(event.sender.id)
       return listener(event, ...args)
     })
   }
@@ -516,6 +516,12 @@ function registerIpc() {
   })
   handle(IPC.authSignIn, async (event, input: { email: string; password: string }, signup = false) => {
     const result = await auth.signIn(event.sender.id, input, signup === true)
+    debouncedNotify()
+    return result
+  })
+  handle(IPC.authRecover, (_event, email: string) => auth.recover(email))
+  handle(IPC.authReset, async (event, input: { email: string; code: string; password: string }) => {
+    const result = await auth.resetPassword(event.sender.id, input)
     debouncedNotify()
     return result
   })
