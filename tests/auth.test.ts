@@ -110,3 +110,19 @@ describe('public desktop configuration', () => {
     expect(studioCsp(url, false)).toContain("'wasm-unsafe-eval'")
   })
 })
+describe('password reset', () => {
+  it('reads a code or the token from a pasted reset link', async () => {
+    const { recoveryBody } = await import('../src/main/auth')
+    expect(recoveryBody('123456', 'a@b.co')).toEqual({ type: 'recovery', email: 'a@b.co', token: '123456' })
+    expect(recoveryBody(`${url}/auth/v1/verify?token=abc123&type=recovery&redirect_to=http://localhost:3000`, '')).toEqual({ type: 'recovery', token_hash: 'abc123' })
+    expect(() => recoveryBody(`${url}/auth/v1/verify?type=recovery`, '')).toThrow('no reset token')
+  })
+  it('verifies the link, sets the new password, then signs in', async () => {
+    const service = auth()
+    const result = await service.resetPassword(1, { email: user.email, code: `${url}/auth/v1/verify?token=abc&type=recovery`, password: 'new-password-1' })
+    expect(result.session?.userId).toBe(user.id)
+    const calls = request.mock.calls.map(([u, init]) => `${init?.method} ${String(u).replace(url, '')}`)
+    expect(calls.slice(0, 2)).toEqual(['POST /auth/v1/verify', 'PUT /auth/v1/user'])
+    await expect(service.resetPassword(1, { email: '', code: 'x', password: 'short' })).rejects.toThrow('8 characters')
+  })
+})

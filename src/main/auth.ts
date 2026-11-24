@@ -2,6 +2,14 @@ export interface StudioSession { userId: string; sessionId: string; email: strin
 interface Tokens { access_token: string; refresh_token: string }
 interface AuthReply { id?: string; email?: string; access_token?: string; refresh_token?: string; user_metadata?: Record<string, unknown> }
 interface TokenStore { get(): string | null; set(value: string): void; clear(): void }
+/** The email holds either a numeric code or a link whose `token` is the hashed token Supabase verifies. */
+export function recoveryBody(code: string, email: string) {
+  if (/^\d{6,10}$/.test(code)) return { type: 'recovery', email, token: code }
+  let hash = code
+  try { hash = new URL(code).searchParams.get('token') ?? '' } catch { /* pasted the bare token */ }
+  if (!hash) throw new Error('That link has no reset token in it')
+  return { type: 'recovery', token_hash: hash }
+}
 /** Supabase Auth REST runs in main: passwords and refresh tokens never enter logs or snapshots. */
 export class StudioAuth {
   private sessions = new Map<number, StudioSession>()
@@ -47,13 +55,31 @@ export class StudioAuth {
       if (!signup) throw new Error('Sign-in did not return a valid session. Try again.')
       return { session: null, message: 'Check your email to confirm your account, then sign in.' }
     }
-    const tokens = { access_token: result.access_token, refresh_token: result.refresh_token }
+    return { session: await this.adopt(id, { access_token: result.access_token, refresh_token: result.refresh_token }, epoch), message: '' }
+  }
+  private async adopt(id: number, tokens: Tokens, epoch: number) {
     const session = await this.verify(tokens)
     if (epoch !== this.epoch) throw new Error('Sign-in cancelled')
     this.tokens = tokens
     this.storage.set(JSON.stringify(tokens))
     this.sessions.set(id, session)
-    return { session, message: '' }
+    return session
+  }
+  /** Sends Supabase's password-reset email. */
+  async recover(email: string) {
+    if (typeof email !== 'string' || !email.includes('@') || email.length > 320) throw new Error('Enter the email you signed up with')
+    await this.api('recover', { email: email.trim() })
+    return { message: 'Check your email. Copy the reset link (do not open it) or the code, and paste it below.' }
+  }
+  /** Signs in with the reset link or code from that email and sets a new password. */
+  async resetPassword(id: number, input: { email: string; code: string; password: string }) {
+    if (!input || typeof input.code !== 'string' || !input.code.trim() || input.code.length > 4096 || typeof input.password !== 'string' || input.password.length < 8 || input.password.length > 4096) throw new Error('Paste the link or code from the email, and pick a password of at least 8 characters')
+    const epoch = ++this.epoch
+    this.loading = null
+    const result = await this.api('verify', recoveryBody(input.code.trim(), String(input.email ?? '').trim()))
+    if (!result.access_token || !result.refresh_token) throw new Error('That reset link or code did not work. Request a new one.')
+    await this.api('user', { password: input.password }, result.access_token, 'PUT')
+    return { session: await this.adopt(id, { access_token: result.access_token, refresh_token: result.refresh_token }, epoch), message: '' }
   }
   async restore(id: number): Promise<StudioSession | null> {
     const epoch = this.epoch

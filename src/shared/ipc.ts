@@ -40,6 +40,8 @@ export const IPC = {
   authStatus: 'auth:status',
   authSignIn: 'auth:signIn',
   authClear: 'auth:clear',
+  authRecover: 'auth:recover',
+  authReset: 'auth:reset',
   authLocked: 'auth:locked',
   snapshot: 'state:snapshot',
   patch: 'state:patch',
@@ -209,6 +211,8 @@ export interface VentrieeApi {
   authStatus(): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number } | null>
   authSignIn(input: { email: string; password: string }, signup?: boolean): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number } | null; message: string }>
   authClear(): Promise<void>
+  authRecover(email: string): Promise<{ message: string }>
+  authReset(input: { email: string; code: string; password: string }): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number } | null; message: string }>
   onAuthLocked(cb: () => void): () => void
   snapshot(): Promise<Snapshot>
   onPatch(cb: (patch: Snapshot) => void): () => void
