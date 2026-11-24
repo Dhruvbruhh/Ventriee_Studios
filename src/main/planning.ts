@@ -3,7 +3,7 @@ import type { Store } from './store'
 import type { Credentials } from './credentials'
 import type { MemoryService } from './memory'
 import { runEngine, modelFor, defaultEndpoint, testEngine } from './engines'
-import { ENGINE_LABELS } from '../shared/types'
+import { ENGINE_LABELS, KEYED_API_ENGINES, LOCAL_API_ENGINES } from '../shared/types'
 import type {
   ChatMessage,
   EngineKind,
@@ -296,10 +296,10 @@ export class PlanningService {
     for (const engine of ['cli-opencode', 'cli-claude', 'cli-codex', 'cli-gemini', 'cli-ollama'] as EngineKind[]) {
       probes.push(this.cliModels(engine, projectRoot))
     }
-    for (const engine of ['api-ollama', 'api-lmstudio', 'api-vllm'] as EngineKind[]) {
+    for (const engine of LOCAL_API_ENGINES) {
       probes.push(this.httpModels(engine, engine, ENGINE_LABELS[engine], defaultEndpoint(engine), null))
     }
-    for (const engine of ['api-openai', 'api-anthropic', 'api-gemini', 'api-openrouter', 'api-deepseek', 'api-mistral', 'api-deploy', 'api-inception'] as EngineKind[]) {
+    for (const engine of KEYED_API_ENGINES) {
       const key = this.creds.get(engine)
       probes.push(
         this.httpModels(engine, engine, ENGINE_LABELS[engine], defaultEndpoint(engine), key).then((listed) =>

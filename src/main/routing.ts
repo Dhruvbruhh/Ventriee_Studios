@@ -15,7 +15,7 @@ const DEEP_ROLES = new Set(['architect', 'reviewer', 'integration', 'deployment'
 /** Roles where speed and volume matter more than depth. */
 const FAST_ROLES = new Set(['seo', 'aeo', 'monitoring', 'qa', 'researcher'])
 
-const STRONG = /(opus|sonnet|gpt-5|gpt-4\.1(?!-mini)|o3|o4|large|pro|480b|235b|v4\.1|mercury-3)/i
+const STRONG = /(opus|sonnet|large|pro|ultra|max|reasoner|\b(gpt-?5|o3|o4)\b|\d{3,}b)/i
 const FAST = /(flash|mini|haiku|small|nano|lite|fast|1\.5b|3b|7b|8b)/i
 const CHEAP_FREE = /(:free|free)/i
 

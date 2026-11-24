@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { homepage } from '../../shared/auth-config'
 import { guard, useStore } from './store'
 import { Modal, NewProjectDialog, Toast } from './shell'
 import { Floor } from './components/Floor'
@@ -242,7 +243,7 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
       <Toolchains />
       <div className="flex gap-8 space-above">
         <button className="btn primary" onClick={onClose}>I'll set it up</button>
-        <button className="btn" onClick={() => void guard(() => window.ventriee.openExternal('https://github.com/Euforia-dhruv/Ventriee_Studios#engines'))}>
+        <button className="btn" onClick={() => void guard(() => window.ventriee.openExternal(`${homepage}#engines`))}>
           Read the guide
         </button>
       </div>

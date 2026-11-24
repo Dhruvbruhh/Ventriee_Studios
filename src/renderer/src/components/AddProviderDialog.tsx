@@ -1,29 +1,17 @@
 import { useMemo, useState } from 'react'
 import { Modal } from '../shell'
 import { guard, useStore } from '../store'
-import { ENGINE_ENDPOINTS, ENGINE_LABELS, type EngineKind, type ProviderConfig } from '../../../shared/types'
+import { ENGINE_ENDPOINTS, ENGINE_LABELS, KEYED_API_ENGINES, LOCAL_API_ENGINES, type EngineKind, type ProviderConfig } from '../../../shared/types'
 
 /** Providers that accept a key and speak a documented HTTP dialect. */
-const API_ENGINES: EngineKind[] = [
-  'api-openai',
-  'api-anthropic',
-  'api-gemini',
-  'api-openrouter',
-  'api-deepseek',
-  'api-mistral',
-  'api-deploy',
-  'api-inception',
-  'api-ollama',
-  'api-lmstudio',
-  'api-vllm'
-]
+const API_ENGINES = [...KEYED_API_ENGINES, ...LOCAL_API_ENGINES]
 
 const KIND: Partial<Record<EngineKind, 'openai' | 'anthropic' | 'gemini'>> = {
   'api-anthropic': 'anthropic',
   'api-gemini': 'gemini'
 }
 
-const LOCAL: EngineKind[] = ['api-ollama', 'api-lmstudio', 'api-vllm']
+const LOCAL = LOCAL_API_ENGINES
 
 export function AddProviderDialog({ onClose }: { onClose: () => void }) {
   const snapshot = useStore((s) => s.snapshot)!
