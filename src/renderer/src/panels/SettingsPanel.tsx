@@ -332,7 +332,7 @@ function AgentForm({ agent }: { agent: Agent }) {
         <div className="field">
           <label className="field-label">Role</label>
           <select aria-label="Role" className="select" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })}>
-            {['orchestrator', 'researcher', 'architect', 'designer', 'frontend', 'integration', 'backend', 'reviewer', 'fixer', 'qa', 'seo', 'aeo', 'deployment', 'monitoring'].map((r) => (
+            {['orchestrator', 'researcher', 'architect', 'designer', 'frontend', 'integration', 'backend', 'database', 'security', 'reviewer', 'fixer', 'qa', 'seo', 'aeo', 'deployment', 'monitoring'].map((r) => (
               <option key={r} value={r}>{r}</option>
             ))}
           </select>
@@ -507,7 +507,7 @@ function NewWorker({ engineDefault, onDone }: { engineDefault: EngineKind; onDon
         <div className="field">
           <label className="field-label">Role</label>
           <select aria-label="Role" className="select" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-            {['researcher', 'architect', 'designer', 'frontend', 'integration', 'backend', 'reviewer', 'fixer', 'qa', 'seo', 'aeo', 'deployment', 'monitoring', 'orchestrator'].map((r) => (
+            {['researcher', 'architect', 'designer', 'frontend', 'integration', 'backend', 'database', 'security', 'reviewer', 'fixer', 'qa', 'seo', 'aeo', 'deployment', 'monitoring', 'orchestrator'].map((r) => (
               <option key={r} value={r}>{r}</option>
             ))}
           </select>

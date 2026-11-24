@@ -90,7 +90,7 @@ const DESIGN_CATEGORIES = new Set<ProjectCategory>(['web', 'saas', 'desktop', 'm
  * Deterministic fallback planner. Used when no model is reachable, so the
  * studio still produces a real, runnable plan instead of stalling.
  */
-export function heuristicPlan(instruction: string): Plan {
+export function heuristicPlan(instruction: string, website = false): Plan {
   const p = classifyBrief(instruction)
   const tasks: PlannedTask[] = []
   const add = (t: Omit<PlannedTask, 'dependsOnKeys'> & { dependsOnKeys?: string[] }) => {
@@ -132,7 +132,26 @@ export function heuristicPlan(instruction: string): Plan {
 
   const build: string[] = []
   if (p.category === 'web' || p.category === 'saas') {
-    if (p.api || p.category === 'saas') {
+    if ((p.api || p.category === 'saas') && website) {
+      const db = add({
+        key: 'database',
+        title: 'Build the database schema, migrations and seed data',
+        description: 'Turn the data model in docs/architecture.md into a real schema, migrations, indexes, access rules and seed data.',
+        acceptance: 'Migrations apply on a clean database, seed data loads, docs/database.md records the commands and output.',
+        role: 'database',
+        phase: 'build',
+        dependsOnKeys: deps
+      })
+      build.push(add({
+        key: 'backend',
+        title: 'Implement backend, API and persistence',
+        description: 'Implement the server side of the agreed contract with validation and tests.',
+        acceptance: 'API runs, tests pass, every input validated at the boundary.',
+        role: 'backend',
+        phase: 'build',
+        dependsOnKeys: [...deps, db]
+      }))
+    } else if (p.api || p.category === 'saas') {
       build.push(add({
         key: 'backend',
         title: 'Implement backend, API and persistence',
@@ -271,6 +290,18 @@ export function heuristicPlan(instruction: string): Plan {
     }))
   }
 
+  if (website && build.length && ['web', 'saas', 'backend', 'ai'].includes(p.category)) {
+    build.push(add({
+      key: 'security',
+      title: 'Security audit and fixes',
+      description: 'Audit secrets, auth, access rules, input validation, injection, headers and dependencies; fix critical and high findings.',
+      acceptance: 'docs/security-review.md lists every finding with severity and location; critical and high ones are fixed and re-checked.',
+      role: 'security',
+      phase: 'review',
+      dependsOnKeys: build.slice()
+    }))
+  }
+
   const reviewDeps = build.length ? build : [arch]
   const review = add({
     key: 'review',
@@ -389,7 +420,13 @@ const ROLE_ALIASES: Record<string, string> = {
   'devops': 'deployment',
   'ops': 'deployment',
   'monitor': 'monitoring',
-  'sre': 'monitoring'
+  'sre': 'monitoring',
+  'db': 'database',
+  'dba': 'database',
+  'database engineer': 'database',
+  'appsec': 'security',
+  'security engineer': 'security',
+  'secops': 'security'
 }
 
 /** Resolve a model's role label to a real roster role. Never silently becomes the orchestrator. */
@@ -399,7 +436,7 @@ export function normalizeRole(raw: string, valid: string[]): string {
   const alias = ROLE_ALIASES[key]
   if (alias && valid.includes(alias)) return alias
   // substring guesses: "senior backend engineer" -> backend, "frontend dev" -> frontend
-  const guess = ['frontend', 'backend', 'designer', 'qa', 'reviewer', 'researcher', 'fixer', 'integration', 'seo', 'aeo', 'deployment', 'monitoring', 'architect']
+  const guess = ['database', 'security', 'frontend', 'backend', 'designer', 'qa', 'reviewer', 'researcher', 'fixer', 'integration', 'seo', 'aeo', 'deployment', 'monitoring', 'architect']
   const bySubstring = guess.find((role) => valid.includes(role) && key.includes(role))
   if (bySubstring) return bySubstring
   return valid.includes('frontend') ? 'frontend' : valid[0]

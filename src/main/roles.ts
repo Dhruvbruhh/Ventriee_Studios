@@ -21,21 +21,27 @@ const SKILLS_BY_ROLE: Record<string, string[]> = {
   orchestrator: [
     'evidence-first-delivery', 'ponytail',
     'wayfinder', 'to-spec', 'to-tickets', 'to-questionnaire', 'triage', 'implement-spec',
-    'find-skills', 'skill-creator', 'karpathy-guidelines', 'wait-what', 'discernment-nudge'
+    'find-skills', 'skill-creator', 'karpathy-guidelines', 'wait-what', 'discernment-nudge',
+    // specialist agents (installed as skills; skipped when absent)
+    'project-manager-senior', 'project-management-project-shepherd', 'project-management-studio-producer', 'product-manager', 'product-sprint-prioritizer', 'engineering-multi-agent-systems-architect', 'testing-reality-checker'
   ],
   researcher: [
     'evidence-first-delivery', 'ponytail',
     'research', 'web-research-scrapling', 'technical-seo-audit', 'webapp-testing',
     'to-questionnaire', 'ask-matt', 'grill-me', 'grilling', 'grill-with-docs',
     'pdf', 'docx', 'xlsx', 'writing-for-agents', 'writing-fragments', 'writing-shape', 'writing-beats',
-    'humanizer', 'lumenfall', 'teach', 'academy-guide'
+    'humanizer', 'lumenfall', 'teach', 'academy-guide',
+    // specialist agents (installed as skills; skipped when absent)
+    'product-trend-researcher', 'design-ux-researcher', 'product-feedback-synthesizer', 'support-executive-summary-generator', 'marketing-ai-citation-strategist'
   ],
   architect: [
     'evidence-first-delivery', 'ponytail',
     'domain-modeling', 'codebase-design', 'improve-codebase-architecture', 'implement',
     'to-spec', 'to-tickets', 'scaffold-exercises', 'karpathy-guidelines',
     'vercel-react-best-practices', 'mcp-builder', 'claude-api',
-    'doc-coauthoring', 'pdf', 'slides', 'theme-factory'
+    'doc-coauthoring', 'pdf', 'slides', 'theme-factory',
+    // specialist agents (installed as skills; skipped when absent)
+    'engineering-software-architect', 'engineering-backend-architect', 'engineering-api-platform-engineer', 'security-architect', 'engineering-rapid-prototyper', 'vercel-bootstrap', 'vercel-create-a-backend', 'modern-web-guidance'
   ],
   // design-system is the one skill that names docs/design-system.md, the designer's
   // deliverable. The artifact skills (design, slides, banner-design, canvas-design)
@@ -51,7 +57,9 @@ const SKILLS_BY_ROLE: Record<string, string[]> = {
     'lightweight-3d-effects', 'web3d-integration-patterns', 'spline-interactive', 'rive-interactive',
     'blender-web-pipeline', 'substance-3d-texturing', 'algorithmic-art',
     'antislop', 'antislop-ui', 'antislop-human', 'antislop-layoutmobile', 'antislop-copywriting', 'antislop-code',
-    'ui-styling', 'lottie-animation', 'lottie-animations', 'gsap-web', 'gsap-core'
+    'ui-styling', 'lottie-animation', 'lottie-animations', 'gsap-web', 'gsap-core',
+    // specialist agents (installed as skills; skipped when absent)
+    'design-ui-designer', 'design-ux-architect', 'design-brand-guardian', 'design-visual-storyteller', 'design-whimsy-injector', 'design-inclusive-visuals-specialist', 'design-ui-finish-gate-reviewer', 'design-image-prompt-engineer'
   ],
   frontend: [
     'evidence-first-delivery', 'ponytail',
@@ -67,61 +75,94 @@ const SKILLS_BY_ROLE: Record<string, string[]> = {
     'spline-interactive', 'rive-interactive', 'aframe-webxr', 'web3d-integration-patterns',
     'lightweight-3d-effects', 'algorithmic-art', 'theme-factory', 'retro',
     'antislop', 'antislop-ui', 'antislop-human', 'antislop-layoutmobile', 'antislop-code',
-    'evidence-first-delivery'
+    'evidence-first-delivery',
+    // specialist agents (installed as skills; skipped when absent)
+    'engineering-frontend-developer', 'engineering-senior-developer', 'design-ux-architect', 'testing-accessibility-auditor', 'modern-web-guidance', 'engineering-i18n-engineer'
   ],
   integration: [
     'evidence-first-delivery', 'ponytail',
     'vercel-react-best-practices', 'netlify-functions', 'netlify-caching', 'netlify-access-control',
     'mcp-builder', 'claude-api', 'setup-ts-deep-modules', 'migrate-to-shoehorn', 'implement',
-    'codebase-design', 'domain-modeling', 'improve-codebase-architecture'
+    'codebase-design', 'domain-modeling', 'improve-codebase-architecture',
+    // specialist agents (installed as skills; skipped when absent)
+    'engineering-api-platform-engineer', 'engineering-identity-access-engineer', 'engineering-payments-billing-engineer', 'engineering-realtime-collaboration-engineer', 'vercel-auth', 'vercel-env-vars', 'vercel-routing-middleware', 'vercel-ai-sdk', 'vercel-ai-gateway'
   ],
   backend: [
     'evidence-first-delivery', 'ponytail',
     'claude-api', 'mcp-builder', 'setup-ts-deep-modules', 'migrate-to-shoehorn',
     'domain-modeling', 'codebase-design', 'implement', 'scaffold-exercises',
     'netlify-functions', 'netlify-access-control', 'netlify-caching', 'pdf', 'docx', 'xlsx',
-    'karpathy-guidelines', 'setup-pre-commit', 'wizard'
+    'karpathy-guidelines', 'setup-pre-commit', 'wizard',
+    // specialist agents (installed as skills; skipped when absent)
+    'engineering-backend-architect', 'engineering-api-platform-engineer', 'engineering-ai-engineer', 'engineering-rag-pipeline-engineer', 'engineering-privacy-engineer', 'vercel-functions', 'vercel-queues', 'vercel-workflow', 'vercel-storage', 'vercel-runtime-cache', 'build-mcp-server'
   ],
   reviewer: [
     'evidence-first-delivery', 'ponytail',
     'code-review', 'karpathy-guidelines', 'improve', 'improve-codebase-architecture', 'triage',
     'handoff', 'claude-handoff', 'pr', 'git-guardrails-claude-code', 'cordis-styling-nitpicking',
-    'tdd'
+    'tdd',
+    // specialist agents (installed as skills; skipped when absent)
+    'engineering-code-reviewer', 'engineering-minimal-change-engineer', 'testing-reality-checker', 'security-ai-generated-code-auditor'
   ],
   fixer: [
     'evidence-first-delivery', 'ponytail',
     'diagnosing-bugs', 'fix', 'tdd', 'implement', 'code-review', 'karpathy-guidelines',
-    'improve', 'wait-what'
+    'improve', 'wait-what',
+    // specialist agents (installed as skills; skipped when absent)
+    'engineering-minimal-change-engineer', 'engineering-code-reviewer', 'testing-test-results-analyzer'
   ],
   qa: [
     'evidence-first-delivery', 'ponytail',
     'webapp-testing', 'tdd', 'record-browser-gif', 'diagnosing-bugs', 'evidence-first-delivery',
-    'antislop-human', 'antislop-layoutmobile', 'web-artifacts-builder'
+    'antislop-human', 'antislop-layoutmobile', 'web-artifacts-builder',
+    // specialist agents (installed as skills; skipped when absent)
+    'testing-evidence-collector', 'testing-reality-checker', 'testing-api-tester', 'testing-accessibility-auditor', 'testing-performance-benchmarker', 'testing-test-automation-engineer', 'design-persona-walkthrough'
   ],
   seo: [
     'evidence-first-delivery', 'ponytail',
     'web-research-scrapling', 'technical-seo-audit', 'writing-for-agents',
     'writing-beats', 'writing-fragments', 'writing-shape', 'doc-coauthoring',
     'humanizer', 'lumenfall', 'seedance-prompt-en', 'seedance-prompt-zh',
-    'antislop-copywriting', 'pdf', 'xlsx', 'to-questionnaire'
+    'antislop-copywriting', 'pdf', 'xlsx', 'to-questionnaire',
+    // specialist agents (installed as skills; skipped when absent)
+    'marketing-seo-specialist', 'marketing-content-creator', 'marketing-video-optimization-specialist', 'engineering-technical-writer'
   ],
   aeo: [
     'evidence-first-delivery', 'ponytail',
     'web-research-scrapling', 'technical-seo-audit', 'writing-for-agents',
     'writing-beats', 'writing-fragments', 'writing-shape', 'doc-coauthoring',
     'humanizer', 'lumenfall', 'seedance-prompt-en', 'seedance-prompt-zh',
-    'antislop-copywriting', 'to-questionnaire'
+    'antislop-copywriting', 'to-questionnaire',
+    // specialist agents (installed as skills; skipped when absent)
+    'marketing-aeo-foundations', 'marketing-ai-citation-strategist', 'marketing-agentic-search-optimizer'
   ],
   deployment: [
     'evidence-first-delivery', 'ponytail',
     'netlify-functions', 'netlify-caching', 'netlify-access-control',
     'vercel-react-best-practices', 'setup-pre-commit', 'git-guardrails-claude-code',
-    'wizard', 'mcp-builder', 'evidence-first-delivery'
+    'wizard', 'mcp-builder', 'evidence-first-delivery',
+    // specialist agents (installed as skills; skipped when absent)
+    'engineering-devops-automator', 'engineering-sre', 'engineering-git-workflow-master', 'vercel-cli', 'vercel-deployments-cicd', 'vercel-domains', 'vercel-env-vars', 'vercel-cdn-caching', 'vercel-firewall'
   ],
   monitoring: [
     'evidence-first-delivery', 'ponytail',
     'webapp-testing', 'record-browser-gif', 'technical-seo-audit', 'improve',
-    'slack-gif-creator', 'evidence-first-delivery'
+    'slack-gif-creator', 'evidence-first-delivery',
+    // specialist agents (installed as skills; skipped when absent)
+    'engineering-sre', 'engineering-incident-response-commander', 'support-analytics-reporter', 'testing-performance-benchmarker', 'vercel-tracing', 'vercel-custom-metrics'
+  ],
+  database: [
+    'evidence-first-delivery', 'ponytail',
+    'domain-modeling', 'supabase-postgres-best-practices', 'vercel-storage',
+    // specialist agents (installed as skills; skipped when absent)
+    'engineering-database-optimizer', 'engineering-database-reliability-engineer', 'engineering-data-engineer', 'engineering-privacy-engineer'
+  ],
+  security: [
+    'evidence-first-delivery', 'ponytail',
+    'code-review', 'vercel-firewall',
+    // specialist agents (installed as skills; skipped when absent)
+    'security-ai-generated-code-auditor', 'security-appsec-engineer', 'security-senior-secops', 'security-secrets-credential-engineer',
+    'security-architect', 'security-cloud-security-architect', 'engineering-identity-access-engineer', 'engineering-privacy-engineer', 'support-legal-compliance-checker'
   ]
 }
 
@@ -160,7 +201,7 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
     title: 'Product Architect',
     color: '#c4b5fd',
     writesCode: true,
-    instructions: `Own system architecture. Choose technologies, define the schema, write API contracts to docs/architecture.md and docs/api.md before implementation starts. Keep the design as simple as the requirements allow. Justify decisions briefly in docs/decisions.md.`
+    instructions: `Own system architecture. Read docs/research.md first. In docs/architecture.md write, in this order: (1) Stack recommendation: compare two or three realistic stacks for this brief in a short table (fit, speed to ship, hosting cost, ecosystem, lock-in) and pick one with the reasons; prefer boring, well-supported choices. (2) Folder structure: the full project tree with one line per folder saying what lives there, separating frontend, backend, database, shared types, tests and docs. (3) Data model and the API contract (also in docs/api.md). Then create that folder structure and the minimal config files (package manifest, tsconfig or equivalent, .env.example with no real secrets, .gitignore) so the next workers start from a skeleton that installs and builds. Keep the design as simple as the requirements allow. Justify decisions briefly in docs/decisions.md.`
   }),
   R({
     role: 'designer',
@@ -195,6 +236,14 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
     instructions: `Implement business logic, APIs, persistence, security and permissions. Validate every input at the trust boundary, never log secrets, and add tests for non-trivial logic. Run migrations and tests before claiming completion.`
   }),
   R({
+    role: 'database',
+    name: 'Nadia',
+    title: 'Database Engineer',
+    color: '#4ade80',
+    writesCode: true,
+    instructions: `Own the data layer. Turn the data model in docs/architecture.md into a real schema, versioned migrations and seed data in the folders the architect defined, on the database the architecture chose. Add primary keys, foreign keys, NOT NULL and unique constraints that match the business rules, and indexes for the queries the API will run. Enable row-level security or equivalent access rules when the stack supports it. Never store secrets or plain-text passwords, and keep personal data to what the brief needs. Prove it: apply the migrations to a clean database and load the seed data, then record the commands and their output in docs/database.md.`
+  }),
+  R({
     role: 'reviewer',
     name: 'Vera',
     title: 'Code Reviewer',
@@ -209,6 +258,14 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
     color: '#fdba74',
     writesCode: true,
     instructions: `Reproduce the failure first, find the root cause, then make the smallest fix that fully solves it. Add a regression test. Never paper over an error with a wider catch.`
+  }),
+  R({
+    role: 'security',
+    name: 'Hex',
+    title: 'Security Engineer',
+    color: '#f87171',
+    writesCode: true,
+    instructions: `Audit the built application before review. Check, with file and line evidence: hardcoded secrets or keys in code, config or client bundles (anything public-prefixed such as NEXT_PUBLIC_ or VITE_ ships to every visitor); authentication and authorization on every route and server action, including object-level access (one user reading another user's data); row-level security or access rules on the database; input validation at every trust boundary; injection (SQL, command, path traversal, XSS, SSRF); user input concatenated into LLM prompts or tool calls; CORS, CSP and security headers; cookie flags; rate limiting on auth and expensive endpoints; dependency advisories (run the package manager's audit); errors or logs that leak secrets or personal data. Fix every critical and high finding with the smallest change and re-check it. Write docs/security-review.md with each finding's severity, location, and the fix applied or why it was deferred. Never weaken an existing control to make something work.`
   }),
   R({
     role: 'qa',
@@ -253,6 +310,9 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
 ]
 
 export const roleByName = (role: string) => ROLE_TEMPLATES.find((r) => r.role === role)
+
+/** Roles only the Client website profile schedules; a normal run never hires them. */
+export const WEBSITE_ROLES = new Set(['database', 'security'])
 
 export const PIPELINE = [
   'research',

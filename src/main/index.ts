@@ -1,3 +1,4 @@
+import type { StartRunInput } from '../shared/types'
 import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol } from 'electron'
 import { join, relative, sep } from 'node:path'
 import { existsSync, mkdirSync, readdirSync } from 'node:fs'
@@ -659,11 +660,11 @@ function registerIpc() {
   handle(IPC.transcribe, (_e, audio: Uint8Array) => transcribe(audio, creds))
   handle(IPC.screenshots, (event, id: string) => recentScreenshots(projectRoot(event, id)))
   handle(IPC.attachmentSave, (event, id: string, name: string, data: Uint8Array) => saveAttachment(projectRoot(event, id), name, data))
-  handle(IPC.startRun, async (_e, input: { projectId: string; instruction: string; attachments?: string[] }) => {
+  handle(IPC.startRun, async (_e, input: StartRunInput) => {
     await refreshProviders()
     const project = store.project(input.projectId)
     if (project) preview.rescan(project)
-    const jobId = await orchestrator.startRun(input.projectId, input.instruction, project ? attachmentPaths(project.path, input.attachments) : [])
+    const jobId = await orchestrator.startRun(input.projectId, input.instruction, project ? attachmentPaths(project.path, input.attachments) : [], input.profile)
     debouncedNotify()
     return { jobId }
   })

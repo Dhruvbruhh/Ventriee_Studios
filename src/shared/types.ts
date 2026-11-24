@@ -499,7 +499,11 @@ export interface StartRunInput {
   instruction: string
   /** Project-relative paths of attached images (.ventriee/attachments/…). */
   attachments?: string[]
+  /** Run profile picked in the command bar; 'website' runs the full client-website pipeline. */
+  profile?: RunProfile
 }
+
+export type RunProfile = 'website'
 
 export interface CreateAgentInput {
   projectId: string

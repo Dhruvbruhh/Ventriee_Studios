@@ -13,7 +13,7 @@ import { deliverFiles } from './deliver'
 import { Mailbox, parseMessageBlocks } from './mailbox'
 import type { CheckpointService } from './checkpoint'
 import { parseVerdict } from './review'
-import { ROLE_TEMPLATES, roleByName, MANDATORY_SKILLS, type Phase } from './roles'
+import { ROLE_TEMPLATES, roleByName, MANDATORY_SKILLS, WEBSITE_ROLES, type Phase } from './roles'
 import { scopeToRole, DELIVERABLE_BY_ROLE } from './brief'
 import { heuristicPlan, orderTasks, parsePlanAnswer, pickSpecialists, type Plan } from './planner'
 import { promotable } from './queue'
@@ -22,6 +22,7 @@ import { newId } from './store'
 import { redact } from './redact'
 import type {
   Agent,
+  RunProfile,
   AssignPromptInput,
   Assignment,
   EngineKind,
@@ -179,6 +180,7 @@ const pathsOverlap = (a: string[], b: string[]) =>
 export class Orchestrator {
   // shortcut: a run's images live in memory (one active run per project); a retry after an app restart runs without them.
   private images = new Map<string, string[]>()
+  private profiles = new Map<string, RunProfile | undefined>()
   private runners = new Map<string, Runner>()
   private paused = new Set<string>()
   private stopping = new Set<string>()
@@ -231,10 +233,10 @@ export class Orchestrator {
   }
 
   /** Roles the planner may schedule: enabled workers plus any template role the owner has not switched off. */
-  private plannableRoles(roster: Agent[]): string[] {
+  private plannableRoles(roster: Agent[], website = false): string[] {
     const disabled = new Set(roster.filter((a) => !a.enabled).map((a) => a.role))
     const enabled = new Set(roster.filter((a) => a.enabled).map((a) => a.role))
-    const hireable = ROLE_TEMPLATES.map((t) => t.role).filter((role) => !disabled.has(role) || enabled.has(role))
+    const hireable = ROLE_TEMPLATES.map((t) => t.role).filter((role) => (website || !WEBSITE_ROLES.has(role)) && (!disabled.has(role) || enabled.has(role)))
     return [...new Set([...enabled, ...hireable])]
   }
 
@@ -274,7 +276,8 @@ export class Orchestrator {
 
   // ------------------------------------------------------------------ planning
   private planningPrompt(project: Project, instruction: string, roster: Agent[], memoryBlock: string) {
-    const roles = this.plannableRoles(roster).filter((role) => role !== 'orchestrator')
+    const website = this.profiles.get(project.id) === 'website'
+    const roles = this.plannableRoles(roster, website).filter((role) => role !== 'orchestrator')
       .map((role) => `${role} (${roster.find((a) => a.role === role)?.title ?? roleByName(role)?.title ?? role})`).join(', ')
     const specialists = pickSpecialists(instruction, this.deps.store.skills().filter((s) => s.enabled))
       .map((s) => `- ${s.id}: ${s.description.slice(0, 140)}`).join('\n')
@@ -291,7 +294,7 @@ Rules:
 - Every task must have testable acceptance criteria.
 - Frontend and backend may run in parallel only after the architecture/contract task completes.
 - Always end with review, then QA. Add deployment only when the brief implies shipping.
-- dependsOn uses the task "key" values you define (t1, t2, ...).
+${website ? '- Client website profile: use this order: researcher, then architect (stack recommendation, folder structure, contract), then designer, then database (when there is persistent data), then backend and frontend, then integration, then security, then reviewer, qa and fixer, then seo, then deployment.\n' : ''}- dependsOn uses the task "key" values you define (t1, t2, ...).
 - 4 to 12 tasks. Each description is an instruction to a worker, concrete and self-contained.
 - Do not include a task for the owner.
 - difficulty: "low" for small or mechanical work (copy, docs, simple pages, renames), "high" for architecture, tricky logic, security or review, otherwise "medium". Low tasks may run on cheaper models.
@@ -309,10 +312,11 @@ JSON shape:
 
   private async makePlan(project: Project, instruction: string, roster: Agent[]): Promise<Plan> {
     const orchestrator = roster.find((a) => a.role === 'orchestrator' && a.enabled)
-    const validRoles = this.plannableRoles(roster)
+    const website = this.profiles.get(project.id) === 'website'
+    const validRoles = this.plannableRoles(roster, website)
     const fallback = this.deps.store.settings().plannerFallback
     const noPlan = (reason: string): Plan => {
-      if (fallback) return heuristicPlan(instruction)
+      if (fallback) return heuristicPlan(instruction, website)
       throw new Error(
         `${reason}. The fallback planner is switched off, so nothing was queued. Turn "Fallback planner" on in Settings to let the deterministic planner take over.`
       )
@@ -355,7 +359,7 @@ JSON shape:
   }
 
   // ------------------------------------------------------------------ run
-  async startRun(projectId: string, instruction: string, images: string[] = []): Promise<string> {
+  async startRun(projectId: string, instruction: string, images: string[] = [], profile?: RunProfile): Promise<string> {
     const project = this.deps.store.project(projectId)
     if (!project) throw new Error('Project not found')
     if (this.deps.store.runningJob(projectId)) throw new Error('A run is already active for this project')
@@ -365,6 +369,7 @@ JSON shape:
     // left the flag set and the following assignment queued work that never started.
     this.stopping.delete(projectId)
     this.images.set(projectId, images)
+    this.profiles.set(projectId, profile)
 
     const roster = this.ensureRoster(project, this.deps.creds)
     const job: Job = {

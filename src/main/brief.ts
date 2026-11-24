@@ -64,6 +64,8 @@ export const DELIVERABLE_BY_ROLE: Record<string, string> = {
   frontend: 'the app entry point and the screens the brief names',
   integration: 'the wiring between client and API, plus docs/integration.md',
   backend: 'the server entry point, its routes and its tests',
+  database: 'the schema, migrations, seed data and docs/database.md',
+  security: 'docs/security-review.md plus fixes for every critical and high finding',
   fixer: 'the smallest fix plus a regression test',
   qa: 'docs/qa-report.md',
   seo: 'the metadata, sitemap and robots files',

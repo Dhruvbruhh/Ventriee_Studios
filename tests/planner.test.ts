@@ -126,3 +126,19 @@ describe('specialist skills', () => {
     expect(picked.map((s) => s.id)).toEqual(['marketing-seo-specialist', 'engineering-frontend-developer'])
   })
 })
+
+describe('website pipeline', () => {
+  it('puts database before backend and security before review', () => {
+    const plan = heuristicPlan('Build a SaaS web app with login, a dashboard and an API backed by a database', true)
+    const key = (k: string) => plan.tasks.find((t) => t.key === k)
+    expect(key('backend')?.dependsOnKeys).toContain('database')
+    expect(key('security')?.role).toBe('security')
+    expect(key('review')?.dependsOnKeys).toContain('security')
+  })
+
+  it('leaves database and security out of a normal run', () => {
+    const roles = heuristicPlan('Build a SaaS web app with login, a dashboard and an API backed by a database').tasks.map((t) => t.role)
+    expect(roles).not.toContain('database')
+    expect(roles).not.toContain('security')
+  })
+})
