@@ -3,7 +3,7 @@ import { extname } from 'node:path'
 import { which } from './exec'
 import { runCli } from './cli'
 import type { Credentials } from './credentials'
-import { ENGINE_LABELS, type EngineKind, type ProviderStatus, type ReasoningEffort } from '../shared/types'
+import { ENGINE_LABELS, ENGINE_ENDPOINTS, type EngineKind, type ProviderStatus, type ReasoningEffort } from '../shared/types'
 
 export interface EngineRunInput {
   engine: EngineKind
@@ -121,39 +121,32 @@ export async function detectProviders(creds: Credentials): Promise<ProviderStatu
 }
 
 export function defaultEndpoint(engine: EngineKind): string {
-  switch (engine) {
-    case 'api-openai': return 'https://api.openai.com/v1'
-    case 'api-anthropic': return 'https://api.anthropic.com/v1'
-    case 'api-gemini': return 'https://generativelanguage.googleapis.com/v1beta'
-    case 'api-openrouter': return 'https://openrouter.ai/api/v1'
-    case 'api-deepseek': return 'https://api.deepseek.com/v1'
-    case 'api-mistral': return 'https://api.mistral.ai/v1'
-    case 'api-deploy': return 'https://api-sf1-cdn.deploy.com/api/v1'
-    case 'api-inception': return 'https://api.inceptionlabs.ai/v1'
-    case 'api-ollama': return 'http://127.0.0.1:11434/v1'
-    case 'api-lmstudio': return 'http://127.0.0.1:1234/v1'
-    case 'api-vllm': return 'http://127.0.0.1:8000/v1'
-    default: return ''
+  return ENGINE_ENDPOINTS[engine] ?? ''
+}
+
+export function modelFor(_engine: EngineKind, model: string) {
+  return model?.trim() ?? ''
+}
+
+const listedFirst = new Map<string, Promise<string>>()
+/** No model picked: use the first one the provider itself lists, instead of a built-in name that goes stale. */
+export function providerModel(engine: EngineKind, endpoint: string, key: string | null): Promise<string> {
+  const base = (engine === 'cli-ollama' ? ENGINE_ENDPOINTS['api-ollama']! : endpoint || defaultEndpoint(engine)).replace(/\/$/, '')
+  const cacheKey = `${engine} ${base}`
+  let found = listedFirst.get(cacheKey)
+  if (!found) {
+    const headers: Record<string, string> = engine === 'api-anthropic' ? { 'x-api-key': key ?? '', 'anthropic-version': '2023-06-01' }
+      : engine === 'api-gemini' ? { 'x-goog-api-key': key ?? '' } : key ? { authorization: `Bearer ${key}` } : {}
+    found = fetch(`${base}/models`, { headers, signal: AbortSignal.timeout(12_000) }).then(async (res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const body = await res.json() as { data?: Array<{ id?: string }>; models?: Array<{ name?: string }> }
+      const first = body.data?.[0]?.id ?? body.models?.[0]?.name?.replace(/^models\//, '')
+      if (!first) throw new Error('it lists no models')
+      return first
+    }).catch((error) => { listedFirst.delete(cacheKey); throw new Error(`No model chosen, and ${base}/models gave none (${(error as Error).message}). Pick a model in Settings.`) })
+    listedFirst.set(cacheKey, found)
   }
-}
-
-const DEFAULT_MODEL: Partial<Record<EngineKind, string>> = {
-  'api-openai': 'gpt-5-mini',
-  'api-anthropic': 'claude-sonnet-4-5',
-  'api-gemini': 'gemini-2.5-flash',
-  'api-openrouter': 'anthropic/claude-sonnet-4.5',
-  'api-deepseek': 'deepseek-chat',
-  'api-mistral': 'mistral-large-latest',
-  'api-deploy': 'deepseek-ai/deepseek-v4.1-flash-1017',
-  'api-inception': 'mercury-3',
-  'api-ollama': 'llama3.1',
-  'api-lmstudio': 'local-model',
-  'api-vllm': 'local-model',
-  'cli-ollama': 'llama3.1'
-}
-
-export function modelFor(engine: EngineKind, model: string) {
-  return model?.trim() || DEFAULT_MODEL[engine] || ''
+  return found
 }
 
 /**
@@ -192,7 +185,7 @@ export function buildCliInvocation(input: EngineRunInput): { bin: string; args: 
       return { bin: 'gemini', args, stdin: input.prompt }
     }
     case 'cli-ollama': {
-      return { bin: 'ollama', args: ['run', model || 'llama3.1'], stdin: input.prompt }
+      return { bin: 'ollama', args: ['run', model], stdin: input.prompt }
     }
     default: {
       const template = input.endpoint.trim() || '{prompt}'
@@ -275,7 +268,10 @@ function parseCodexJson(raw: string) {
 }
 
 export async function runEngine(input: EngineRunInput, creds: Credentials): Promise<EngineRunOutput> {
-  const model = modelFor(input.engine, input.model)
+  let model = modelFor(input.engine, input.model)
+  if (!model && (input.engine === 'cli-ollama' || (!isCliEngine(input.engine) && input.engine !== 'api-custom'))) {
+    try { model = await providerModel(input.engine, input.endpoint.trim(), creds.get(input.engine)) } catch (error) { return { ok: false, text: '', inputTokens: 0, outputTokens: 0, costUsd: 0, externalId: null, command: '', error: (error as Error).message } }
+  }
   if (isCliEngine(input.engine)) {
     // CLI agents open files themselves, so attached images are named by path.
     const images = loadImages(input.images)

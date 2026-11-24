@@ -2,6 +2,7 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'node:path'
 import { loadEnv } from 'vite'
+import { homepage } from './package.json'
 import { cleanSupabaseUrl, isPublicSupabaseKey, studioCsp } from './src/shared/auth-config'
 
 // Monaco vendors DOMPurify 3.2.7 (vulnerable); swap in the patched package, which has the same default export.
@@ -17,7 +18,7 @@ export default defineConfig(({ mode }) => {
   const key = env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() || env.VITE_SUPABASE_ANON_KEY?.trim() || ''
   if (key && !isPublicSupabaseKey(key)) throw new Error('Use a Supabase publishable/anon key, never a privileged key, in the desktop app')
   const csp = studioCsp(url, mode === 'development')
-  const define = { __SUPABASE_URL__: JSON.stringify(url), __SUPABASE_KEY__: JSON.stringify(key) }
+  const define = { __SUPABASE_URL__: JSON.stringify(url), __SUPABASE_KEY__: JSON.stringify(key), __HOMEPAGE__: JSON.stringify(homepage) }
   return {
     main: {
       define,

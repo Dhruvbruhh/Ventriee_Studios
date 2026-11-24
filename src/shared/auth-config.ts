@@ -1,5 +1,8 @@
 declare const __SUPABASE_URL__: string
 declare const __SUPABASE_KEY__: string
+declare const __HOMEPAGE__: string
+/** package.json `homepage`, baked in at build time. */
+export const homepage = typeof __HOMEPAGE__ === 'string' ? __HOMEPAGE__ : ''
 export const supabaseUrl = typeof __SUPABASE_URL__ === 'string' ? cleanSupabaseUrl(__SUPABASE_URL__) : ''
 export const supabaseKey = typeof __SUPABASE_KEY__ === 'string' && isPublicSupabaseKey(__SUPABASE_KEY__) ? __SUPABASE_KEY__.trim() : ''
 export function isPublicSupabaseKey(value: string): boolean {

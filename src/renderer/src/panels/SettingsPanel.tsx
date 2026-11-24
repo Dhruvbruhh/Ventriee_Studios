@@ -22,12 +22,7 @@ const SUBSCRIPTIONS: Array<{ engine: EngineKind; name: string; plan: string; ins
   { engine: 'cli-opencode', name: 'OpenCode', plan: 'Any provider OpenCode supports', install: 'npm install -g opencode-ai', login: 'opencode auth login', hint: 'Pick a provider and follow its sign-in.' }
 ]
 
-const ENGINE_ORDER: EngineKind[] = [
-  'cli-opencode', 'cli-claude', 'cli-codex', 'cli-gemini', 'cli-custom', 'cli-ollama',
-  'api-openai', 'api-anthropic', 'api-gemini', 'api-openrouter', 'api-deepseek', 'api-mistral',
-  'api-deploy', 'api-inception',
-  'api-ollama', 'api-lmstudio', 'api-vllm', 'api-custom'
-]
+const ENGINE_ORDER = Object.keys(ENGINE_LABELS) as EngineKind[]
 
 const TABS: Array<[Tab, string, ReactNode]> = [
   ['subscriptions', 'Subscriptions', <IconKey key="i" />],

@@ -54,6 +54,11 @@ export const ENGINE_ENDPOINTS: Partial<Record<EngineKind, string>> = {
   'api-vllm': 'http://127.0.0.1:8000/v1'
 }
 
+/** Providers on this machine (no key) and hosted ones (need a key), both read from ENGINE_ENDPOINTS. */
+const API_ENGINES = Object.keys(ENGINE_ENDPOINTS) as EngineKind[]
+export const LOCAL_API_ENGINES = API_ENGINES.filter((e) => ENGINE_ENDPOINTS[e]!.startsWith('http://127.0.0.1'))
+export const KEYED_API_ENGINES = API_ENGINES.filter((e) => !LOCAL_API_ENGINES.includes(e))
+
 export type Autonomy = 'ask' | 'scoped' | 'autonomous'
 
 /**
