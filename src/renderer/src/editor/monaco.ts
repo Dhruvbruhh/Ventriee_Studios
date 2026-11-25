@@ -16,7 +16,7 @@ import { emmetCSS, emmetHTML, emmetJSX } from 'emmet-monaco-es'
 // Colours come from the theme tokens in styles.css (loaded before this lazy chunk).
 const css = getComputedStyle(document.documentElement)
 const token = (name: string) => css.getPropertyValue(name).trim()
-monaco.editor.defineTheme('ventriee', { base: 'vs-dark', inherit: true, rules: [], colors: {
+monaco.editor.defineTheme('ventriee', { base: css.colorScheme.includes('light') ? 'vs' : 'vs-dark', inherit: true, rules: [], colors: {
   'editor.background': token('--bg-deep'), 'editorLineNumber.foreground': token('--faint'), 'editorCursor.foreground': token('--accent'),
   'editor.selectionBackground': token('--selection'), 'editor.inactiveSelectionBackground': token('--selection'), 'editorLineNumber.activeForeground': token('--text')
 } })

@@ -13,36 +13,36 @@
 
 @layer base {
   :root {
-    --bg: #1b130e;
-    --bg-deep: #140e0a;
-    --panel: rgb(46 34 26 / 0.62);
-    --panel-2: rgb(64 47 36 / 0.58);
-    --panel-3: rgb(84 62 47 / 0.6);
-    --line: rgb(255 228 204 / 0.11);
-    --line-soft: rgb(255 228 204 / 0.065);
-    --line-strong: rgb(255 228 204 / 0.2);
-    --accent-line: rgb(243 154 91 / 0.38);
-    --selection: #5c3c26;
-    --text: #fbf4ee;
-    --text-dim: #dccdc0;
-    --muted: #ad9c8e;
-    --faint: #a08f81;
-    --accent: #f39a5b;
-    --accent-deep: #d96a2b;
-    --accent-ink: #2b1306;
-    --bg-raised: rgb(36 26 20 / 0.78);
-    --status-bg: #3b2618;
-    --status-ink: #f7d8bf;
-    --ok: #79dcb4;
-    --warn: #f2a55f;
-    --err: #f4796b;
-    --info: #8ab4f8;
+    --bg: #b3d9ff;
+    --bg-deep: #eef5ff;
+    --panel: rgb(255 255 255 / 0.4);
+    --panel-2: rgb(255 255 255 / 0.52);
+    --panel-3: rgb(255 255 255 / 0.66);
+    --line: rgb(255 255 255 / 0.6);
+    --line-soft: rgb(30 64 120 / 0.09);
+    --line-strong: rgb(30 64 120 / 0.2);
+    --accent-line: rgb(232 110 45 / 0.45);
+    --selection: #c4dcff;
+    --text: #0e1d33;
+    --text-dim: #2a3d58;
+    --muted: #46597a;
+    --faint: #536785;
+    --accent: #f07a35;
+    --accent-deep: #d4581a;
+    --accent-ink: #ffffff;
+    --bg-raised: rgb(255 255 255 / 0.72);
+    --status-bg: rgb(255 255 255 / 0.7);
+    --status-ink: #1d3b66;
+    --ok: #11815a;
+    --warn: #b0600f;
+    --err: #c0392b;
+    --info: #2563c9;
     --radius-sm: 6px;
     --radius: 10px;
     --radius-lg: 14px;
     --radius-xl: 20px;
-    --shadow: 0 18px 50px -18px rgb(0 0 0 / 0.85);
-    --shadow-pop: 0 24px 64px -20px rgb(0 0 0 / 0.9), 0 0 0 1px rgb(255 255 255 / 0.03);
+    --shadow: 0 18px 50px -22px rgb(30 64 120 / 0.35);
+    --shadow-pop: 0 24px 64px -24px rgb(30 64 120 / 0.42), 0 0 0 1px rgb(255 255 255 / 0.4);
     /* elevation: each surface is a step lighter than the one under it */
     --surface-0: var(--bg-deep);
     --surface-1: var(--panel);
@@ -73,9 +73,9 @@
     --mono: "JetBrains Mono", "Cascadia Code", "SF Mono", ui-monospace, "Consolas", monospace;
     --sans: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
     --display: "Inter Display", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
-    --glass: blur(22px) saturate(150%);
-    --glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.09);
-    color-scheme: dark;
+    --glass: blur(24px) saturate(160%);
+    --glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.75);
+    color-scheme: light;
   }
 
   body {
@@ -1855,12 +1855,13 @@ button.gh-line:hover, button.gh-line:focus-visible { background: color-mix(in sr
 @property --glow-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
 @keyframes glow-spin { to { --glow-angle: 360deg; } }
 
-:root:not([data-theme="light"]) body {
+/* "Blue sky" (feralui.dev gradient builder) behind everything: four blue stops plus soft cloud light */
+body {
   background:
-    radial-gradient(900px 620px at 78% 8%, rgb(255 170 92 / 0.22), transparent 60%),
-    radial-gradient(700px 520px at 8% 92%, rgb(214 106 43 / 0.2), transparent 62%),
-    radial-gradient(520px 420px at 42% 46%, rgb(120 70 40 / 0.28), transparent 70%),
-    linear-gradient(160deg, #2a1c14, var(--bg) 55%, #120c08);
+    radial-gradient(60% 45% at 18% 12%, rgb(255 255 255 / 0.95), transparent 70%),
+    radial-gradient(45% 35% at 55% 28%, rgb(255 255 255 / 0.6), transparent 70%),
+    radial-gradient(40% 30% at 30% 55%, rgb(255 255 255 / 0.45), transparent 70%),
+    linear-gradient(160deg, #e6f2ff 0%, #b3d9ff 38%, #80b3ff 72%, #6699e6 100%) fixed;
 }
 .app, .auth-screen { background: transparent; }
 
@@ -1868,7 +1869,7 @@ button.gh-line:hover, button.gh-line:focus-visible { background: color-mix(in sr
 .sidebar, .topbar, .modal, .chat-box, .auth-card, .dash-progress, .dash-lane, .metrics, .plan-side {
   backdrop-filter: var(--glass);
 }
-.sidebar { background: color-mix(in srgb, var(--panel) 70%, transparent); }
+.sidebar { background: var(--panel); border-right-color: var(--line); }
 .topbar { background: color-mix(in srgb, var(--panel) 55%, transparent); }
 .modal { background: color-mix(in srgb, var(--bg-raised) 92%, transparent); box-shadow: var(--shadow-pop), var(--glass-edge); }
 .chat-box, .dash-lane, .metrics { background: var(--panel); box-shadow: var(--shadow), var(--glass-edge); }
@@ -1877,8 +1878,8 @@ button.gh-line:hover, button.gh-line:focus-visible { background: color-mix(in sr
 .chat-box, .modal, .auth-card { border-radius: 24px; }
 
 /* the owner's messages read like the cream cards in the reference */
-.msg.owner .msg-body { background: color-mix(in srgb, var(--text) 92%, transparent); color: var(--accent-ink); box-shadow: var(--shadow); }
-.msg.owner .msg-body strong { color: var(--accent-ink); }
+.msg.owner .msg-body { background: var(--panel-3); color: var(--text); box-shadow: var(--shadow), var(--glass-edge); border: 1px solid var(--line); }
+
 
 /* Candy button: glassy gradient with a top highlight, presses in */
 .btn { position: relative; border-radius: 12px; }
@@ -1904,7 +1905,7 @@ button.gh-line:hover, button.gh-line:focus-visible { background: color-mix(in sr
 }
 .ws-tab { height: 28px; padding: 0 14px; border-radius: 999px; transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1), background 160ms, color 160ms; }
 .ws-tab:hover { transform: translateY(-1px) scale(1.06); }
-.ws-tab.on { background: var(--text); color: var(--accent-ink); box-shadow: 0 6px 18px -8px rgb(0 0 0 / 0.6); }
+.ws-tab.on { background: #fff; color: var(--text); box-shadow: 0 6px 18px -8px rgb(30 64 120 / 0.45); }
 
 /* Glow-border card: a slow conic glow traced around the progress hero */
 .dash-progress { isolation: isolate; border-color: transparent; }
@@ -1925,7 +1926,7 @@ button.gh-line:hover, button.gh-line:focus-visible { background: color-mix(in sr
 
 /* sidebar items become soft glass pills */
 .side-nav-item, .side-session { border-radius: 12px; }
-.side-nav-item.on, .side-session.on { background: color-mix(in srgb, var(--text) 10%, transparent); box-shadow: var(--glass-edge); }
+.side-nav-item.on, .side-session.on { background: var(--panel-3); box-shadow: var(--glass-edge), 0 4px 14px -8px rgb(30 64 120 / 0.35); }
 
 @media (prefers-reduced-motion: reduce) {
   .dash-progress::before { animation: none; }
@@ -1935,5 +1936,5 @@ button.gh-line:hover, button.gh-line:focus-visible { background: color-mix(in sr
 /* matrix rain behind the sign-in screen, faded toward the card so the form stays readable */
 .auth-screen { position: relative; }
 .auth-intro, .auth-card { position: relative; z-index: 1; }
-.matrix-rain { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; opacity: 0.55;
+.matrix-rain { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; opacity: 0.7;
   -webkit-mask-image: linear-gradient(90deg, #000 0%, rgb(0 0 0 / 0.55) 55%, rgb(0 0 0 / 0.2) 100%); mask-image: linear-gradient(90deg, #000 0%, rgb(0 0 0 / 0.55) 55%, rgb(0 0 0 / 0.2) 100%); }
