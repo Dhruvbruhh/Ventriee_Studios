@@ -13,36 +13,36 @@
 
 @layer base {
   :root {
-    --bg: #0d0f12;
-    --bg-deep: #0a0c0e;
-    --panel: #14171b;
-    --panel-2: #191d22;
-    --panel-3: #1f242a;
-    --line: #262b32;
-    --line-soft: #1e2329;
-    --line-strong: #39414b;
-    --accent-line: #453a63;
-    --selection: #3b2f5c;
-    --text: #e9ebee;
-    --text-dim: #a7aeb8;
-    --muted: #858d98;
-    --faint: #8a929d;
-    --accent: #a78bfa;
-    --accent-deep: #7c3aed;
-    --accent-ink: #170b2e;
-    --bg-raised: #101317;
-    --status-bg: #241b36;
-    --status-ink: #d4c4ef;
-    --ok: #79dcb4;
-    --warn: #f2a55f;
-    --err: #f4796b;
-    --info: #8ab4f8;
+    --bg: #b3d9ff;
+    --bg-deep: #eef5ff;
+    --panel: rgb(255 255 255 / 0.4);
+    --panel-2: rgb(255 255 255 / 0.52);
+    --panel-3: rgb(255 255 255 / 0.66);
+    --line: rgb(255 255 255 / 0.6);
+    --line-soft: rgb(30 64 120 / 0.09);
+    --line-strong: rgb(30 64 120 / 0.2);
+    --accent-line: rgb(232 110 45 / 0.45);
+    --selection: #c4dcff;
+    --text: #0e1d33;
+    --text-dim: #2a3d58;
+    --muted: #46597a;
+    --faint: #536785;
+    --accent: #f07a35;
+    --accent-deep: #d4581a;
+    --accent-ink: #ffffff;
+    --bg-raised: rgb(255 255 255 / 0.72);
+    --status-bg: rgb(255 255 255 / 0.7);
+    --status-ink: #1d3b66;
+    --ok: #11815a;
+    --warn: #b0600f;
+    --err: #c0392b;
+    --info: #2563c9;
     --radius-sm: 6px;
     --radius: 10px;
     --radius-lg: 14px;
     --radius-xl: 20px;
-    --shadow: 0 18px 50px -18px rgb(0 0 0 / 0.85);
-    --shadow-pop: 0 24px 64px -20px rgb(0 0 0 / 0.9), 0 0 0 1px rgb(255 255 255 / 0.03);
+    --shadow: 0 18px 50px -22px rgb(30 64 120 / 0.35);
+    --shadow-pop: 0 24px 64px -24px rgb(30 64 120 / 0.42), 0 0 0 1px rgb(255 255 255 / 0.4);
     /* elevation: each surface is a step lighter than the one under it */
     --surface-0: var(--bg-deep);
     --surface-1: var(--panel);
@@ -73,7 +73,9 @@
     --mono: "JetBrains Mono", "Cascadia Code", "SF Mono", ui-monospace, "Consolas", monospace;
     --sans: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
     --display: "Inter Display", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
-    color-scheme: dark;
+    --glass: blur(24px) saturate(160%);
+    --glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.75);
+    color-scheme: light;
   }
 
   body {
@@ -1846,3 +1848,93 @@ button.gh-line:hover, button.gh-line:focus-visible { background: color-mix(in sr
     .metric:nth-child(3) { border-left: 0; }
   }
 }
+
+/* ---- Warm glass theme ----
+   Frosted panels over a warm ambient backdrop. The candy button, dock tabs, glow-border card and
+   command palette rows are ported from Vengeance UI (MIT, github.com/Ashutoshx7/VengeanceUI) to plain CSS. */
+@property --glow-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+@keyframes glow-spin { to { --glow-angle: 360deg; } }
+
+/* "Blue sky" (feralui.dev gradient builder) behind everything: four blue stops plus soft cloud light */
+body {
+  background:
+    radial-gradient(60% 45% at 18% 12%, rgb(255 255 255 / 0.95), transparent 70%),
+    radial-gradient(45% 35% at 55% 28%, rgb(255 255 255 / 0.6), transparent 70%),
+    radial-gradient(40% 30% at 30% 55%, rgb(255 255 255 / 0.45), transparent 70%),
+    linear-gradient(160deg, #e6f2ff 0%, #b3d9ff 38%, #80b3ff 72%, #6699e6 100%) fixed;
+}
+.app, .auth-screen { background: transparent; }
+
+/* frosted surfaces */
+.sidebar, .topbar, .modal, .chat-box, .auth-card, .dash-progress, .dash-lane, .metrics, .plan-side {
+  backdrop-filter: var(--glass);
+}
+.sidebar { background: var(--panel); border-right-color: var(--line); }
+.topbar { background: color-mix(in srgb, var(--panel) 55%, transparent); }
+.modal { background: color-mix(in srgb, var(--bg-raised) 92%, transparent); box-shadow: var(--shadow-pop), var(--glass-edge); }
+.chat-box, .dash-lane, .metrics { background: var(--panel); box-shadow: var(--shadow), var(--glass-edge); }
+.auth-card { background: var(--panel); box-shadow: var(--shadow-pop), var(--glass-edge); }
+.plan-side { background: color-mix(in srgb, var(--panel) 50%, transparent); }
+.chat-box, .modal, .auth-card { border-radius: 24px; }
+
+/* the owner's messages read like the cream cards in the reference */
+.msg.owner .msg-body { background: var(--panel-3); color: var(--text); box-shadow: var(--shadow), var(--glass-edge); border: 1px solid var(--line); }
+
+
+/* Candy button: glassy gradient with a top highlight, presses in */
+.btn { position: relative; border-radius: 12px; }
+.btn.primary, .btn.primary:hover:not(:disabled) {
+  color: var(--accent-ink);
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, white);
+  background: radial-gradient(95% 60% at 50% 75%, var(--accent-deep) 0%, var(--accent) 100%);
+  box-shadow: 0 4px 40px -12px var(--accent), inset 0 1px 8px -4px #fff;
+  transition: filter 200ms var(--ease), transform 200ms var(--ease);
+}
+.btn.primary:hover:not(:disabled) { filter: brightness(1.1); }
+.btn.primary:active:not(:disabled) { transform: scale(0.95) rotate(1deg); }
+.btn.primary::after {
+  content: ""; position: absolute; top: 1px; right: 10%; width: 60%; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.5), transparent);
+}
+
+/* Glass dock tabs: a floating frosted pill, tabs lift on hover, the open one is a cream chip */
+.ws-toggle {
+  padding: 4px; gap: 4px; border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 80%, transparent); backdrop-filter: var(--glass);
+  border: 1px solid var(--line); box-shadow: var(--shadow), var(--glass-edge);
+}
+.ws-tab { height: 28px; padding: 0 14px; border-radius: 999px; transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1), background 160ms, color 160ms; }
+.ws-tab:hover { transform: translateY(-1px) scale(1.06); }
+.ws-tab.on { background: #fff; color: var(--text); box-shadow: 0 6px 18px -8px rgb(30 64 120 / 0.45); }
+
+/* Glow-border card: a slow conic glow traced around the progress hero */
+.dash-progress { isolation: isolate; border-color: transparent; }
+.dash-progress::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: conic-gradient(from var(--glow-angle), var(--accent-deep), var(--accent), var(--warn), transparent 40%, transparent 60%, var(--accent-deep));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: glow-spin 6s linear infinite;
+}
+
+/* Search-modal rows for the command palette and quick open */
+.palette-list > button { border-radius: 10px; transition: background 120ms, color 120ms; }
+.palette-list > button:hover, .palette-list > button:focus-visible { background: var(--accent-soft); color: var(--text); outline: none; }
+
+/* switches match the reference's orange toggles */
+.switch.on { background: var(--accent); border-color: color-mix(in srgb, var(--accent) 70%, white); }
+.switch.on::after { background: #fff; }
+
+/* sidebar items become soft glass pills */
+.side-nav-item, .side-session { border-radius: 12px; }
+.side-nav-item.on, .side-session.on { background: var(--panel-3); box-shadow: var(--glass-edge), 0 4px 14px -8px rgb(30 64 120 / 0.35); }
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-progress::before { animation: none; }
+  .ws-tab, .btn.primary { transition: none; }
+}
+
+/* matrix rain behind the sign-in screen, faded toward the card so the form stays readable */
+.auth-screen { position: relative; }
+.auth-intro, .auth-card { position: relative; z-index: 1; }
+.matrix-rain { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; opacity: 0.7;
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, rgb(0 0 0 / 0.55) 55%, rgb(0 0 0 / 0.2) 100%); mask-image: linear-gradient(90deg, #000 0%, rgb(0 0 0 / 0.55) 55%, rgb(0 0 0 / 0.2) 100%); }

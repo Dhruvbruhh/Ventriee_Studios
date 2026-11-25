@@ -56,7 +56,7 @@ export const useStore = create<UiState>((set, get) => ({
   selectedAgentId: null,
   railTab: 'plan',
   panel: 'none',
-  workspace: 'home',
+  workspace: 'plan',
   editorDirty: false,
   output: {},
   chatStream: {},

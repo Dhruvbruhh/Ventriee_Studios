@@ -17,8 +17,10 @@ let FX: SakugaFX = null as unknown as SakugaFX
 export async function initFx() {
   await import('./vendor/sakuga/core.js')
   FX = (window as unknown as { SakugaFX: SakugaFX }).SakugaFX
-  // Retinted from their white-and-lavender paper look to the studio's violet (the --accent family in styles.css).
-  Object.assign(FX.P, { fill: '#ede9fe', shade: '#a78bfa', line: '#7c3aed', accent: '#e879f9', ink: '#170b2e', sfx: ['#170b2e', '#ede9fe'] })
+  // Retinted to the studio theme: colours come from the tokens in styles.css.
+  const css = getComputedStyle(document.documentElement)
+  const t = (name: string) => css.getPropertyValue(name).trim()
+  Object.assign(FX.P, { fill: t('--text'), shade: t('--accent'), line: t('--accent-deep'), accent: t('--warn'), ink: t('--accent-ink'), sfx: [t('--accent-ink'), t('--text')] })
   // Buttons opt in by markup: data-fx="send" | "tab", and every primary button gets the small confirm.
   document.addEventListener('click', (e) => {
     const el = (e.target as Element | null)?.closest?.('[data-fx], .btn.primary')

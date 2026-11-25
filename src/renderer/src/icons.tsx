@@ -2,7 +2,7 @@ import {
   AppWindow, ArrowClockwise, ArrowSquareOut, CaretDown, Check, Clock, Coins, Copy, Cpu, Database, DotsSixVertical, Folder,
   GearSix, Key, Lightning, ListBullets, ListChecks, MagnifyingGlass, Notebook, PaperPlaneRight, Pause, PencilSimple, Play,
   Plug, Plus, Pulse, PushPin, SidebarSimple, SignOut, SlidersHorizontal, Sparkle, SquaresFour, Star, Stop, TerminalWindow,
-  Trash, Tray, UsersThree, X, type Icon, type IconProps
+  Trash, Tray, UsersThree, X, ChatCircleDots, Code, type Icon, type IconProps
 } from '@phosphor-icons/react'
 
 // Phosphor's duotone style: a line plus a soft fill in the current colour, so accents read purple.
@@ -28,6 +28,8 @@ export const IconCheck = make(Check)
 export const IconGrip = make(DotsSixVertical)
 export const IconTerminal = make(TerminalWindow)
 export const IconSpark = make(Sparkle)
+export const IconChat = make(ChatCircleDots)
+export const IconCode = make(Code)
 export const IconGrid = make(SquaresFour)
 export const IconList = make(ListBullets)
 export const IconExternal = make(ArrowSquareOut)
