@@ -3,9 +3,10 @@ import { App } from './App'
 import { guard, resetStudio, useStore, cleanError } from './store'
 import { supabaseUrl, supabaseKey } from '../../shared/auth-config'
 import { IconSignOut } from './icons'
+import { MatrixRain } from './components/MatrixRain'
 
 function Screen({ children }: { children: ReactNode }) {
-  return <main className="auth-screen"><section className="auth-intro">
+  return <main className="auth-screen"><MatrixRain /><section className="auth-intro">
     <div className="auth-brand"><div className="brand-mark" aria-hidden="true" />Ventriee Studios</div>
     <h1>Ideas become<br /><span>real work.</span></h1>
     <p>Plan your next project, bring your agents together, and build in a workspace on your computer.</p>

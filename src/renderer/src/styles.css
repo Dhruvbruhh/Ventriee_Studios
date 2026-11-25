@@ -13,26 +13,26 @@
 
 @layer base {
   :root {
-    --bg: #0d0f12;
-    --bg-deep: #0a0c0e;
-    --panel: #14171b;
-    --panel-2: #191d22;
-    --panel-3: #1f242a;
-    --line: #262b32;
-    --line-soft: #1e2329;
-    --line-strong: #39414b;
-    --accent-line: #453a63;
-    --selection: #3b2f5c;
-    --text: #e9ebee;
-    --text-dim: #a7aeb8;
-    --muted: #858d98;
-    --faint: #8a929d;
-    --accent: #a78bfa;
-    --accent-deep: #7c3aed;
-    --accent-ink: #170b2e;
-    --bg-raised: #101317;
-    --status-bg: #241b36;
-    --status-ink: #d4c4ef;
+    --bg: #1b130e;
+    --bg-deep: #140e0a;
+    --panel: rgb(46 34 26 / 0.62);
+    --panel-2: rgb(64 47 36 / 0.58);
+    --panel-3: rgb(84 62 47 / 0.6);
+    --line: rgb(255 228 204 / 0.11);
+    --line-soft: rgb(255 228 204 / 0.065);
+    --line-strong: rgb(255 228 204 / 0.2);
+    --accent-line: rgb(243 154 91 / 0.38);
+    --selection: #5c3c26;
+    --text: #fbf4ee;
+    --text-dim: #dccdc0;
+    --muted: #ad9c8e;
+    --faint: #a08f81;
+    --accent: #f39a5b;
+    --accent-deep: #d96a2b;
+    --accent-ink: #2b1306;
+    --bg-raised: rgb(36 26 20 / 0.78);
+    --status-bg: #3b2618;
+    --status-ink: #f7d8bf;
     --ok: #79dcb4;
     --warn: #f2a55f;
     --err: #f4796b;
@@ -73,6 +73,8 @@
     --mono: "JetBrains Mono", "Cascadia Code", "SF Mono", ui-monospace, "Consolas", monospace;
     --sans: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
     --display: "Inter Display", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --glass: blur(22px) saturate(150%);
+    --glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.09);
     color-scheme: dark;
   }
 
@@ -1846,3 +1848,92 @@ button.gh-line:hover, button.gh-line:focus-visible { background: color-mix(in sr
     .metric:nth-child(3) { border-left: 0; }
   }
 }
+
+/* ---- Warm glass theme ----
+   Frosted panels over a warm ambient backdrop. The candy button, dock tabs, glow-border card and
+   command palette rows are ported from Vengeance UI (MIT, github.com/Ashutoshx7/VengeanceUI) to plain CSS. */
+@property --glow-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+@keyframes glow-spin { to { --glow-angle: 360deg; } }
+
+:root:not([data-theme="light"]) body {
+  background:
+    radial-gradient(900px 620px at 78% 8%, rgb(255 170 92 / 0.22), transparent 60%),
+    radial-gradient(700px 520px at 8% 92%, rgb(214 106 43 / 0.2), transparent 62%),
+    radial-gradient(520px 420px at 42% 46%, rgb(120 70 40 / 0.28), transparent 70%),
+    linear-gradient(160deg, #2a1c14, var(--bg) 55%, #120c08);
+}
+.app, .auth-screen { background: transparent; }
+
+/* frosted surfaces */
+.sidebar, .topbar, .modal, .chat-box, .auth-card, .dash-progress, .dash-lane, .metrics, .plan-side {
+  backdrop-filter: var(--glass);
+}
+.sidebar { background: color-mix(in srgb, var(--panel) 70%, transparent); }
+.topbar { background: color-mix(in srgb, var(--panel) 55%, transparent); }
+.modal { background: color-mix(in srgb, var(--bg-raised) 92%, transparent); box-shadow: var(--shadow-pop), var(--glass-edge); }
+.chat-box, .dash-lane, .metrics { background: var(--panel); box-shadow: var(--shadow), var(--glass-edge); }
+.auth-card { background: var(--panel); box-shadow: var(--shadow-pop), var(--glass-edge); }
+.plan-side { background: color-mix(in srgb, var(--panel) 50%, transparent); }
+.chat-box, .modal, .auth-card { border-radius: 24px; }
+
+/* the owner's messages read like the cream cards in the reference */
+.msg.owner .msg-body { background: color-mix(in srgb, var(--text) 92%, transparent); color: var(--accent-ink); box-shadow: var(--shadow); }
+.msg.owner .msg-body strong { color: var(--accent-ink); }
+
+/* Candy button: glassy gradient with a top highlight, presses in */
+.btn { position: relative; border-radius: 12px; }
+.btn.primary, .btn.primary:hover:not(:disabled) {
+  color: var(--accent-ink);
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, white);
+  background: radial-gradient(95% 60% at 50% 75%, var(--accent-deep) 0%, var(--accent) 100%);
+  box-shadow: 0 4px 40px -12px var(--accent), inset 0 1px 8px -4px #fff;
+  transition: filter 200ms var(--ease), transform 200ms var(--ease);
+}
+.btn.primary:hover:not(:disabled) { filter: brightness(1.1); }
+.btn.primary:active:not(:disabled) { transform: scale(0.95) rotate(1deg); }
+.btn.primary::after {
+  content: ""; position: absolute; top: 1px; right: 10%; width: 60%; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.5), transparent);
+}
+
+/* Glass dock tabs: a floating frosted pill, tabs lift on hover, the open one is a cream chip */
+.ws-toggle {
+  padding: 4px; gap: 4px; border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 80%, transparent); backdrop-filter: var(--glass);
+  border: 1px solid var(--line); box-shadow: var(--shadow), var(--glass-edge);
+}
+.ws-tab { height: 28px; padding: 0 14px; border-radius: 999px; transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1), background 160ms, color 160ms; }
+.ws-tab:hover { transform: translateY(-1px) scale(1.06); }
+.ws-tab.on { background: var(--text); color: var(--accent-ink); box-shadow: 0 6px 18px -8px rgb(0 0 0 / 0.6); }
+
+/* Glow-border card: a slow conic glow traced around the progress hero */
+.dash-progress { isolation: isolate; border-color: transparent; }
+.dash-progress::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: conic-gradient(from var(--glow-angle), var(--accent-deep), var(--accent), var(--warn), transparent 40%, transparent 60%, var(--accent-deep));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: glow-spin 6s linear infinite;
+}
+
+/* Search-modal rows for the command palette and quick open */
+.palette-list > button { border-radius: 10px; transition: background 120ms, color 120ms; }
+.palette-list > button:hover, .palette-list > button:focus-visible { background: var(--accent-soft); color: var(--text); outline: none; }
+
+/* switches match the reference's orange toggles */
+.switch.on { background: var(--accent); border-color: color-mix(in srgb, var(--accent) 70%, white); }
+.switch.on::after { background: #fff; }
+
+/* sidebar items become soft glass pills */
+.side-nav-item, .side-session { border-radius: 12px; }
+.side-nav-item.on, .side-session.on { background: color-mix(in srgb, var(--text) 10%, transparent); box-shadow: var(--glass-edge); }
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-progress::before { animation: none; }
+  .ws-tab, .btn.primary { transition: none; }
+}
+
+/* matrix rain behind the sign-in screen, faded toward the card so the form stays readable */
+.auth-screen { position: relative; }
+.auth-intro, .auth-card { position: relative; z-index: 1; }
+.matrix-rain { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; opacity: 0.55;
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, rgb(0 0 0 / 0.55) 55%, rgb(0 0 0 / 0.2) 100%); mask-image: linear-gradient(90deg, #000 0%, rgb(0 0 0 / 0.55) 55%, rgb(0 0 0 / 0.2) 100%); }
