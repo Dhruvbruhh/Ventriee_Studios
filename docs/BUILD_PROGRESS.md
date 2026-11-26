@@ -24,10 +24,11 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W10 | Cloud schema verification + ownership guard (§20/21/32) | W3, W5, W8 | Done | migration `0004_ownership_guard.sql`; `tests/migrations.test.ts` runs all migrations on embedded PostgreSQL and exercises RLS as real users |
 | W11 | Unified resource library + natural-language discovery (§14) | - | Done | registry in `src/shared/resources.ts` + `src/main/resources.ts`; IPC `resources:list`; `ResourcesPanel` rewritten over real sources; `tests/resources.test.ts` (12 tests) |
 | W12 | Security Master tooling (§11) | - | Done | read-only scan in `src/shared/security.ts` + `src/main/securityScan.ts` (secrets, code patterns, .env hygiene, npm audit); IPC `security:scan`; Security panel; scan results injected into the security worker's prompt; `tests/security.test.ts` (12 tests) |
+| W13 | Frontend Master visual QA loop (§10) | - | Done | `src/main/visualQa.ts`: after a frontend worker delivers, the sandboxed browser renders the running preview at desktop + 390px mobile, screenshots both, and collects console errors; failures send the task to rework with the specific problems; the reviewer receives the rendered-check summary; `tests/visualQa.test.ts` (4 tests) |
 
-## Verification baseline (master, after W12)
+## Verification baseline (master, after W13)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
-- vitest: 427 passed, 1 skipped (85 files), including 18 executable migration/RLS tests, 12 resource-library tests and 12 security-scanner tests
+- vitest: 431 passed, 1 skipped (86 files), including 18 executable migration/RLS tests, 12 resource-library tests, 12 security-scanner tests and 4 visual-QA tests
 - desktop build: `npm run build` green
 - web build: `cd web && npm run build` green
 - mobile: `npm ci && npm run typecheck && npm test` green (18 jest tests)
@@ -81,3 +82,16 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Security panel (sidebar) shows findings with severity/impact/fix; the security
   worker receives the digest in its task prompt. No writing, fixing or deleting
   is ever performed automatically.
+- 2026-11-26: W13. Frontend work was judged only on source text; §10 requires
+  evaluation of the rendered interface. After a frontend worker delivers, the
+  orchestrator now renders the project's running preview in the sandboxed
+  automation browser, screenshots it at desktop and 390×844 mobile widths, and
+  collects the page's console errors. Problems (console errors, a failed
+  screenshot, a nearly empty page body) send the task straight to rework with
+  the specific findings; a pass is recorded in the task review and given to the
+  reviewer. Skips are logged explicitly (no preview running, no browser). The
+  loop never throws and never fixes anything itself. New files:
+  `src/main/visualQa.ts`, `tests/visualQa.test.ts`; orchestrator deps gained an
+  optional structural `browser`. Known limit: screenshots live in the browser
+  screens folder and the run log; the task review stores the summary, not the
+  image.

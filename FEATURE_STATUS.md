@@ -221,6 +221,7 @@ Last updated: 2026-11-25
 | Client → Project link | ✅ | clientId on Project |
 | Resource library | ✅ | Registry in `src/shared/resources.ts` merges skills, plugins, MCP servers, workflows, worker roles and a curated library catalogue; states (installed/available/needs install) come from real sources, library state from the open project's `package.json`; natural-language discovery (`discoverResources`) explains its matches. UI: ResourcesPanel.tsx |
 | Security review (read-only scan) | ✅ | `src/shared/security.ts` + `src/main/securityScan.ts`: secret patterns (masked), dangerous-code rules, .env hygiene, real `npm audit --json`; Security panel; digest injected into the security worker's prompt; `tests/security.test.ts` |
+| Frontend visual QA loop | ✅ | `src/main/visualQa.ts`: after a frontend worker delivers, the sandboxed browser renders the preview at desktop + mobile widths, screenshots both, and checks console errors and empty pages; failures rework the task with specific findings; reviewer receives the rendered-check summary; `tests/visualQa.test.ts` |
 | Connectors (Resend/PostHog/Sentry etc.) | ✅ | SettingsPanel → Connectors; passed to CLI agent workers as env vars (`connectorEnv`) |
 | Client badge in Plan view | ✅ | Workspace.tsx |
 

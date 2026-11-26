@@ -23,6 +23,7 @@ import { redact } from './redact'
 import { IntelligenceEngine } from './intelligence'
 import { scanProject } from './securityScan'
 import { securityDigest } from '../shared/security'
+import { visualQa, type VisualQaResult, type VisualQaBrowser } from './visualQa'
 import type {
   Agent,
   RunProfile,
@@ -57,7 +58,11 @@ export interface OrchestratorDeps {
   mcpConfig?: (filter?: string[]) => string
   /** The project's running preview URL, if any, so browser-capable workers can test it. */
   previewUrl?: (projectId: string) => string | null
+  /** Sandboxed browser for the visual QA loop; optional so tests can run without Electron. */
+  browser?: VisualQaBrowser
 }
+
+/** The real automation class satisfies the structural shape the QA loop needs. */
 
 interface Runner {
   controller: AbortController
@@ -975,8 +980,42 @@ JSON shape:
       return
     }
 
-    this.deps.store.updateTask(task.id, { status: 'review' })
-    await this.reviewTask(project, task.id, agent, evidence)
+    // Visual QA: frontend deliverables are judged on the rendered app, not the diff.
+    let visual: VisualQaResult | null = null
+    if (agent.role === 'frontend') {
+      const url = this.deps.previewUrl?.(project.id)
+      if (url && this.deps.browser) {
+        try {
+          visual = await visualQa(this.deps.browser, url, '')
+          this.log(project.id, agent.id, task.id, 'review', `Visual QA: ${visual.summary}`)
+          if (!visual.ok) {
+            const detail = visual.problems.slice(0, 4).join(' | ')
+            this.deps.store.updateTask(task.id, { status: 'rework', review: `Visual QA failed: ${detail}. ${evidence.summary}` })
+            this.deps.store.addMessage({
+              projectId: project.id,
+              taskId: task.id,
+              sender: 'orchestrator',
+              recipient: agent.id,
+              type: 'request',
+              content: `The rendered app has problems: ${detail}. Fix them in the workspace and deliver again.`,
+              status: 'unread'
+            })
+            return
+          }
+        } catch (error) {
+          this.log(project.id, agent.id, task.id, 'error', `Visual QA skipped: ${(error as Error).message}`)
+        }
+      } else {
+        this.log(project.id, agent.id, task.id, 'review', 'Visual QA skipped: no running preview or browser')
+      }
+    }
+
+    this.deps.store.updateTask(task.id, { status: 'review', review: visual?.ok ? `Visual QA passed: ${visual.summary}` : undefined })
+    await this.reviewTask(project, task.id, agent, {
+      ...evidence,
+      // The reviewer judges the rendered app too, not just the diff.
+      summary: visual?.ran ? `${evidence.summary} Visual QA: ${visual.summary}` : evidence.summary
+    })
     this.deps.notify()
   }
 

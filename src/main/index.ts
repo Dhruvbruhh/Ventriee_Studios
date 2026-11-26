@@ -1595,7 +1595,8 @@ function bootstrapData() {
     providerConfigs: () => store.providers(),
     checkpoints,
     mcpConfig: (filter?: string[]) => writeMcpConfig(userData, store.settings().mcpServers, filter),
-    previewUrl: (id) => { const p = store.project(id); const s = p ? preview.stateForProject(p) : null; return s?.status === 'ready' || s?.status === 'external' ? s.url : null }
+    previewUrl: (id) => { const p = store.project(id); const s = p ? preview.stateForProject(p) : null; return s?.status === 'ready' || s?.status === 'external' ? s.url : null },
+    browser
   })
 
   // Mark anything that was mid-flight at shutdown, so the UI never shows a stale spinner.
