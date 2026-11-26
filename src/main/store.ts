@@ -62,7 +62,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dailyBudgetUsd: 0,
   projectBudgetUsd: 0,
   completionEndpoint: '',
-  onboardingSeen: false
+  onboardingSeen: false,
+  simpleMode: false
 }
 
 export class Store {

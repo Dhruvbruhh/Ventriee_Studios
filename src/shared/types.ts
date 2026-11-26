@@ -428,6 +428,8 @@ export interface AppSettings {
   completionEndpoint: string
   /** Set true once the first-run engine onboarding has been dismissed. */
   onboardingSeen?: boolean
+  /** Chat-first surface for non-technical owners; false (default) keeps the full developer IDE. */
+  simpleMode?: boolean
 }
 
 export type ArtifactKind =

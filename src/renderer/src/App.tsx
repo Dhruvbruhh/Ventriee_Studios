@@ -10,6 +10,7 @@ import { Inspector } from './components/Inspector'
 import { Workspace } from './components/Workspace'
 import { Dashboard } from './components/Dashboard'
 import { SideChat } from './components/SideChat'
+import { SimpleMode } from './components/SimpleMode'
 import { TerminalView } from './components/Terminal'
 import { SettingsPanel } from './panels/SettingsPanel'
 import { MemoryPanel } from './panels/MemoryPanel'
@@ -107,6 +108,8 @@ export function App() {
     )
   }
 
+  if (snapshot.settings.simpleMode) return <SimpleMode />
+
   const project = snapshot.projects.find((p) => p.id === snapshot.activeProjectId) ?? null
   const working = snapshot.agents.filter((a) => a.status === 'working').length
   const configured = snapshot.providers.filter((p) => p.available).length
@@ -148,6 +151,7 @@ export function App() {
             {working > 0 ? `${working} active` : configured > 0 ? `${configured} engines` : 'no engines'}
           </span>
         </div>
+        <button className="btn ghost" onClick={() => void guard(() => window.ventriee.saveSettings({ simpleMode: true }))} title="Switch to the chat-first Simple mode">Simple mode</button>
         <button className={`icon-btn${showAdvisor ? ' active' : ''}`} onClick={() => setShowAdvisor((v) => !v)} title="Side chat" aria-label="Side chat">
           <IconSpark />
         </button>
