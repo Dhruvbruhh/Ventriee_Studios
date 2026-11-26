@@ -1,4 +1,5 @@
-export interface StudioSession { userId: string; sessionId: string; email: string; expiresAt: number }
+/** activeOrgId null = the user's personal workspace; a uuid = an org they belong to. */
+export interface StudioSession { userId: string; sessionId: string; email: string; expiresAt: number; activeOrgId: string | null }
 interface Tokens { access_token: string; refresh_token: string }
 interface AuthReply { id?: string; email?: string; access_token?: string; refresh_token?: string; user_metadata?: Record<string, unknown> }
 interface TokenStore { get(): string | null; set(value: string): void; clear(): void }
@@ -44,7 +45,19 @@ export class StudioAuth {
     // Decode expiry only after Supabase has authenticated the token and returned its user.
     const claims = JSON.parse(Buffer.from(tokens.access_token.split('.')[1], 'base64url').toString())
     if (typeof user.id !== 'string' || claims.sub !== user.id || !Number.isFinite(claims.exp) || claims.exp * 1000 <= Date.now()) throw new Error('Your session has expired')
-    return { userId: user.id, sessionId: claims.session_id ?? user.id, email: user.email ?? '', expiresAt: claims.exp * 1000 }
+    return { userId: user.id, sessionId: claims.session_id ?? user.id, email: user.email ?? '', expiresAt: claims.exp * 1000, activeOrgId: null }
+  }
+  /** The signed-in user's access token for the cloud data layer, or null when signed out. */
+  accessToken() { return this.tokens?.access_token ?? null }
+  /**
+   * Switch the window's active workspace: null for personal, or an org id the
+   * user belongs to. RLS is the real gate — this only scopes which rows the app
+   * reads; it does not grant access.
+   */
+  setWorkspace(id: number, orgId: string | null) {
+    const session = this.requireSession(id)
+    session.activeOrgId = orgId
+    return session
   }
   async signIn(id: number, input: { email: string; password: string }, signup = false) {
     if (!input || typeof input.email !== 'string' || !input.email.includes('@') || input.email.length > 320 || typeof input.password !== 'string' || !input.password || input.password.length > 4096) throw new Error('Enter a valid email and password')

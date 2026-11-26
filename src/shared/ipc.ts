@@ -167,7 +167,9 @@ export const IPC = {
   skillRead: 'skill:read',
   skillWrite: 'skill:write',
   skillInstallUrl: 'skill:install-url',
-  mcpToolCalls: 'mcp:tool-calls'
+  mcpToolCalls: 'mcp:tool-calls',
+  cloudOrgs: 'cloud:orgs',
+  cloudWorkspace: 'cloud:workspace'
 } as const
 
 export interface CredentialInfo {
@@ -267,11 +269,11 @@ export interface VentrieeApi {
   notebookRestart(projectId: string, path: string): Promise<void>
   notebookShutdown(projectId: string, path: string): Promise<void>
   onNotebook(cb: (event: NotebookEvent) => void): () => void
-  authStatus(): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number } | null>
-  authSignIn(input: { email: string; password: string }, signup?: boolean): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number } | null; message: string }>
+  authStatus(): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number; activeOrgId: string | null } | null>
+  authSignIn(input: { email: string; password: string }, signup?: boolean): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number; activeOrgId: string | null } | null; message: string }>
   authClear(): Promise<void>
   authRecover(email: string): Promise<{ message: string }>
-  authReset(input: { email: string; code: string; password: string }): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number } | null; message: string }>
+  authReset(input: { email: string; code: string; password: string }): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number; activeOrgId: string | null } | null; message: string }>
   onAuthLocked(cb: () => void): () => void
   snapshot(): Promise<Snapshot>
   onPatch(cb: (patch: Snapshot) => void): () => void
@@ -428,6 +430,10 @@ export interface VentrieeApi {
   /** Clone a skill from a Git URL, scan it, and install it. */
   skillInstallUrl(url: string): Promise<SkillImportResult>
   mcpToolCalls(sessionId: string): Promise<McpToolCall[]>
+  /** Proof-of-use for the cloud data layer: the orgs the signed-in user belongs to. */
+  cloudOrgs(): Promise<Array<{ id: string; name: string; owner_id: string; created_at: string }>>
+  /** Switch this window between the personal workspace (null) and an org. */
+  cloudSetWorkspace(orgId: string | null): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number; activeOrgId: string | null }>
 }
 
 export type TaskPatch = Partial<Task>

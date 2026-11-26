@@ -257,7 +257,9 @@ const api: VentrieeApi = {
     const listener = (_e: unknown, r: Parameters<typeof cb>[0]) => cb(r)
     ipcRenderer.on(IPC.browserEvent, listener)
     return () => ipcRenderer.removeListener(IPC.browserEvent, listener)
-  }
+  },
+  cloudOrgs: () => ipcRenderer.invoke(IPC.cloudOrgs),
+  cloudSetWorkspace: (orgId) => ipcRenderer.invoke(IPC.cloudWorkspace, orgId)
 }
 
 contextBridge.exposeInMainWorld('ventriee', api)

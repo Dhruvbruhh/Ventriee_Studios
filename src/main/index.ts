@@ -4,6 +4,7 @@ import { join, relative, sep } from 'node:path'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
 import { StudioAuth } from './auth'
+import { SupabaseCloudClient } from './cloud'
 import { FileService, workspacePath } from './files'
 import { GitService } from './git'
 import type { TextFile, GitAction } from '../shared/workspace'
@@ -143,6 +144,8 @@ const auth = new StudioAuth(supabaseUrl, supabaseKey, {
   set: (value) => { try { creds.setKey('cred:supabase:session', value) } catch { /* Memory-only session without an OS keychain. */ } },
   clear: () => { store.db.kvDelete('cred:supabase:session') }
 })
+// Cloud data layer runs on the signed-in user's token; RLS enforces access.
+const cloud = new SupabaseCloudClient(supabaseUrl, supabaseKey, () => auth.accessToken())
 protocol.registerSchemesAsPrivileged([{ scheme: RENDERER_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
 
 function windowProject(win: BrowserWindow): string | null {
@@ -663,6 +666,8 @@ function registerIpc() {
     debouncedNotify()
     return result
   })
+  handle(IPC.cloudOrgs, () => cloud.listOrganizations())
+  handle(IPC.cloudWorkspace, (event, orgId: string | null) => auth.setWorkspace(event.sender.id, orgId === null ? null : String(orgId)))
   handle(IPC.authRecover, (_event, email: string) => auth.recover(email))
   handle(IPC.authReset, async (event, input: { email: string; code: string; password: string }) => {
     const result = await auth.resetPassword(event.sender.id, input)
