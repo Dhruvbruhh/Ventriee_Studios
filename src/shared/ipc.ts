@@ -1,4 +1,5 @@
 import type {
+  Clarification,
   Agent,
   AppSettings,
   AssignPromptInput,
@@ -76,6 +77,7 @@ export const IPC = {
   deleteAgent: 'agent:delete',
   duplicateAgent: 'agent:duplicate',
   startRun: 'run:start',
+  clarifyBrief: 'run:clarify',
   stopRun: 'run:stop',
   approveTask: 'task:approve',
   rejectTask: 'task:reject',
@@ -304,6 +306,8 @@ export interface VentrieeApi {
   deleteAgent(id: string): Promise<void>
   duplicateAgent(id: string): Promise<Agent>
   startRun(input: StartRunInput): Promise<{ jobId: string }>
+  /** Questions the planner wants answered before planning this brief; [] when clear, off or no engine. */
+  clarifyBrief(input: { projectId: string; brief: string }): Promise<Clarification[]>
   stopRun(projectId: string): Promise<void>
   approveTask(taskId: string): Promise<void>
   rejectTask(taskId: string, reason: string): Promise<void>

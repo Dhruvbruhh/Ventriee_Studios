@@ -395,6 +395,14 @@ export interface AssignPromptInput {
   }>
   /** Extra instruction appended to every task, e.g. a phase hint. */
   note?: string
+  /** Owner's answers to the planner's questions, folded into the brief. */
+  clarifications?: Clarification[]
+}
+
+/** A planner question and the owner's answer (the model's suggested default until edited). */
+export interface Clarification {
+  question: string
+  answer: string
 }
 
 export type AgentStatus = 'idle' | 'working' | 'waiting' | 'paused' | 'error' | 'offline'
@@ -591,6 +599,8 @@ export interface AppSettings {
   requireDeployApproval: boolean
   reducedMotion: boolean
   plannerFallback: boolean
+  /** Ask the owner clarifying questions before planning a vague brief. */
+  clarifyBrief: boolean
   /** Who picks models: the owner, the orchestrator, or both. */
   routingMode: RoutingMode
   costPreference: CostPreference
@@ -740,6 +750,8 @@ export interface StartRunInput {
   attachments?: string[]
   /** Run profile picked in the command bar; 'website' runs the full client-website pipeline. */
   profile?: RunProfile
+  /** Owner's answers to the planner's questions, folded into the brief. */
+  clarifications?: Clarification[]
 }
 
 export type RunProfile = 'website'

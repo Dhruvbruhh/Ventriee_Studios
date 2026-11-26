@@ -4,6 +4,7 @@ import { RichText } from './RichText'
 import { Preview } from './Preview'
 import { NewProjectDialog } from '../shell'
 import { useAttachments, useVoice } from './Attachments'
+import { useClarify } from './Clarify'
 import { IconCheck, IconSend, IconSpark } from '../icons'
 import type { ChatMessage, PromptDoc, Task } from '../../../shared/types'
 
@@ -42,15 +43,18 @@ export function SimpleMode() {
     setBusy(false)
   }
 
-  const build = async () => {
-    if (!project || !plan || busy) return
-    setBusy(true)
-    const result = await guard(
-      () => window.ventriee.assignPrompt({ projectId: project.id, promptId: plan.id, mode: 'orchestrator' }),
-      'Building started'
-    )
-    setBusy(false)
-    if (result) useStore.getState().notify(`On it: ${result.taskCount || 'the'} ${result.taskCount === 1 ? 'step' : 'steps'} planned.`)
+  const clarify = useClarify(project?.id)
+  const build = () => {
+    if (!project || !plan || busy || clarify.checking) return
+    void clarify.ask(plan.body, async (clarifications) => {
+      setBusy(true)
+      const result = await guard(
+        () => window.ventriee.assignPrompt({ projectId: project.id, promptId: plan.id, mode: 'orchestrator', clarifications }),
+        'Building started'
+      )
+      setBusy(false)
+      if (result) useStore.getState().notify(`On it: ${result.taskCount || 'the'} ${result.taskCount === 1 ? 'step' : 'steps'} planned.`)
+    })
   }
 
   const startOver = () => {
@@ -103,12 +107,13 @@ export function SimpleMode() {
             <section className="simple-plan">
               <div className="simple-plan-head"><IconCheck width={14} height={14} /> Here's the plan</div>
               <div className="simple-plan-body"><RichText text={plan.body} /></div>
-              <div className="simple-plan-actions">
-                <button className="btn primary lg" onClick={build} disabled={busy}>{busy ? 'Starting…' : 'Approve & build'}</button>
+              {clarify.pending ? null : <div className="simple-plan-actions">
+                <button className="btn primary lg" onClick={build} disabled={busy || clarify.checking}>{busy ? 'Starting…' : clarify.checking ? 'Checking…' : 'Approve & build'}</button>
                 <span className="faint text-sm">Not quite right? Keep chatting below and press “Update the plan”.</span>
-              </div>
+              </div>}
             </section>
           ) : null}
+          {clarify.panel}
           <Composer
             busy={busy}
             canPlan={snapshot.chat.some((m) => m.role === 'owner' && m.content.trim())}

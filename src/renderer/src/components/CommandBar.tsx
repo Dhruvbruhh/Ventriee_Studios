@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { guard, useStore } from '../store'
 import { useAttachments, useVoice } from './Attachments'
+import { useClarify } from './Clarify'
 import { IconSend, IconStop } from '../icons'
 
 const SUGGESTIONS = [
@@ -34,22 +35,27 @@ export function CommandBar() {
     el.style.height = `${Math.min(el.scrollHeight, 140)}px`
   }, [draft])
 
-  const submit = async () => {
-    if (!project || busy || running || !draft.trim()) return
-    setBusy(true)
-    const result = await guard(() => window.ventriee.startRun({ projectId: project.id, instruction: draft.trim(), attachments: attach.paths, profile: profile || undefined }))
-    setBusy(false)
-    if (result) {
-      setDraft('')
-      attach.clear()
-      useStore.getState().setRailTab('plan')
-      notify('Brief sent to the orchestrator')
-    }
+  const clarify = useClarify(project?.id)
+  const submit = () => {
+    if (!project || busy || running || !draft.trim() || clarify.checking || clarify.pending) return
+    const instruction = draft.trim()
+    void clarify.ask(instruction, async (clarifications) => {
+      setBusy(true)
+      const result = await guard(() => window.ventriee.startRun({ projectId: project.id, instruction, attachments: attach.paths, profile: profile || undefined, clarifications }))
+      setBusy(false)
+      if (result) {
+        setDraft('')
+        attach.clear()
+        useStore.getState().setRailTab('plan')
+        notify('Brief sent to the orchestrator')
+      }
+    })
   }
 
   return (
     <div className="command">
       <div className="command-inner">
+        {clarify.panel}
         {attach.strip}
         <div className="composer">
           <textarea
@@ -87,8 +93,8 @@ export function CommandBar() {
               <IconStop /> Stop
             </button>
           ) : (
-            <button className="send-btn" data-fx="send" onClick={submit} disabled={!project || !draft.trim() || busy}>
-              <IconSend /> Run
+            <button className="send-btn" data-fx="send" onClick={submit} disabled={!project || !draft.trim() || busy || clarify.checking || clarify.pending}>
+              <IconSend /> {clarify.checking ? 'Checking…' : 'Run'}
             </button>
           )}
         </div>

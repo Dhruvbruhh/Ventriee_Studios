@@ -25,6 +25,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W11 | Unified resource library + natural-language discovery (§14) | - | Done | registry in `src/shared/resources.ts` + `src/main/resources.ts`; IPC `resources:list`; `ResourcesPanel` rewritten over real sources; `tests/resources.test.ts` (12 tests) |
 | W12 | Security Master tooling (§11) | - | Done | read-only scan in `src/shared/security.ts` + `src/main/securityScan.ts` (secrets, code patterns, .env hygiene, npm audit); IPC `security:scan`; Security panel; scan results injected into the security worker's prompt; `tests/security.test.ts` (12 tests) |
 | W13 | Frontend Master visual QA loop (§10) | - | Done | `src/main/visualQa.ts`: after a frontend worker delivers, the sandboxed browser renders the running preview at desktop + 390px mobile, screenshots both, and collects console errors; failures send the task to rework with the specific problems; the reviewer receives the rendered-check summary; `tests/visualQa.test.ts` (4 tests) |
+| W16 | Requirements clarification before planning (§8) | - | Done | `src/main/clarify.ts` (prompt, defensive parse capped at 5, fold answers into a "Clarifications" block); `Orchestrator.clarify` + IPC `run:clarify`; question panel in Simple mode, Assign dialog (orchestrator mode) and command bar; setting "Ask clarifying questions"; `tests/clarify.test.ts` (6 tests) |
 
 ## Verification baseline (master, after W13)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -95,3 +96,15 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   optional structural `browser`. Known limit: screenshots live in the browser
   screens folder and the run log; the task review stores the summary, not the
   image.
+- 2026-11-26: W16. Planning went straight from brief to plan, so vague briefs
+  got invented requirements (§8). Before planning, the UI now asks the
+  orchestrator agent (same engine/model and availability check as `makePlan`)
+  for 0–5 questions that would materially change the result, each with a
+  suggested default. A clear brief returns none and the run starts exactly as
+  before. The owner edits answers or clicks "Use defaults"; answers are appended
+  to the brief as a "Clarifications" block, which is what the planner sees and
+  what the job's `instruction` records, so they stay visible on the run. The
+  check returns no questions when the setting is off, no orchestrator is
+  enabled (heuristic planner), the engine is unavailable, or the call fails or
+  answers junk, so it never blocks a run. Remote/voice/automation runs skip it.
+  Known limit: the saved prompt revision is not changed, only the run's brief.

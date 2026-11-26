@@ -15,6 +15,7 @@ import type { CheckpointService } from './checkpoint'
 import { parseVerdict } from './review'
 import { ROLE_TEMPLATES, roleByName, MANDATORY_SKILLS, WEBSITE_ROLES, type Phase } from './roles'
 import { scopeToRole, DELIVERABLE_BY_ROLE } from './brief'
+import { clarifyPrompt, foldClarifications, parseClarifyAnswer } from './clarify'
 import { heuristicPlan, orderTasks, parsePlanAnswer, pickSpecialists, type Plan } from './planner'
 import { promotable } from './queue'
 import { routeModel, routeModels, type RouteChoice } from './routing'
@@ -25,6 +26,7 @@ import { scanProject } from './securityScan'
 import { securityDigest } from '../shared/security'
 import { visualQa, type VisualQaResult, type VisualQaBrowser } from './visualQa'
 import type {
+  Clarification,
   Agent,
   RunProfile,
   AssignPromptInput,
@@ -368,6 +370,38 @@ JSON shape:
     }
     this.log(project.id, orchestrator.id, null, 'plan', `Planner failed (${result.error ?? 'unknown'})`)
     return noPlan(`The planner failed (${result.error ?? 'unknown error'})`)
+  }
+
+  /**
+   * Questions the planner wants answered before it plans. Never blocks a run: off,
+   * no usable orchestrator (the heuristic planner would plan) or any failure means [].
+   */
+  async clarify(projectId: string, brief: string): Promise<Clarification[]> {
+    const project = this.deps.store.project(projectId)
+    if (!project || !brief.trim() || !this.deps.store.settings().clarifyBrief) return []
+    const orchestrator = this.ensureRoster(project, this.deps.creds).find((a) => a.role === 'orchestrator' && a.enabled)
+    if (!orchestrator) return []
+    try {
+      const provider = (await detectProviders(this.deps.creds)).find((p) => p.engine === orchestrator.engine)
+      if (!provider?.available || !(isCliEngine(orchestrator.engine) || this.deps.creds.configured(orchestrator.engine))) return []
+      const result = await runEngine(
+        {
+          engine: orchestrator.engine,
+          model: orchestrator.model,
+          endpoint: orchestrator.endpoint,
+          system: withRules(orchestrator.instructions, project.path),
+          prompt: clarifyPrompt(brief),
+          cwd: project.path,
+          maxTokens: 800,
+          timeoutMs: 90 * 1000,
+          reasoning: orchestrator.reasoning ?? 'auto'
+        },
+        this.deps.creds
+      )
+      return result.ok ? parseClarifyAnswer(result.text) : []
+    } catch {
+      return []
+    }
   }
 
   // ------------------------------------------------------------------ run
@@ -1513,8 +1547,10 @@ Answer with a JSON object only: {"verdict":"pass"|"fail","reasoning":"...","bloc
     const project = this.deps.store.project(input.projectId)
     if (!project) throw new Error('Project not found')
     if (this.deps.store.runningJob(project.id)) throw new Error('A run is already active for this project')
-    const prompt = this.deps.store.prompt(input.promptId)
-    if (!prompt) throw new Error('Prompt not found')
+    const stored = this.deps.store.prompt(input.promptId)
+    if (!stored) throw new Error('Prompt not found')
+    // Answers ride on the brief (and so on the job record), not the saved prompt revision.
+    const prompt = { ...stored, body: foldClarifications(stored.body, input.clarifications) }
     if (!existsSync(project.path)) throw new Error(`Project workspace does not exist: ${project.path}`)
     // Same reason as startRun: a stop recorded while no run was active must not
     // make this new run exit on its first queue check without doing anything.
@@ -1536,7 +1572,7 @@ Answer with a JSON object only: {"verdict":"pass"|"fail","reasoning":"...","bloc
     const job: Job = {
       id: newId('job'),
       projectId: project.id,
-      instruction: prompt.body.slice(0, 2000),
+      instruction: foldClarifications(stored.body.slice(0, 2000), input.clarifications),
       status: 'running',
       planSource: 'heuristic',
       createdAt: Date.now(),
