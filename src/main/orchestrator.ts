@@ -20,6 +20,7 @@ import { promotable } from './queue'
 import { routeModel } from './routing'
 import { newId } from './store'
 import { redact } from './redact'
+import { IntelligenceEngine } from './intelligence'
 import type {
   Agent,
   RunProfile,
@@ -207,6 +208,9 @@ export class Orchestrator {
   }
   /** Decrypting every stored key on every streamed chunk would be wasteful. */
   private secretCache: { at: number; values: string[] } | null = null
+
+  /** Incremental code index + retrieval; stateless across projects, keyed by project path. */
+  private intel = new IntelligenceEngine()
 
   constructor(private deps: OrchestratorDeps) {}
 
@@ -628,6 +632,20 @@ JSON shape:
     this.deps.notify()
 
     const memoryDocs = this.deps.memory.retrieve(project.id, `${task.title} ${task.description}`, 6)
+    // Project Intelligence: index the workspace and fold the minimum relevant code
+    // into the memory block, so the worker gets real context, not just memory docs.
+    let contextBlock = memoryDocs.length ? this.deps.memory.promptBlock(memoryDocs) : ''
+    try {
+      this.intel.sync(project.path)
+      const compiled = this.intel.compile(project.path, {
+        query: `${task.title} ${task.description} ${task.acceptance}`,
+        memoryBlock: contextBlock
+      })
+      contextBlock = compiled.text
+    } catch (error) {
+      // Retrieval is an enhancement, never a gate: a worker still runs on memory alone.
+      this.log(project.id, agent.id, task.id, 'error', `Code retrieval skipped: ${(error as Error).message}`)
+    }
     const team = this.deps.store.agents(project.id).filter((a) => a.enabled && a.id !== agent.id)
     const inbox = this.deps.store.messages(project.id).filter((m) => m.recipient === agent.id && m.status === 'unread').slice(-8)
     // Offer this worker the skills bound to it, not the first N of the registry.
@@ -676,7 +694,7 @@ JSON shape:
     this.deps.notify()
 
     const timeoutMs = Math.max(2, this.deps.store.settings().sessionTimeoutMinutes) * 60 * 1000
-    let prompt = this.taskPrompt(project, task, { ...agent, ...run }, team, memoryDocs.length ? this.deps.memory.promptBlock(memoryDocs) : '', dependencyContext, inbox, skills)
+    let prompt = this.taskPrompt(project, task, { ...agent, ...run }, team, contextBlock, dependencyContext, inbox, skills)
     const url = this.deps.previewUrl?.(project.id)
     if (url && run.engine === 'cli-claude' && this.deps.store.settings().mcpServers.some((m) => m.name === 'playwright' && m.enabled)) {
       prompt += `\n\nThe app is running at ${url}. If you change anything visible, open it with the Playwright browser tools, click through what you changed, and take a screenshot of the result before you finish.`
@@ -992,7 +1010,7 @@ ${team.length ? talking : '(you are working alone)'}
 ## Available skills
 ${skills.length ? skills.map((s) => `- ${s.name}: ${s.description} (${s.path})`).join('\n') + '\n\nRead a skill\'s SKILL.md before you rely on it. It holds the rules and examples; this line is only a pointer.' : '(none installed)'}
 
-## Owner and project memory
+## Owner/project memory and relevant code
 ${memoryBlock || '(none)'}
 
 ## Unread messages addressed to you
