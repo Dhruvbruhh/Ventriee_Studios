@@ -29,6 +29,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W17 | Agent catalogue with departments + importable manifests (§9) | - | Done | branch `claude/w17-agent-catalogue-7ba21e`: `src/shared/agents.ts` (template format, manifest validation), catalogue in the app DB (`Store.agentCatalogue`), planner/hiring read enabled templates, Agents panel; `tests/agents-catalogue.test.ts` (18 tests) |
 | W15 | Isolated Git worktrees for parallel code tasks (§9/§16) | - | Done | `src/main/worktrees.ts`: in a clean Git project with parallel runs on, each code task runs in its own worktree (branch `ventriee/task-<id>`, under the app data dir); after its evidence check it is committed and merged `--no-ff` one at a time; a conflict is aborted and the task goes to rework with the files listed; a dirty project is never merged into (branch kept). Falls back to in-place serialized work for non-git, uncommitted or setting-off projects. Boot recovery removes orphans and keeps unmerged branches. Setting "Isolate parallel code tasks". `tests/worktrees.test.ts` (5), `tests/orchestrator-worktrees.test.ts` (3) |
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
+| W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 
 ## Verification baseline (master, after W13)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -171,3 +172,21 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   role picker and the measured table. Stats key on the model id, so one model served
   by two providers shares its record. The migration is appended to `db.ts`: a
   sibling migration merged first must stay ahead of it.
+- 2026-11-26: W14. Desktop work never reached the cloud, so the web dashboard
+  and mobile app had nothing real to show. `CloudSync` (`src/main/cloud/sync.ts`)
+  listens to store writes of projects and tasks (`Store.onChange`, not the
+  orchestrator) and only marks a row dirty in a local `cloud_sync` table, which
+  holds the desktop↔cloud id mapping, the outbox, per-row backoff and conflicts.
+  A debounced flush, plus a 60 s tick while signed in, pushes projects first,
+  then tasks (title, mapped board status, raw desktop status, model, worker
+  name), redacted and checked against a column allowlist; paths, descriptions,
+  output, code and memory never leave. Updates are compare-and-set on the new
+  `updated_at` column, so a row edited on the web is recorded as a conflict and
+  shown in Settings until the owner keeps the desktop version. Tasks created in
+  the cloud on a linked project arrive once as an unread owner message, never
+  as a runnable task. Migration `0005_desktop_sync.sql` also fixes a 0001 bug:
+  any user UPDATE on `tasks` failed with infinite RLS recursion (tasks_update →
+  task_assignments → tasks); a definer `is_task_assignee()` replaces the
+  subquery. Known limits: deleting a desktop project does not delete its cloud
+  copy; there is no "take cloud version" (only keep desktop); a project already
+  linked stays in the workspace it was first pushed to.

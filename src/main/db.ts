@@ -197,6 +197,17 @@ const MIGRATIONS: string[] = [
     latencyMs INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_mo_bucket ON model_outcomes(role, difficulty, model);
+  `,
+  // Desktop <-> cloud sync (cloud/sync.ts): one row per synced item, linking the
+  // local id to its cloud row, plus the outbox (dirty), retry backoff and conflicts.
+  `
+  CREATE TABLE IF NOT EXISTS cloud_sync (
+    kind TEXT NOT NULL, localId TEXT NOT NULL, cloudId TEXT, userId TEXT NOT NULL DEFAULT '',
+    cloudUpdatedAt TEXT, dirty INTEGER NOT NULL DEFAULT 1, attempts INTEGER NOT NULL DEFAULT 0,
+    nextAt INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '', conflict TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (kind, localId)
+  );
+  CREATE INDEX IF NOT EXISTS idx_cloud_sync_cloud ON cloud_sync(cloudId);
   `
 ]
 

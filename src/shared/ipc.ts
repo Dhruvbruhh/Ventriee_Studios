@@ -187,8 +187,20 @@ export const IPC = {
   cloudOrgs: 'cloud:orgs',
   cloudWorkspace: 'cloud:workspace',
   remoteStatus: 'remote:status',
-  remoteSetEnabled: 'remote:set-enabled'
+  remoteSetEnabled: 'remote:set-enabled',
+  cloudSyncStatus: 'cloud:sync-status',
+  cloudSyncKeepDesktop: 'cloud:sync-keep-desktop'
 } as const
+
+/** Desktop <-> cloud project/task sync (main/cloud/sync.ts). */
+export interface SyncConflict { kind: 'project' | 'task'; localId: string; title: string; reason: string }
+export interface SyncStatus {
+  state: 'off' | 'signed-out' | 'syncing' | 'synced' | 'pending' | 'error' | 'conflict'
+  pending: number
+  conflicts: SyncConflict[]
+  lastSyncAt: number | null
+  error: string
+}
 
 /** Inbound remote-control ("Jarvis") shapes surfaced to the renderer. */
 export interface RemoteDevice { id: string; name: string; platform: string; remote_enabled: boolean; last_seen_at: string; org_id: string | null }
@@ -483,6 +495,9 @@ export interface VentrieeApi {
   remoteStatus(): Promise<RemoteStatus>
   /** Turn inbound remote control on/off for this device (default off). */
   remoteSetEnabled(on: boolean): Promise<{ device: RemoteDevice | null; enabled: boolean }>
+  cloudSyncStatus(): Promise<SyncStatus>
+  /** Resolve a sync conflict by overwriting the cloud row with this desktop's version. */
+  cloudSyncKeepDesktop(kind: 'project' | 'task', localId: string): Promise<SyncStatus>
 }
 
 export type TaskPatch = Partial<Task>
