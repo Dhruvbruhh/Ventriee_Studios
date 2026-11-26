@@ -108,7 +108,9 @@ export const IPC = {
   testProvider: 'provider:test',
   graphifyStatus: 'graphify:status',
   graphifyBuild: 'graphify:build',
-  graphifyQuery: 'graphify:query'
+  graphifyQuery: 'graphify:query',
+  cloudOrgs: 'cloud:orgs',
+  cloudWorkspace: 'cloud:workspace'
 } as const
 
 export interface CredentialInfo {
@@ -208,11 +210,11 @@ export interface VentrieeApi {
   notebookRestart(projectId: string, path: string): Promise<void>
   notebookShutdown(projectId: string, path: string): Promise<void>
   onNotebook(cb: (event: NotebookEvent) => void): () => void
-  authStatus(): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number } | null>
-  authSignIn(input: { email: string; password: string }, signup?: boolean): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number } | null; message: string }>
+  authStatus(): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number; activeOrgId: string | null } | null>
+  authSignIn(input: { email: string; password: string }, signup?: boolean): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number; activeOrgId: string | null } | null; message: string }>
   authClear(): Promise<void>
   authRecover(email: string): Promise<{ message: string }>
-  authReset(input: { email: string; code: string; password: string }): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number } | null; message: string }>
+  authReset(input: { email: string; code: string; password: string }): Promise<{ session: { userId: string; sessionId: string; email: string; expiresAt: number; activeOrgId: string | null } | null; message: string }>
   onAuthLocked(cb: () => void): () => void
   snapshot(): Promise<Snapshot>
   onPatch(cb: (patch: Snapshot) => void): () => void
@@ -310,6 +312,10 @@ export interface VentrieeApi {
   graphifyBuild(projectId: string): Promise<{ ok: boolean; out: string }>
   /** Ask the project's graph a question; returns the scoped subgraph answer. */
   graphifyQuery(projectId: string, question: string): Promise<{ ok: boolean; out: string }>
+  /** Proof-of-use for the cloud data layer: the orgs the signed-in user belongs to. */
+  cloudOrgs(): Promise<Array<{ id: string; name: string; owner_id: string; created_at: string }>>
+  /** Switch this window between the personal workspace (null) and an org. */
+  cloudSetWorkspace(orgId: string | null): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number; activeOrgId: string | null }>
 }
 
 export type TaskPatch = Partial<Task>

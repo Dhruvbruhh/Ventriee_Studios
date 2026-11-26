@@ -91,6 +91,22 @@ describe('Supabase main-process authentication', () => {
     request.mockImplementation(async () => new Response('{}'))
     await expect(auth().signIn(1, { email: user.email, password: 'example-password' })).rejects.toThrow('valid session')
   })
+  it('starts in the personal workspace and switches to an org without re-authenticating', async () => {
+    const service = auth()
+    const result = await service.signIn(1, { email: user.email, password: 'example-password' })
+    expect(result.session?.activeOrgId).toBeNull()
+    const calls = request.mock.calls.length
+    expect(service.setWorkspace(1, 'org-uuid').activeOrgId).toBe('org-uuid')
+    expect(service.session(1)?.activeOrgId).toBe('org-uuid')
+    expect(service.setWorkspace(1, null).activeOrgId).toBeNull()
+    expect(request.mock.calls.length).toBe(calls) // switching is local, no network
+    expect(service.accessToken()).toBe(jwt())
+  })
+  it('cannot switch workspace or read a token without a session', () => {
+    const service = auth()
+    expect(() => service.setWorkspace(1, 'org-uuid')).toThrow('Sign in')
+    expect(service.accessToken()).toBeNull()
+  })
 })
 describe('public desktop configuration', () => {
   it('accepts public keys and rejects administrative keys', () => {
