@@ -94,7 +94,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     firecrawlKey: '',
     stripeKey: '',
     e2bKey: ''
-  }
+  },
+  simpleMode: false
 }
 
 export class Store {

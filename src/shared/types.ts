@@ -647,6 +647,8 @@ export interface AppSettings {
     stripeKey: string
     e2bKey: string
   }
+  /** Chat-first surface for non-technical owners; false (default) keeps the full developer IDE. */
+  simpleMode?: boolean
 }
 
 export type ArtifactKind =
