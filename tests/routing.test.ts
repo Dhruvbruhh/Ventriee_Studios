@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { routeModel } from '../src/main/routing'
+import { routeModel, routeModels, deriveProfile } from '../src/main/routing'
 import { parsePlanAnswer } from '../src/main/planner'
 import type { ModelOption } from '../src/shared/types'
 
@@ -19,6 +19,36 @@ describe('difficulty routing', () => {
     const plan = parsePlanAnswer(JSON.stringify({ summary: 's', tasks: [
       { title: 'Copy', role: 'frontend', difficulty: 'LOW' }, { title: 'Auth', role: 'backend', difficulty: 'extreme' }] }), ['frontend', 'backend'])!
     expect(plan.tasks.map((t) => t.difficulty)).toEqual(['low', undefined])
+  })
+})
+
+describe('capability profiles', () => {
+  it('derives depth, speed and context hints from the model id', () => {
+    const opus = deriveProfile(option('claude-opus-4'))
+    const flash = deriveProfile(option('gemini-2.5-flash'))
+    expect(opus.reasoningScore).toBeGreaterThan(flash.reasoningScore)
+    expect(flash.latencyTier).toBe('fast')
+    expect(opus.contextWindow).toBeGreaterThanOrEqual(200_000)
+  })
+  it('lets an owner override pull a derived-weak model to the top', () => {
+    const profiles = { 'api-openrouter::gemini-2.5-flash': { codingScore: 100, reasoningScore: 100 } }
+    const pick = routeModel({ role: 'backend', models, costPreference: 'quality', difficulty: 'high', profiles })!
+    expect(pick.option.model).toBe('gemini-2.5-flash')
+  })
+})
+
+describe('fallback chain', () => {
+  it('ranks every available model best-first, matching routeModel for the top pick', () => {
+    const chain = routeModels({ role: 'architect', models, costPreference: 'balanced', difficulty: 'high' })
+    expect(chain.length).toBe(3)
+    expect(chain[0].option.model).toBe('claude-opus-4')
+    expect(chain[0].option).toEqual(routeModel({ role: 'architect', models, costPreference: 'balanced', difficulty: 'high' })!.option)
+    expect(chain[1].reason).toContain('fallback #1')
+  })
+  it('drops a model the owner marked unavailable', () => {
+    const culled = routeModels({ role: 'architect', models, costPreference: 'balanced', difficulty: 'high', profiles: { 'api-openrouter::claude-opus-4': { availability: 'unavailable' } } })
+    expect(culled.length).toBe(2)
+    expect(culled.map((c) => c.option.model)).not.toContain('claude-opus-4')
   })
 })
 

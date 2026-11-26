@@ -46,6 +46,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   plannerFallback: true,
   routingMode: 'automatic',
   costPreference: 'balanced',
+  modelProfiles: {},
   plannerEngine: 'cli-opencode',
   plannerModel: '',
   plannerEndpoint: '',
