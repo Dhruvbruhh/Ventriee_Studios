@@ -2,7 +2,8 @@
 // auth token, mirroring auth.ts's raw-fetch style so no SDK is added. RLS on the
 // server is the authority on access; this layer only shapes requests.
 import type {
-  AuditEntry, CloudClient, CloudProject, CloudTask, Device, Membership, Organization, TaskAssignment
+  AuditEntry, CloudClient, CloudProject, CloudTask, CommandStatus, Device, DeviceGrant,
+  Membership, Organization, RemoteCommand, TaskAssignment
 } from './types'
 
 export type { CloudClient } from './types'
@@ -69,6 +70,52 @@ export class SupabaseCloudClient implements CloudClient {
   listDevices(opts?: { orgId?: string | null }) {
     const filter = opts && 'orgId' in opts ? `&org_id=${opts.orgId === null ? 'is.null' : `eq.${enc(opts.orgId!)}`}` : ''
     return this.rest<Device[]>(`devices?select=*${filter}&order=last_seen_at.desc`)
+  }
+  async updateDevice(deviceId: string, patch: { name?: string; platform?: string; remoteEnabled?: boolean; touch?: boolean }) {
+    const body: Record<string, unknown> = {}
+    if (patch.name !== undefined) body.name = patch.name
+    if (patch.platform !== undefined) body.platform = patch.platform
+    if (patch.remoteEnabled !== undefined) body.remote_enabled = patch.remoteEnabled
+    if (patch.touch) body.last_seen_at = new Date().toISOString()
+    return this.one<Device>(await this.rest<Device[]>(`devices?id=eq.${enc(deviceId)}`, { method: 'PATCH', body, prefer: 'return=representation' }))
+  }
+
+  enqueueCommand(input: { deviceId: string; orgId?: string | null; type: string; payload?: Record<string, unknown>; requiresConfirmation?: boolean; expiresAt: string }) {
+    return this.insert<RemoteCommand>('commands', {
+      device_id: input.deviceId, org_id: input.orgId ?? null, type: input.type,
+      payload: input.payload ?? {}, requires_confirmation: input.requiresConfirmation ?? false, expires_at: input.expiresAt
+    })
+  }
+  listCommands(opts: { deviceId: string; status?: CommandStatus | CommandStatus[]; limit?: number }) {
+    const status = opts.status ? `&status=${Array.isArray(opts.status) ? `in.(${opts.status.map(enc).join(',')})` : `eq.${enc(opts.status)}`}` : ''
+    return this.rest<RemoteCommand[]>(`commands?select=*&device_id=eq.${enc(opts.deviceId)}${status}&order=created_at.desc&limit=${Math.min(Math.max(opts.limit ?? 50, 1), 500)}`)
+  }
+  // Atomic claim: PATCH only rows still 'queued'; an empty echo means someone else won the race.
+  async claimCommand(commandId: string) {
+    return this.one<RemoteCommand>(await this.rest<RemoteCommand[]>(
+      `commands?id=eq.${enc(commandId)}&status=eq.queued`,
+      { method: 'PATCH', body: { status: 'claimed', claimed_at: new Date().toISOString() }, prefer: 'return=representation' }
+    ), null)
+  }
+  async updateCommand(commandId: string, patch: { status: CommandStatus; result?: Record<string, unknown>; error?: string; finished?: boolean }) {
+    const body: Record<string, unknown> = { status: patch.status }
+    if (patch.result !== undefined) body.result = patch.result
+    if (patch.error !== undefined) body.error = patch.error
+    if (patch.finished) body.finished_at = new Date().toISOString()
+    return this.one<RemoteCommand>(await this.rest<RemoteCommand[]>(`commands?id=eq.${enc(commandId)}`, { method: 'PATCH', body, prefer: 'return=representation' }), null)
+  }
+
+  listGrants(deviceId: string) { return this.rest<DeviceGrant[]>(`device_grants?select=*&device_id=eq.${enc(deviceId)}&order=created_at.asc`) }
+  grantDevice(input: { deviceId: string; userId: string; expiresAt?: string | null }) {
+    return this.insert<DeviceGrant>('device_grants', { device_id: input.deviceId, user_id: input.userId, expires_at: input.expiresAt ?? null })
+  }
+  async revokeGrant(grantId: string) { await this.rest<void>(`device_grants?id=eq.${enc(grantId)}`, { method: 'DELETE' }) }
+
+  /** PostgREST returns an array; take the single row or (for a guarded update) a fallback. */
+  private one<T>(rows: T[], fallback?: T | null): T {
+    const row = rows[0]
+    if (row === undefined) { if (fallback !== undefined) return fallback as T; throw new Error('The cloud did not return the expected row') }
+    return row
   }
 
   recordAudit(entry: { action: string; orgId?: string | null; targetType?: string; targetId?: string; metadata?: Record<string, unknown> }) {

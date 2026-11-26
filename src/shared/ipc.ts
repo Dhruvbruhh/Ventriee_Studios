@@ -169,8 +169,18 @@ export const IPC = {
   skillInstallUrl: 'skill:install-url',
   mcpToolCalls: 'mcp:tool-calls',
   cloudOrgs: 'cloud:orgs',
-  cloudWorkspace: 'cloud:workspace'
+  cloudWorkspace: 'cloud:workspace',
+  remoteStatus: 'remote:status',
+  remoteSetEnabled: 'remote:set-enabled'
 } as const
+
+/** Inbound remote-control ("Jarvis") shapes surfaced to the renderer. */
+export interface RemoteDevice { id: string; name: string; platform: string; remote_enabled: boolean; last_seen_at: string; org_id: string | null }
+export interface RemoteCommandRow {
+  id: string; type: string; status: 'queued' | 'claimed' | 'running' | 'done' | 'failed' | 'expired'
+  requires_confirmation: boolean; error: string; created_at: string; finished_at: string | null
+}
+export interface RemoteStatus { device: RemoteDevice | null; enabled: boolean; commands: RemoteCommandRow[] }
 
 export interface CredentialInfo {
   engine: EngineKind
@@ -434,6 +444,10 @@ export interface VentrieeApi {
   cloudOrgs(): Promise<Array<{ id: string; name: string; owner_id: string; created_at: string }>>
   /** Switch this window between the personal workspace (null) and an org. */
   cloudSetWorkspace(orgId: string | null): Promise<{ userId: string; sessionId: string; email: string; expiresAt: number; activeOrgId: string | null }>
+  /** This desktop's remote-control registration, enabled state, and recent commands. */
+  remoteStatus(): Promise<RemoteStatus>
+  /** Turn inbound remote control on/off for this device (default off). */
+  remoteSetEnabled(on: boolean): Promise<{ device: RemoteDevice | null; enabled: boolean }>
 }
 
 export type TaskPatch = Partial<Task>

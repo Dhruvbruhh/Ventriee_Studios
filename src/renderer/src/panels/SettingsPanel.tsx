@@ -3,6 +3,7 @@ import { guard, useStore } from '../store'
 import { Modal, Switch } from '../shell'
 import { ENGINE_LABELS, type Agent, type AppSettings, type EngineKind, type Difficulty, type ModelProfile } from '../../../shared/types'
 import { effectiveProfile, routeModels } from '../../../shared/routing'
+import type { RemoteStatus } from '../../../shared/ipc'
 // CLI adapters spawn a process per request; mirrors isCliEngine in main.
 const isCliEngine = (engine: EngineKind) => engine.startsWith('cli-')
 import { IconClose, IconCheck, IconCpu, IconDatabase, IconGithub, IconKey, IconMic, IconPalette, IconPlug, IconPlus, IconRefresh, IconSliders, IconTrash, IconUsers } from '../icons'
@@ -621,6 +622,38 @@ function NewWorker({ engineDefault, onDone }: { engineDefault: EngineKind; onDon
   )
 }
 
+/** Inbound remote control ("Jarvis"): register/heartbeat status, the on/off toggle, and recent commands. */
+function RemoteControlSection() {
+  const [status, setStatus] = useState<RemoteStatus | null>(null)
+  const load = () => window.ventriee.remoteStatus().then(setStatus).catch(() => {})
+  useEffect(() => { void load(); const t = setInterval(load, 5000); return () => clearInterval(t) }, [])
+  const device = status?.device
+  return <>
+    <div className="section-label space-above">Remote control (Jarvis)</div>
+    <div className="kv-row">
+      <div className="kv-row-main">
+        <div className="kv-row-title">Let your phone or the web drive this device</div>
+        <div className="kv-row-sub">
+          {device
+            ? <>Registered as <strong>{device.name}</strong> ({device.platform}). Commands arrive through your Ventriee account — no open ports. Off by default; only you (or people you grant) can send commands.</>
+            : <>Sign in to register this device. Then turn this on to let an authorized phone or web client ask for project status, start or stop a run, or open a preview.</>}
+        </div>
+      </div>
+      <Switch on={Boolean(status?.enabled)} disabled={!device}
+        onClick={() => device && void guard(() => window.ventriee.remoteSetEnabled(!status?.enabled), status?.enabled ? 'Remote control off' : 'Remote control on').then(() => load())}
+        label="Remote control" />
+    </div>
+    {device && status?.commands.length ? <div className="kv-row"><div className="kv-row-main">
+      <div className="kv-row-sub">Recent commands</div>
+      <ul className="plain-list" aria-label="Recent remote commands">
+        {status.commands.slice(0, 8).map((c) => <li key={c.id} className="kv-row-sub">
+          <code>{c.type}</code> — {c.status}{c.requires_confirmation ? ' (confirmed)' : ''}{c.error ? `: ${c.error}` : ''}
+        </li>)}
+      </ul>
+    </div></div> : null}
+  </>
+}
+
 /** Editor settings sync through the owner's account, and the opt-in local error log behind "Report a problem". */
 function SyncAndReports() {
   const settings = useStore((s) => s.snapshot?.settings)
@@ -644,6 +677,8 @@ function SyncAndReports() {
     </div>
     {missing.length ? <div className="kv-row"><div className="kv-row-main"><div className="kv-row-sub">Extensions from your other computer: {missing.join(', ')}</div></div>
       <button className="btn tiny primary" onClick={() => void (async () => { for (const id of missing) await guard(() => window.ventriee.extInstall(id)); setMissing([]) })()}>Install them</button></div> : null}
+
+    <RemoteControlSection />
 
     <div className="section-label space-above">Spending limits</div>
     <div className="kv-row">

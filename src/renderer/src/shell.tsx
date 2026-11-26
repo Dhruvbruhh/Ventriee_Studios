@@ -55,11 +55,12 @@ export function Modal({
   )
 }
 
-export function Switch({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
+export function Switch({ on, onClick, label, disabled }: { on: boolean; onClick: () => void; label: string; disabled?: boolean }) {
   return (
     <button
-      className={`switch${on ? ' on' : ''}`}
-      onClick={onClick}
+      className={`switch${on ? ' on' : ''}${disabled ? ' disabled' : ''}`}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       role="switch"
       aria-checked={on}
       aria-label={label}
