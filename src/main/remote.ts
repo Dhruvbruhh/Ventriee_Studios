@@ -311,6 +311,11 @@ export interface CommandBus {
   updateCommand(commandId: string, patch: { status: CommandStatus; result?: Record<string, unknown>; error?: string; finished?: boolean }): Promise<RemoteCommand | null>
 }
 
+/** A window may read/toggle the attached device only while its own session owns it. */
+export function ownsAttachedDevice(sessionUserId: string | null, remoteUserId: string | null): boolean {
+  return !!sessionUserId && sessionUserId === remoteUserId
+}
+
 /** One allowed capability. highRisk commands must arrive with requires_confirmation=true. */
 export interface Capability {
   handler: (cmd: RemoteCommand) => Promise<unknown>

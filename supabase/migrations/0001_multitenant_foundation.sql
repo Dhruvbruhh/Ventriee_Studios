@@ -151,6 +151,22 @@ create trigger organizations_add_owner
   after insert on public.organizations
   for each row execute function public.add_owner_membership();
 
+-- Ownership is not transferable through the API: admins manage everything else,
+-- but only the current owner column value may be preserved (never changed).
+create or replace function public.no_owner_transfer()
+  returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.owner_id is distinct from old.owner_id then
+    raise exception 'Organization ownership cannot be transferred through the API';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists organizations_no_owner_transfer on public.organizations;
+create trigger organizations_no_owner_transfer
+  before update on public.organizations
+  for each row execute function public.no_owner_transfer();
+
 -- ---------------------------------------------------------------------------
 -- Row-Level Security
 -- ---------------------------------------------------------------------------
@@ -176,12 +192,17 @@ create policy organizations_update on public.organizations for update
 create policy organizations_delete on public.organizations for delete
   using (owner_id = (select auth.uid()));
 
--- memberships: co-members read the roster; owners/admins manage it.
+-- memberships: co-members read the roster; owners/admins manage it. Only the
+-- owner may grant or change rows carrying the 'owner' role (no admin self-
+-- promotion or handing the org away).
 create policy memberships_select on public.memberships for select
   using (public.is_org_member(org_id));
 create policy memberships_write on public.memberships for all
   using (public.has_org_role(org_id, array['owner','admin']))
-  with check (public.has_org_role(org_id, array['owner','admin']));
+  with check (
+    public.has_org_role(org_id, array['owner','admin'])
+    and (role <> 'owner' or public.has_org_role(org_id, array['owner']))
+  );
 
 -- projects: personal (own, org_id NULL) or any project of an org you belong to.
 -- Managers+ write org projects; the owner writes their personal projects.
@@ -267,7 +288,10 @@ create policy devices_select on public.devices for select
   );
 create policy devices_write on public.devices for all
   using (user_id = (select auth.uid()))
-  with check (user_id = (select auth.uid()));
+  with check (
+    user_id = (select auth.uid())
+    and (org_id is null or public.is_org_member(org_id))
+  );
 
 -- audit_log: append-only. You read your personal actions and, as owner/admin,
 -- your org's trail. Inserts must be attributed to you. No update/delete policy

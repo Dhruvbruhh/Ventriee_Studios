@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { describe, expect, it, vi } from 'vitest'
-import { RemoteJobs, parsePoll, runScript, startScript, validateRemote, type RemoteProvider } from '../src/main/remote'
+import { RemoteJobs, ownsAttachedDevice, parsePoll, runScript, startScript, validateRemote, type RemoteProvider } from '../src/main/remote'
 import type { RemoteJob, RemoteJobInput } from '../src/shared/types'
 
 const INPUT: RemoteJobInput = {
@@ -42,6 +42,16 @@ describe('remote run scripts', () => {
     expect(parsePoll('STATE exit 3\nLOG\n')).toMatchObject({ status: 'failed', exitCode: 3 })
     expect(parsePoll('STATE exit cancelled\nLOG\n')).toMatchObject({ status: 'cancelled' })
     expect(parsePoll('STATE missing\n')).toMatchObject({ status: 'lost' })
+  })
+})
+
+describe('inbound remote-control authorization', () => {
+  it('gates attached-device access to the owning session', () => {
+    expect(ownsAttachedDevice('u1', 'u1')).toBe(true)
+    expect(ownsAttachedDevice('u2', 'u1')).toBe(false)
+    expect(ownsAttachedDevice(null, 'u1')).toBe(false)
+    expect(ownsAttachedDevice('u1', null)).toBe(false)
+    expect(ownsAttachedDevice(null, null)).toBe(false)
   })
 })
 
