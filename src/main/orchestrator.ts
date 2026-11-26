@@ -13,7 +13,7 @@ import { deliverFiles } from './deliver'
 import { Mailbox, parseMessageBlocks } from './mailbox'
 import type { CheckpointService } from './checkpoint'
 import { parseVerdict } from './review'
-import { ROLE_TEMPLATES, roleByName, MANDATORY_SKILLS, WEBSITE_ROLES, type Phase } from './roles'
+import { roleByName, MANDATORY_SKILLS, WEBSITE_ROLES, type Phase } from './roles'
 import { scopeToRole, DELIVERABLE_BY_ROLE } from './brief'
 import { clarifyPrompt, foldClarifications, parseClarifyAnswer } from './clarify'
 import { heuristicPlan, orderTasks, parsePlanAnswer, pickSpecialists, type Plan } from './planner'
@@ -71,8 +71,6 @@ interface Runner {
   sessionId: string
   startedAt: number
 }
-
-const CODE_ROLES = new Set(ROLE_TEMPLATES.filter((r) => r.writesCode).map((r) => r.role))
 
 const STAR = '*'
 
@@ -245,18 +243,27 @@ export class Orchestrator {
     return orchestrator ? [orchestrator] : []
   }
 
-  /** Roles the planner may schedule: enabled workers plus any template role the owner has not switched off. */
+  /** A role's catalogue template (built-in or the owner's own), enabled or not. */
+  private template(role: string) {
+    return this.deps.store.agentCatalogue().templates.find((t) => t.role === role)
+  }
+
+  private writesCode(role: string): boolean {
+    return this.template(role)?.writesCode ?? false
+  }
+
+  /** Roles the planner may schedule: enabled workers plus any enabled catalogue template the owner has not switched off in this project. */
   private plannableRoles(roster: Agent[], website = false): string[] {
     const disabled = new Set(roster.filter((a) => !a.enabled).map((a) => a.role))
     const enabled = new Set(roster.filter((a) => a.enabled).map((a) => a.role))
-    const hireable = ROLE_TEMPLATES.map((t) => t.role).filter((role) => (website || !WEBSITE_ROLES.has(role)) && (!disabled.has(role) || enabled.has(role)))
+    const hireable = this.deps.store.agentCatalogue().templates.filter((t) => t.enabled).map((t) => t.role).filter((role) => (website || !WEBSITE_ROLES.has(role)) && (!disabled.has(role) || enabled.has(role)))
     return [...new Set([...enabled, ...hireable])]
   }
 
   /** Create a worker for a template role, on the engine and model the owner configured in Settings. */
   private hire(project: Project, role: string, roster: Agent[]): Agent | null {
-    const tpl = roleByName(role)
-    if (!tpl) return null
+    const tpl = this.template(role)
+    if (!tpl?.enabled) return null
     const settings = this.deps.store.settings()
     const agent: Agent = {
       id: newId('agt'),
@@ -264,16 +271,16 @@ export class Orchestrator {
       role: tpl.role,
       name: tpl.name,
       title: tpl.title,
-      engine: settings.orchestratorEngine,
-      model: settings.orchestratorModel,
+      engine: tpl.engine || settings.orchestratorEngine,
+      model: tpl.engine ? tpl.model : settings.orchestratorModel,
       endpoint: '',
       instructions: tpl.instructions,
-      autonomy: 'scoped',
+      autonomy: tpl.requiresApproval ? 'ask' : 'scoped',
       reasoning: 'auto',
-      skills: tpl.skills,
-      mcpServers: [],
+      skills: [...new Set([...tpl.skills, ...MANDATORY_SKILLS])],
+      mcpServers: tpl.mcpServers,
       concurrency: 1,
-      budgetUsd: 5,
+      budgetUsd: tpl.budgetUsd,
       color: tpl.color,
       desk: roster.reduce((max, a) => Math.max(max, a.desk + 1), 0),
       enabled: true,
@@ -292,7 +299,7 @@ export class Orchestrator {
   private planningPrompt(project: Project, instruction: string, roster: Agent[], memoryBlock: string) {
     const website = this.profiles.get(project.id) === 'website'
     const roles = this.plannableRoles(roster, website).filter((role) => role !== 'orchestrator')
-      .map((role) => `${role} (${roster.find((a) => a.role === role)?.title ?? roleByName(role)?.title ?? role})`).join(', ')
+      .map((role) => `${role} (${roster.find((a) => a.role === role)?.title ?? this.template(role)?.title ?? role})`).join(', ')
     const specialists = pickSpecialists(instruction, this.deps.store.skills().filter((s) => s.enabled))
       .map((s) => `- ${s.id}: ${s.description.slice(0, 140)}`).join('\n')
     return `You are planning work for a real software project. Respond with JSON only, no prose.
@@ -623,7 +630,7 @@ JSON shape:
           }
         }
         const scope = scopeFor(agent.role)
-        const writes = CODE_ROLES.has(agent.role)
+        const writes = this.writesCode(agent.role)
         if (writes && claims.some((c) => pathsOverlap(c.scope, scope))) continue
         // Non-writing roles still read the whole tree; they never block a writer.
         const claim = writes ? { taskId: task.id, scope } : null
@@ -692,7 +699,7 @@ JSON shape:
     // Offer this worker the skills bound to it, not the first N of the registry.
     // An empty binding means "use the role template's list", so a new worker is
     // useful before the owner touches its config.
-    const wanted = new Set([...MANDATORY_SKILLS, ...(agent.skills.length ? agent.skills : roleByName(agent.role)?.skills ?? []), ...(task.skills ?? [])])
+    const wanted = new Set([...MANDATORY_SKILLS, ...(agent.skills.length ? agent.skills : this.template(agent.role)?.skills ?? []), ...(task.skills ?? [])])
     const skills = this.deps.store.skills().filter((s) => s.enabled && wanted.has(s.id))
     const before = await this.evidenceDigest(project.path)
     const sessionId = newId('ses')
@@ -991,7 +998,7 @@ JSON shape:
     this.deps.store.updateAgent(agent.id, { status: 'idle', currentTaskId: null })
     this.log(project.id, agent.id, task.id, 'task', `${agent.name} delivered "${task.title}" (${evidence.summary})`)
 
-    if (CODE_ROLES.has(agent.role) && !evidence.passed) {
+    if (this.writesCode(agent.role) && !evidence.passed) {
       const how = isCliEngine(run.engine)
         ? `Produce the actual deliverable in ${project.path}, then report back.`
         : 'Reply with the deliverable as === FILE: … === blocks and nothing else outside them.'
@@ -1008,9 +1015,10 @@ JSON shape:
       return
     }
 
-    if (task.phase === 'deploy' && this.deps.store.settings().requireDeployApproval) {
+    const approval = task.phase === 'deploy' && this.deps.store.settings().requireDeployApproval
+    if (approval || this.template(agent.role)?.requiresApproval) {
       this.deps.store.updateTask(task.id, { status: 'approval', review: `Awaiting owner approval. ${evidence.summary}` })
-      this.log(project.id, agent.id, task.id, 'approval', `Deployment staged, waiting for owner approval`)
+      this.log(project.id, agent.id, task.id, 'approval', approval ? `Deployment staged, waiting for owner approval` : `${agent.name}'s work is waiting for owner approval`)
       return
     }
 
@@ -1182,7 +1190,7 @@ ${rules}
       if (!prev || prev !== mtime) changedAll.push(file.replace(/\\/g, '/'))
     }
     const removedAll = [...before.files.keys()].filter((f) => !after.files.has(f)).map((f) => f.replace(/\\/g, '/'))
-    const writes = CODE_ROLES.has(task.role)
+    const writes = this.writesCode(task.role)
     // With concurrent writers on disjoint scopes, the workspace changes during this
     // task's window include other workers' files. Count only files this role owns,
     // plus root-level shared files (package.json, tsconfig, lockfiles).

@@ -26,6 +26,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W12 | Security Master tooling (§11) | - | Done | read-only scan in `src/shared/security.ts` + `src/main/securityScan.ts` (secrets, code patterns, .env hygiene, npm audit); IPC `security:scan`; Security panel; scan results injected into the security worker's prompt; `tests/security.test.ts` (12 tests) |
 | W13 | Frontend Master visual QA loop (§10) | - | Done | `src/main/visualQa.ts`: after a frontend worker delivers, the sandboxed browser renders the running preview at desktop + 390px mobile, screenshots both, and collects console errors; failures send the task to rework with the specific problems; the reviewer receives the rendered-check summary; `tests/visualQa.test.ts` (4 tests) |
 | W16 | Requirements clarification before planning (§8) | - | Done | `src/main/clarify.ts` (prompt, defensive parse capped at 5, fold answers into a "Clarifications" block); `Orchestrator.clarify` + IPC `run:clarify`; question panel in Simple mode, Assign dialog (orchestrator mode) and command bar; setting "Ask clarifying questions"; `tests/clarify.test.ts` (6 tests) |
+| W17 | Agent catalogue with departments + importable manifests (§9) | - | Done | branch `claude/w17-agent-catalogue-7ba21e`: `src/shared/agents.ts` (template format, manifest validation), catalogue in the app DB (`Store.agentCatalogue`), planner/hiring read enabled templates, Agents panel; `tests/agents-catalogue.test.ts` (18 tests) |
 
 ## Verification baseline (master, after W13)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -108,3 +109,24 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   enabled (heuristic planner), the engine is unavailable, or the call fails or
   answers junk, so it never blocks a run. Remote/voice/automation runs skip it.
   Known limit: the saved prompt revision is not changed, only the run's brief.
+- 2026-11-26: W17. Built-in roles were a fixed list in `roles.ts`; §9 wants a
+  user-editable catalogue. Agent templates now carry name, title, description,
+  role key, department, instructions, preferred engine/model, skills, MCP
+  servers, writesCode, budget, approval requirement and enabled. The 16 built-ins
+  are seeded from `ROLE_TEMPLATES` into seven default departments (Project
+  Management, Frontend, Backend, Quality, Security, Research, DevOps). Only the
+  owner's own templates and edits to built-ins are stored (kv `agentCatalogue`),
+  so unedited built-ins keep following the code. Built-ins can be edited,
+  disabled or reset, never deleted, so the planner's role keys stay valid.
+  The orchestrator's role lookup (`plannableRoles`, `hire`, writesCode, skill
+  fallback, planner titles) reads the catalogue: an enabled custom template is
+  scheduled and hired with its engine, model, budget, MCP servers and skills; a
+  disabled one is neither planned nor hired. `requiresApproval` sends the
+  worker's finished task to owner approval (same path as deploy approval).
+  Export writes one agent or a department as a `ventriee-agents` v1 JSON
+  manifest; import rejects unknown fields, bad role keys, unknown engines and
+  unlisted departments, names missing skills/MCP servers, and brings new agents
+  in switched off. Manifests are data only. New Agents sidebar panel; the
+  Resource Library lists enabled catalogue agents. Limits: the deterministic
+  fallback planner still only knows built-in roles; custom roles get the default
+  write scope (`scopeFor`); not clicked through in the running app.

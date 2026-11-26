@@ -42,6 +42,7 @@ import type {
 } from './types'
 import type { Resource } from './resources'
 import type { SecurityReport } from './security'
+import type { AgentCatalogue, AgentTemplate, Department } from './agents'
 import type { Catalog, LspEvent, LspStatus } from './catalog'
 import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, GithubAction, ProjectTask, TestEvent, ExtensionContributions, FileIconTheme, NotebookEvent, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput, EditorConfig } from './workspace'
 
@@ -159,6 +160,12 @@ export const IPC = {
   pluginRemove: 'plugin:remove',
   resources: 'resources:list',
   securityScan: 'security:scan',
+  agentCatalogue: 'agents:catalogue',
+  agentTemplateSave: 'agents:save',
+  agentTemplateDelete: 'agents:delete',
+  agentDepartmentsSave: 'agents:departments',
+  agentExport: 'agents:export',
+  agentImport: 'agents:import',
   remoteList: 'remote:list',
   remoteTest: 'remote:test',
   remoteStart: 'remote:start',
@@ -432,6 +439,17 @@ export interface VentrieeApi {
   resources(projectId: string | null): Promise<Resource[]>
   /** Read-only security scan of the project (secrets, patterns, npm audit, .env). */
   securityScan(projectId: string): Promise<SecurityReport>
+  /** Agent catalogue: built-in and owner templates grouped by department. */
+  agentCatalogue(): Promise<AgentCatalogue>
+  /** Create (create=true) or edit a template. */
+  agentTemplateSave(template: Omit<AgentTemplate, 'builtin'>, create: boolean): Promise<AgentTemplate>
+  /** Delete an owner template, or reset a built-in to its default. */
+  agentTemplateDelete(role: string): Promise<void>
+  agentDepartmentsSave(departments: Department[]): Promise<Department[]>
+  /** Save one agent or a whole department to a JSON manifest; null when cancelled. */
+  agentExport(pick: { role?: string; department?: string }): Promise<string | null>
+  /** Validate and import a manifest; imported agents arrive switched off. Null when cancelled. */
+  agentImport(): Promise<{ added: string[]; missing: string[] } | null>
   remoteList(): Promise<RemoteJob[]>
   /** Check the SSH connection and the tools a remote run needs. */
   remoteTest(host: string): Promise<string>
