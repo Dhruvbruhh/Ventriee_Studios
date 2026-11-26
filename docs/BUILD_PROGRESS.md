@@ -19,8 +19,8 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W5 | Inbound remote control / Jarvis — device registry, heartbeat, command queue (§17) | W3 | Done (merged) | integrated from branch `claude/jarvis-remote-control-b9a5f3`; migration 0002 not applied |
 | W6 | Mobile app — monitoring, approvals, voice (§18) | W3, W5 | Done (merged) | `mobile/` Expo app integrated from branch `claude/mobile-jarvis-app-769e08`; jest 18 tests green |
 | W7 | Simple mode — chat-first desktop surface (§7) | — | Done (merged) | PR #40 |
-| W8 | Security & RBAC hardening pass (§20) | W3, W4, W5 | In progress | delegated session |
-| W9 | Help Center (§24) | W4 | In progress | delegated session |
+| W8 | Security & RBAC hardening pass (§20) | W3, W4, W5 | Done (merged) | `w8-security-rbac` (RLS fixes: admin self-promotion, owner transfer, device org scoping; IPC session-gating; SECURITY_ARCHITECTURE.md; npm audit 0) |
+| W9 | Help Center (§24) | W4 | Done (merged) | `w9-help-center` (14 topics, sidebar panel, help content tests) |
 
 ## Verification baseline (master, after W1–W4/W7 integration)
 - typecheck: clean (node + web tsconfigs)
