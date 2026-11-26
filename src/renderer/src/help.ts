@@ -315,6 +315,33 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
   },
   {
+    id: 'security-review',
+    title: 'Security review',
+    summary: 'A read-only scan of the open project for hardcoded secrets, dangerous code patterns, unignored .env files and vulnerable dependencies. It reports findings; it never fixes anything by itself.',
+    sections: [
+      { heading: 'What is it', points: [
+        'Pattern-based checks: nine credential formats, five dangerous-code rules, .env hygiene, and the package manager\'s own audit.',
+        'Evidence is masked: a found secret shows only its first and last characters.',
+      ] },
+      { heading: 'When to use', points: [
+        'Before delivering client work, and any time dependencies or auth code changed.',
+        'The security worker also receives this scan automatically when it runs.',
+      ] },
+      { heading: 'How to configure', points: [
+        'Nothing to configure: open Security in the sidebar and it scans the active project.',
+        'Dependency checks need package.json and npm; other checks are pure file reading.',
+      ] },
+      { heading: 'Which agents use it', points: [
+        'The security worker (Hex) gets the scan results in its task prompt and must verify each finding.',
+      ] },
+      { heading: 'What can go wrong', points: [
+        'A clean report means these checks found nothing. It is not proof the project is secure.',
+        'Secrets installed outside the project (global config, CI variables) are not visible to the scan.',
+        'Very large projects are capped at 800 files; the panel says when the report is partial.',
+      ] },
+    ],
+  },
+  {
     id: 'workflows',
     title: 'Workflows',
     summary: 'Chain AI, agent runs, commands and checks into a flow you can run by hand or on a schedule.',

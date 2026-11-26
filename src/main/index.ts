@@ -52,6 +52,7 @@ import { inspectMcp } from './mcpInspect'
 import { installServer, searchRegistry } from './mcpRegistry'
 import { PluginService } from './plugins'
 import { listResources } from './resources'
+import { scanProject } from './securityScan'
 import { RemoteJobs, E2BProvider } from './remote'
 import { fileMatches, runWorkflow, triggerOf } from './workflows'
 import { BrowserAutomation } from './browserAutomation'
@@ -531,6 +532,11 @@ function registerIpc() {
       workflows: store.workflows(),
       projectPath: project?.path ?? null
     })
+  })
+  handle(IPC.securityScan, async (_e, projectId: string) => {
+    const project = store.project(String(projectId))
+    if (!project) throw new Error('Open a project before scanning it')
+    return scanProject(project.path)
   })
   handle(IPC.mcpSearch,(_e, query: string, cursor?: string) => searchRegistry(String(query ?? ''), typeof cursor === 'string' ? cursor : ''))
   handle(IPC.mcpInstall, (_e, server: RegistryServer, option: number, values: Record<string, string>) => {

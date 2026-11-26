@@ -883,6 +883,7 @@
     animation: rise 200ms var(--ease);
   }
   .modal.narrow { width: min(580px, 100%); }
+  .modal.wide { width: min(1080px, 100%); }
   .modal-head {
     display: flex; align-items: flex-start; gap: var(--s-3);
     padding: var(--s-5) var(--s-5) var(--s-4);
@@ -1913,6 +1914,12 @@ button.gh-line:hover, button.gh-line:focus-visible { background: color-mix(in sr
 .resource-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .resource-tag { font-size: 10px; padding: 0 5px; border-radius: 4px; background: var(--surface-3, var(--surface-2)); border: 1px solid var(--line-soft); }
 .resource-install { font-size: 11px; padding: 4px 6px; border-radius: 4px; background: var(--surface-3, var(--surface-2)); border: 1px solid var(--line-soft); overflow-x: auto; white-space: nowrap; user-select: all; }
+
+/* ---- Security review panel ---- */
+.security-list { display: flex; flex-direction: column; gap: var(--s-2); }
+.security-finding { padding: var(--s-3); background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: var(--radius); display: flex; flex-direction: column; gap: 4px; }
+.security-finding-head { display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap; }
+.security-sev { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; min-width: 64px; }
 .btn-sm { font-size: var(--fs-xs); padding: 2px 8px; }
 
 /* Analytics panel */

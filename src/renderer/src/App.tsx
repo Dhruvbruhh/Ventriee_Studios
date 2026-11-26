@@ -19,6 +19,7 @@ import { ProjectPanel } from './panels/ProjectPanel'
 import { RunsPanel } from './panels/RunsPanel'
 import { ClientsPanel } from './panels/ClientsPanel'
 import { ResourcesPanel } from './panels/ResourcesPanel'
+import { SecurityPanel } from './panels/SecurityPanel'
 import { AnalyticsPanel } from './panels/AnalyticsPanel'
 import { WorkflowsPanel } from './panels/WorkflowsPanel'
 import { BrowserPanel } from './panels/BrowserPanel'
@@ -223,6 +224,7 @@ export function App() {
       {panel === 'project' ? <ProjectPanel onClose={() => setPanel('none')} /> : null}
       {panel === 'clients' ? <ClientsPanel onClose={() => setPanel('none')} /> : null}
       {panel === 'resources' ? <ResourcesPanel onClose={() => setPanel('none')} /> : null}
+      {panel === 'security' ? <SecurityPanel onClose={() => setPanel('none')} /> : null}
       {panel === 'analytics' ? <AnalyticsPanel onClose={() => setPanel('none')} /> : null}
       {panel === 'workflows' ? <WorkflowsPanel onClose={() => setPanel('none')} /> : null}
       {panel === 'browser' ? <BrowserPanel onClose={() => setPanel('none')} /> : null}

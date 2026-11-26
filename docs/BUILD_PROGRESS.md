@@ -23,10 +23,11 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W9 | Help Center (§24) | W4 | Done (merged) | `w9-help-center` (14 topics, sidebar panel, help content tests) |
 | W10 | Cloud schema verification + ownership guard (§20/21/32) | W3, W5, W8 | Done | migration `0004_ownership_guard.sql`; `tests/migrations.test.ts` runs all migrations on embedded PostgreSQL and exercises RLS as real users |
 | W11 | Unified resource library + natural-language discovery (§14) | - | Done | registry in `src/shared/resources.ts` + `src/main/resources.ts`; IPC `resources:list`; `ResourcesPanel` rewritten over real sources; `tests/resources.test.ts` (12 tests) |
+| W12 | Security Master tooling (§11) | - | Done | read-only scan in `src/shared/security.ts` + `src/main/securityScan.ts` (secrets, code patterns, .env hygiene, npm audit); IPC `security:scan`; Security panel; scan results injected into the security worker's prompt; `tests/security.test.ts` (12 tests) |
 
-## Verification baseline (master, after W11)
+## Verification baseline (master, after W12)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
-- vitest: 415 passed, 1 skipped (84 files), including 18 executable migration/RLS tests and 12 resource-library tests
+- vitest: 427 passed, 1 skipped (85 files), including 18 executable migration/RLS tests, 12 resource-library tests and 12 security-scanner tests
 - desktop build: `npm run build` green
 - web build: `cd web && npm run build` green
 - mobile: `npm ci && npm run typecheck && npm test` green (18 jest tests)
@@ -69,3 +70,14 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   install command for a missing library; nothing is executed automatically. New
   files: `src/shared/resources.ts`, `src/main/resources.ts`,
   `tests/resources.test.ts`. Also added a Help topic (`resources`).
+- 2026-11-26: W12. The security role relied on prompt instructions alone; §11
+  wants AI reasoning combined with real tools. Added a deterministic, read-only
+  scanner (`scanProject`): nine secret formats with masked evidence, five
+  dangerous-code rules (disabled TLS verification, eval/new Function, raw HTML
+  injection, wildcard CORS), .env hygiene (real values and not gitignored),
+  and the real `npm audit --json` parsed into findings. Walks up to 800 files,
+  skips node_modules/dist/data blobs, and says when the report is partial. The
+  report's own limits state that a clean result is not proof of security. New
+  Security panel (sidebar) shows findings with severity/impact/fix; the security
+  worker receives the digest in its task prompt. No writing, fixing or deleting
+  is ever performed automatically.

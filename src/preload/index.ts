@@ -244,6 +244,7 @@ const api: VentrieeApi = {
   pluginDiscard: (token) => ipcRenderer.invoke(IPC.pluginDiscard, token),
   pluginRemove: (id) => ipcRenderer.invoke(IPC.pluginRemove, id),
   resources: (projectId) => ipcRenderer.invoke(IPC.resources, projectId),
+  securityScan: (projectId) => ipcRenderer.invoke(IPC.securityScan, projectId),
   remoteList: () => ipcRenderer.invoke(IPC.remoteList),
   remoteTest: (host) => ipcRenderer.invoke(IPC.remoteTest, host),
   remoteStart: (input) => ipcRenderer.invoke(IPC.remoteStart, input),

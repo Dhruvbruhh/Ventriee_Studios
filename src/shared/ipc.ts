@@ -40,6 +40,7 @@ import type {
   WorkflowRunEvent
 } from './types'
 import type { Resource } from './resources'
+import type { SecurityReport } from './security'
 import type { Catalog, LspEvent, LspStatus } from './catalog'
 import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, GithubAction, ProjectTask, TestEvent, ExtensionContributions, FileIconTheme, NotebookEvent, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput, EditorConfig } from './workspace'
 
@@ -155,6 +156,7 @@ export const IPC = {
   pluginDiscard: 'plugin:discard',
   pluginRemove: 'plugin:remove',
   resources: 'resources:list',
+  securityScan: 'security:scan',
   remoteList: 'remote:list',
   remoteTest: 'remote:test',
   remoteStart: 'remote:start',
@@ -424,6 +426,8 @@ export interface VentrieeApi {
   pluginRemove(id: string): Promise<void>
   /** Unified resource library for the open project, with truthful installed/available/missing state. */
   resources(projectId: string | null): Promise<Resource[]>
+  /** Read-only security scan of the project (secrets, patterns, npm audit, .env). */
+  securityScan(projectId: string): Promise<SecurityReport>
   remoteList(): Promise<RemoteJob[]>
   /** Check the SSH connection and the tools a remote run needs. */
   remoteTest(host: string): Promise<string>

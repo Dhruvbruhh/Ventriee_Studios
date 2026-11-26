@@ -21,6 +21,8 @@ import { routeModel, routeModels, type RouteChoice } from './routing'
 import { newId } from './store'
 import { redact } from './redact'
 import { IntelligenceEngine } from './intelligence'
+import { scanProject } from './securityScan'
+import { securityDigest } from '../shared/security'
 import type {
   Agent,
   RunProfile,
@@ -699,7 +701,16 @@ JSON shape:
     this.deps.notify()
 
     const timeoutMs = Math.max(2, this.deps.store.settings().sessionTimeoutMinutes) * 60 * 1000
-    let prompt = this.taskPrompt(project, task, { ...agent, ...run }, team, contextBlock, dependencyContext, inbox, skills)
+    // Security workers get real scanner findings, so they verify patterns instead of guessing.
+    let securityBlock = ''
+    if (agent.role === 'security') {
+      try {
+        securityBlock = `## Read-only security scan (already run for you)\n${securityDigest(await scanProject(project.path))}\n\nVerify each finding, fix the real ones, and extend this list with what patterns cannot catch. Do not treat an empty list as proof the project is secure.\n\n`
+      } catch (error) {
+        this.log(project.id, agent.id, task.id, 'error', `Security scan skipped: ${(error as Error).message}`)
+      }
+    }
+    let prompt = this.taskPrompt(project, task, { ...agent, ...run }, team, contextBlock, dependencyContext, inbox, skills, securityBlock)
     const url = this.deps.previewUrl?.(project.id)
     if (url && run.engine === 'cli-claude' && this.deps.store.settings().mcpServers.some((m) => m.name === 'playwright' && m.enabled)) {
       prompt += `\n\nThe app is running at ${url}. If you change anything visible, open it with the Playwright browser tools, click through what you changed, and take a screenshot of the result before you finish.`
@@ -977,7 +988,8 @@ JSON shape:
     memoryBlock: string,
     dependencyContext: string,
     inbox: Array<{ sender: string; content: string }>,
-    skills: Array<{ name: string; description: string; path: string }>
+    skills: Array<{ name: string; description: string; path: string }>,
+    securityBlock = ''
   ) {
     const roster = team.map((a) => `- ${a.name} (${a.role}, ${a.title})`).join('\n')
     // A CLI session edits the workspace itself; an HTTP model cannot reach disk,
@@ -1042,6 +1054,7 @@ ${memoryBlock || '(none)'}
 ## Unread messages addressed to you
 ${inbox.length ? inbox.map((m) => `- from ${m.sender}: ${m.content.slice(0, 600)}`).join('\n') : '(none)'}
 
+${securityBlock}
 ## Rules
 ${rules}
 `

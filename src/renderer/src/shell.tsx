@@ -11,6 +11,7 @@ export function Modal({
   onClose,
   children,
   narrow,
+  wide,
   tabs,
   nav,
   actions
@@ -20,6 +21,7 @@ export function Modal({
   onClose: () => void
   children: ReactNode
   narrow?: boolean
+  wide?: boolean
   tabs?: ReactNode
   /** A navigation column beside the body, for modals with many sections. */
   nav?: ReactNode
@@ -35,7 +37,7 @@ export function Modal({
 
   return (
     <div className="scrim" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal${narrow ? ' narrow' : ''}${nav ? ' with-nav' : ''}`}>
+      <div className={`modal${narrow ? ' narrow' : ''}${wide ? ' wide' : ''}${nav ? ' with-nav' : ''}`}>
         <div className="modal-head">
           <div className="grow">
             <div className="modal-title">{title}</div>

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { guard, useStore, type Panel } from '../store'
 import { AccountButton } from '../auth'
-import { IconChartBar, IconFlow, IconGlobe, IconCloud, IconStore, IconChevron, IconClock, IconFolder, IconGrid, IconHelp, IconMemory, IconPlus, IconPulse, IconSettings, IconSkill, IconWindow, IconBriefcase, IconBooks } from '../icons'
+import { IconChartBar, IconFlow, IconGlobe, IconCloud, IconStore, IconChevron, IconClock, IconFolder, IconGrid, IconHelp, IconMemory, IconPlus, IconPulse, IconSettings, IconShield, IconSkill, IconWindow, IconBriefcase, IconBooks } from '../icons'
 
 function NavItem({ icon, label, active, onClick }: { icon: ReactNode; label: string; active?: boolean; onClick: () => void }) {
   return <button className={`side-nav-item${active ? ' on' : ''}`} onClick={onClick} aria-current={active ? 'page' : undefined}>{icon}<span>{label}</span></button>
@@ -54,6 +54,7 @@ export function Sidebar({ onNewProject }: { onNewProject: () => void }) {
       <NavItem icon={<IconStore width={15} height={15} />} label="Marketplace" active={panel === 'marketplace'} onClick={() => open('marketplace')} />
       <NavItem icon={<IconBriefcase width={15} height={15} />} label="Clients" active={panel === 'clients'} onClick={() => open('clients')} />
       <NavItem icon={<IconBooks width={15} height={15} />} label="Resources" active={panel === 'resources'} onClick={() => open('resources')} />
+<NavItem icon={<IconShield width={15} height={15} />} label="Security" active={panel === 'security'} onClick={() => open('security')} />
       <NavItem icon={<IconChartBar width={15} height={15} />} label="Analytics" active={panel === 'analytics'} onClick={() => open('analytics')} />
       <NavItem icon={<IconHelp width={15} height={15} />} label="Help" active={panel === 'help'} onClick={() => open('help')} />
     </div>

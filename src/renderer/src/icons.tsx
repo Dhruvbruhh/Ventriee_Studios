@@ -1,7 +1,7 @@
 import {
   AppWindow, ArrowClockwise, ArrowSquareOut, CaretDown, ChartBar, Check, Clock, Coins, Copy, Cpu, Database, DotsSixVertical, Folder,
   GearSix, Key, Lightning, ListBullets, ListChecks, MagnifyingGlass, Notebook, PaperPlaneRight, Pause, PencilSimple, Play,
-  Plug, Plus, Pulse, PushPin, SidebarSimple, SignOut, SlidersHorizontal, Sparkle, SquaresFour, Star, Stop, TerminalWindow,
+  Plug, Plus, Pulse, PushPin, SidebarSimple, ShieldCheck, SignOut, SlidersHorizontal, Sparkle, SquaresFour, Star, Stop, TerminalWindow,
   Trash, Tray, UsersThree, X, Briefcase, Books, FlowArrow, Microphone, Palette, GithubLogo, Globe, PuzzlePiece, CloudArrowUp, Storefront, Question, type Icon, type IconProps
 } from '@phosphor-icons/react'
 
@@ -63,3 +63,4 @@ export const IconPuzzle = make(PuzzlePiece)
 export const IconCloud = make(CloudArrowUp)
 export const IconStore = make(Storefront)
 export const IconHelp = make(Question)
+export const IconShield = make(ShieldCheck)
