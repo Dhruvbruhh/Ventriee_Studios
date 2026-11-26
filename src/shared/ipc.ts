@@ -39,6 +39,7 @@ import type {
   WorkflowVersion,
   WorkflowRunEvent
 } from './types'
+import type { Resource } from './resources'
 import type { Catalog, LspEvent, LspStatus } from './catalog'
 import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, GithubAction, ProjectTask, TestEvent, ExtensionContributions, FileIconTheme, NotebookEvent, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput, EditorConfig } from './workspace'
 
@@ -153,6 +154,7 @@ export const IPC = {
   pluginInstall: 'plugin:install',
   pluginDiscard: 'plugin:discard',
   pluginRemove: 'plugin:remove',
+  resources: 'resources:list',
   remoteList: 'remote:list',
   remoteTest: 'remote:test',
   remoteStart: 'remote:start',
@@ -420,6 +422,8 @@ export interface VentrieeApi {
   pluginInstall(token: string): Promise<PluginInfo>
   pluginDiscard(token: string): Promise<void>
   pluginRemove(id: string): Promise<void>
+  /** Unified resource library for the open project, with truthful installed/available/missing state. */
+  resources(projectId: string | null): Promise<Resource[]>
   remoteList(): Promise<RemoteJob[]>
   /** Check the SSH connection and the tools a remote run needs. */
   remoteTest(host: string): Promise<string>

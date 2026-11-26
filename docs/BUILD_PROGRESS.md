@@ -22,10 +22,11 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W8 | Security & RBAC hardening pass (§20) | W3, W4, W5 | Done (merged) | `w8-security-rbac` (RLS fixes: admin self-promotion, owner transfer, device org scoping; IPC session-gating; SECURITY_ARCHITECTURE.md; npm audit 0) |
 | W9 | Help Center (§24) | W4 | Done (merged) | `w9-help-center` (14 topics, sidebar panel, help content tests) |
 | W10 | Cloud schema verification + ownership guard (§20/21/32) | W3, W5, W8 | Done | migration `0004_ownership_guard.sql`; `tests/migrations.test.ts` runs all migrations on embedded PostgreSQL and exercises RLS as real users |
+| W11 | Unified resource library + natural-language discovery (§14) | - | Done | registry in `src/shared/resources.ts` + `src/main/resources.ts`; IPC `resources:list`; `ResourcesPanel` rewritten over real sources; `tests/resources.test.ts` (12 tests) |
 
-## Verification baseline (master, after W10)
+## Verification baseline (master, after W11)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
-- vitest: 403 passed, 1 skipped (83 files), including 18 executable migration/RLS tests
+- vitest: 415 passed, 1 skipped (84 files), including 18 executable migration/RLS tests and 12 resource-library tests
 - desktop build: `npm run build` green
 - web build: `cd web && npm run build` green
 - mobile: `npm ci && npm run typecheck && npm test` green (18 jest tests)
@@ -55,3 +56,16 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   three users to prove cross-org isolation, ownership invariants, audit-log
   append-only, comment access, and remote-command authorization. CI now also
   builds `web/` and typechecks+tests `mobile/`.
+- 2026-11-26: W11. The Resource Library was a hardcoded 26-entry list in the
+  renderer, which §14 forbids and which could not show installed state. It now
+  reads a real registry: skills (enabled = Installed, disabled = Available),
+  plugins, MCP servers, workflows, the 16 built-in worker roles, and a curated
+  catalogue of external libraries. Library state is read from the open project's
+  `package.json` (scoped packages by prefix); with no project open nothing is
+  claimed as installed. `discoverResources` ranks by name/capability/description
+  with a small intent-to-capability synonym map and shows the matched terms
+  ("Matches animation, motion, scroll"). The panel groups by state with counts,
+  links installed resources to the panel that manages them, and shows the exact
+  install command for a missing library; nothing is executed automatically. New
+  files: `src/shared/resources.ts`, `src/main/resources.ts`,
+  `tests/resources.test.ts`. Also added a Help topic (`resources`).

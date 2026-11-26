@@ -1,78 +1,114 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Modal } from '../shell'
+import { cleanError, useStore } from '../store'
+import { discoverResources, type Resource, type ResourceKind, type ResourceState } from '../../../shared/resources'
 
-type Resource = { name: string; url: string; description: string; category: string }
+const STATE_LABEL: Record<ResourceState, string> = {
+  installed: 'Installed',
+  available: 'Available',
+  missing: 'Needs install'
+}
 
-const RESOURCES: Resource[] = [
-  // UI & Components
-  { name: 'shadcn/ui', url: 'https://ui.shadcn.com', description: 'Copy-paste React components. Standard for all client UIs.', category: 'Components' },
-  { name: 'Tailwind CSS v4', url: 'https://tailwindcss.com', description: 'Utility-first CSS — same stack as this app.', category: 'Components' },
-  { name: 'Radix UI', url: 'https://www.radix-ui.com', description: 'Unstyled accessible primitives underpinning shadcn.', category: 'Components' },
-  // Animation
-  { name: 'GSAP', url: 'https://gsap.com', description: 'The go-to for scroll, morph and timeline animations.', category: 'Animation' },
-  { name: 'Framer Motion', url: 'https://www.framer.com/motion', description: 'Declarative React animations; pairs with shadcn.', category: 'Animation' },
-  { name: 'Lottie Web', url: 'https://airbnb.io/lottie', description: 'JSON-based animation; use for loaders and micro-interactions.', category: 'Animation' },
-  // Auth
-  { name: 'Better Auth', url: 'https://better-auth.com', description: 'TypeScript-native auth. Preferred for all new projects.', category: 'Auth' },
-  { name: 'Clerk', url: 'https://clerk.com', description: 'Hosted auth with pre-built UI; fastest to ship.', category: 'Auth' },
-  // Data
-  { name: 'Drizzle ORM', url: 'https://orm.drizzle.team', description: 'SQL-first TypeScript ORM. Use with Postgres or SQLite.', category: 'Database' },
-  { name: 'React Query (TanStack)', url: 'https://tanstack.com/query', description: 'Server-state caching; standard data-fetching layer.', category: 'Data' },
-  { name: 'Zustand', url: 'https://zustand-demo.pmnd.rs', description: 'Minimal global state — same lib used in this IDE.', category: 'Data' },
-  { name: 'Zod', url: 'https://zod.dev', description: 'Runtime schema validation for API inputs and forms.', category: 'Data' },
-  // Scraping / Research
-  { name: 'Firecrawl', url: 'https://firecrawl.dev', description: 'Turn any website into clean LLM-ready markdown.', category: 'Scraping' },
-  { name: 'Crawlee', url: 'https://crawlee.dev', description: 'Node web scraping framework for structured extraction.', category: 'Scraping' },
-  // Outbound services
-  { name: 'Resend', url: 'https://resend.com', description: 'Email API — transactional and marketing.', category: 'Services' },
-  { name: 'PostHog', url: 'https://posthog.com', description: 'Open-source product analytics and feature flags.', category: 'Services' },
-  { name: 'Sentry', url: 'https://sentry.io', description: 'Error monitoring and performance tracing.', category: 'Services' },
-  { name: 'Cloudflare Pages + Workers', url: 'https://pages.cloudflare.com', description: 'Edge deployment for full-stack projects.', category: 'Deployment' },
-  { name: 'Vercel', url: 'https://vercel.com', description: 'Zero-config Next.js deployment.', category: 'Deployment' },
-  { name: 'Neon', url: 'https://neon.tech', description: 'Serverless Postgres — pairs with Drizzle.', category: 'Database' },
-  { name: 'Upstash Redis', url: 'https://upstash.com', description: 'Serverless Redis for rate limiting and queues.', category: 'Database' },
-  { name: 'Stripe', url: 'https://stripe.com/docs', description: 'Payments API — subscriptions, one-time, invoices.', category: 'Services' },
-  { name: 'Phosphor Icons', url: 'https://phosphoricons.com', description: 'Icon library used in this IDE — consistent across projects.', category: 'UI' },
-  { name: 'React Hook Form', url: 'https://react-hook-form.com', description: 'Performant forms with Zod resolver support.', category: 'UI' },
-  { name: 'next-seo', url: 'https://github.com/garmeeh/next-seo', description: 'Meta, OG and structured data for Next.js.', category: 'SEO' },
-]
+const KIND_LABEL: Record<ResourceKind, string> = {
+  skill: 'Skill',
+  plugin: 'Plugin',
+  mcp: 'MCP server',
+  workflow: 'Workflow',
+  agent: 'Worker',
+  library: 'Library'
+}
 
-const CATEGORIES = Array.from(new Set(RESOURCES.map((r) => r.category))).sort()
+/** Where a resource is managed after it is installed. Libraries are external. */
+const MANAGE: Partial<Record<ResourceKind, { panel: 'skills' | 'marketplace' | 'workflows'; label: string }>> = {
+  skill: { panel: 'skills', label: 'Manage skills' },
+  plugin: { panel: 'marketplace', label: 'Manage plugins' },
+  mcp: { panel: 'marketplace', label: 'Manage MCP' },
+  workflow: { panel: 'workflows', label: 'Open workflows' }
+}
 
 export function ResourcesPanel({ onClose }: { onClose: () => void }) {
+  const snapshot = useStore((s) => s.snapshot)
+  const setPanel = useStore((s) => s.setPanel)
+  const project = snapshot?.projects.find((p) => p.id === snapshot.activeProjectId) ?? null
+  const [resources, setResources] = useState<Resource[]>([])
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [category, setCategory] = useState<string>('All')
+  const [state, setState] = useState<ResourceState | 'all'>('all')
+  const [category, setCategory] = useState('All')
 
-  const filtered = RESOURCES.filter((r) => {
-    const q = search.toLowerCase()
-    const matchSearch = !q || r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q) || r.category.toLowerCase().includes(q)
-    const matchCat = category === 'All' || r.category === category
-    return matchSearch && matchCat
-  })
+  useEffect(() => {
+    let live = true
+    setLoading(true)
+    window.ventriee.resources(project?.id ?? null)
+      .then((list) => { if (live) { setResources(list); setError('') } })
+      .catch((e) => { if (live) setError(cleanError(e)) })
+      .finally(() => { if (live) setLoading(false) })
+    return () => { live = false }
+  }, [project?.id])
+
+  const categories = useMemo(() => Array.from(new Set(resources.map((r) => r.category))).sort(), [resources])
+  const counts = useMemo(() => ({
+    installed: resources.filter((r) => r.state === 'installed').length,
+    available: resources.filter((r) => r.state === 'available').length,
+    missing: resources.filter((r) => r.state === 'missing').length
+  }), [resources])
+
+  const matches = useMemo(() => discoverResources(resources, search), [resources, search])
+  const filtered = matches.filter((r) => (state === 'all' || r.state === state) && (category === 'All' || r.category === category))
 
   return (
-    <Modal title="Resource Library" subtitle="Tools and libraries used across agency projects." onClose={onClose}>
+    <Modal title="Resource Library" subtitle={project ? `Skills, tools and libraries for ${project.name}. Library state is read from this project's package.json.` : 'Open a project to detect installed libraries. Skills, plugins, MCP servers and workers are shown as they are.'} onClose={onClose}>
       <div className="resources-toolbar">
-        <input className="input" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ flex: 1 }} />
-        <select className="select" value={category} onChange={(e) => setCategory(e.target.value)} style={{ width: 160 }}>
+        <input className="input" placeholder="Describe what you need, e.g. an animated marketing site." value={search} onChange={(e) => setSearch(e.target.value)} style={{ flex: 1 }} />
+        <select className="select" value={category} onChange={(e) => setCategory(e.target.value)} style={{ width: 160 }} aria-label="Filter by category">
           <option value="All">All categories</option>
-          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
+      <div className="resources-toolbar">
+        <div className="seg" role="group" aria-label="Filter by state">
+          <button className={state === 'all' ? 'on' : ''} onClick={() => setState('all')}>All {resources.length}</button>
+          <button className={state === 'installed' ? 'on' : ''} onClick={() => setState('installed')}>Installed {counts.installed}</button>
+          <button className={state === 'available' ? 'on' : ''} onClick={() => setState('available')}>Available {counts.available}</button>
+          <button className={state === 'missing' ? 'on' : ''} onClick={() => setState('missing')}>Needs install {counts.missing}</button>
+        </div>
+      </div>
+      {error ? <div className="text-sm" style={{ color: 'var(--danger, #b42318)', padding: '8px 0' }}>{error}</div> : null}
+      {loading ? <div className="dim text-sm" style={{ padding: '16px 0' }}>Reading installed resources…</div> : null}
       <div className="resources-grid">
-        {filtered.map((r) => (
-          <div key={r.name} className="resource-card">
-            <div className="resource-card-header">
-              <span className="resource-card-name">{r.name}</span>
-              <span className="resource-card-cat dim">{r.category}</span>
+        {filtered.map((r) => {
+          const manage = MANAGE[r.kind]
+          return (
+            <div key={r.id} className="resource-card">
+              <div className="resource-card-header">
+                <span className="resource-card-name">{r.name}</span>
+                <span className={`resource-state is-${r.state}`}>{STATE_LABEL[r.state]}</span>
+              </div>
+              <div className="resource-card-desc dim">{r.description}</div>
+              {r.why ? <div className="resource-why">{r.why}</div> : null}
+              {r.capabilities.length ? (
+                <div className="resource-tags">{r.capabilities.slice(0, 4).map((c) => <span key={c} className="resource-tag">{c}</span>)}</div>
+              ) : null}
+              {r.agents.length > 0 && r.kind === 'library' ? <div className="dim text-xs">For: {r.agents.join(', ')}</div> : null}
+              {r.state === 'missing' && r.install ? <code className="resource-install">{r.install}</code> : null}
+              <div className="resource-card-foot">
+                <span className="dim text-xs">{KIND_LABEL[r.kind]} · {r.category}{r.version ? ` · v${r.version}` : ''}</span>
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  {r.url ? (
+                    <button className="btn btn-sm" onClick={() => { window.ventriee.openExternal(r.url!) }}>Open ↗</button>
+                  ) : null}
+                  {manage ? <button className="btn btn-sm" onClick={() => setPanel(manage.panel)}>{manage.label}</button> : null}
+                </div>
+              </div>
             </div>
-            <div className="resource-card-desc dim">{r.description}</div>
-            <div className="resource-card-foot">
-              <a className="btn btn-sm" href={r.url} target="_blank" rel="noreferrer" onClick={(e) => { e.preventDefault(); window.ventriee.openExternal(r.url) }}>Open ↗</a>
-            </div>
+          )
+        })}
+        {!loading && filtered.length === 0 ? (
+          <div className="dim text-sm" style={{ gridColumn: '1/-1', padding: '16px 0' }}>
+            {search ? `Nothing matches “${search}”. Try a broader capability, or install a resource from the Marketplace.` : 'No resources in this filter.'}
           </div>
-        ))}
-        {filtered.length === 0 ? <div className="dim text-sm" style={{ gridColumn: '1/-1', padding: '16px 0' }}>No resources match your search.</div> : null}
+        ) : null}
       </div>
     </Modal>
   )

@@ -51,6 +51,7 @@ import { voiceEngine, voiceSpeak, voiceSystemPrompt, voiceTranscribe } from './v
 import { inspectMcp } from './mcpInspect'
 import { installServer, searchRegistry } from './mcpRegistry'
 import { PluginService } from './plugins'
+import { listResources } from './resources'
 import { RemoteJobs, E2BProvider } from './remote'
 import { fileMatches, runWorkflow, triggerOf } from './workflows'
 import { BrowserAutomation } from './browserAutomation'
@@ -521,6 +522,16 @@ function registerIpc() {
   handle(IPC.pluginInstall, (_e, token: string) => { const info = plugins.install(String(token)); syncWorkflowTriggers(); debouncedNotify(); return info })
   handle(IPC.pluginDiscard, (_e, token: string) => plugins.discard(String(token)))
   handle(IPC.pluginRemove, (_e, id: string) => { plugins.remove(String(id)); syncWorkflowTriggers(); debouncedNotify() })
+  handle(IPC.resources, (_e, projectId: string | null) => {
+    const project = typeof projectId === 'string' ? store.project(projectId) : null
+    return listResources({
+      skills: skills.scan(),
+      plugins: plugins.list(),
+      mcpServers: store.settings().mcpServers,
+      workflows: store.workflows(),
+      projectPath: project?.path ?? null
+    })
+  })
   handle(IPC.mcpSearch,(_e, query: string, cursor?: string) => searchRegistry(String(query ?? ''), typeof cursor === 'string' ? cursor : ''))
   handle(IPC.mcpInstall, (_e, server: RegistryServer, option: number, values: Record<string, string>) => {
     const choice = server?.installs?.[option]

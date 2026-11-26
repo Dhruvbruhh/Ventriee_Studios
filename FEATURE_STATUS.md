@@ -219,7 +219,7 @@ Last updated: 2026-11-25
 | Client CRM (kanban) | ✅ | ClientsPanel.tsx |
 | Project profiles picker | ✅ | shell.tsx ProfilePicker |
 | Client → Project link | ✅ | clientId on Project |
-| Resource library | ✅ | ResourcesPanel.tsx |
+| Resource library | ✅ | Registry in `src/shared/resources.ts` merges skills, plugins, MCP servers, workflows, worker roles and a curated library catalogue; states (installed/available/needs install) come from real sources, library state from the open project's `package.json`; natural-language discovery (`discoverResources`) explains its matches. UI: ResourcesPanel.tsx |
 | Connectors (Resend/PostHog/Sentry etc.) | ✅ | SettingsPanel → Connectors; passed to CLI agent workers as env vars (`connectorEnv`) |
 | Client badge in Plan view | ✅ | Workspace.tsx |
 

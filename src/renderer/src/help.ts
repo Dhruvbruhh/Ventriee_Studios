@@ -287,6 +287,34 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
   },
   {
+    id: 'resources',
+    title: 'Resource library',
+    summary: 'One searchable library for everything an agent can use: skills, plugins, MCP servers, workflows, the built-in workers, and external libraries such as GSAP or Drizzle.',
+    sections: [
+      { heading: 'What is it', points: [
+        'A read-only view over the real registries, so a resource is only marked Installed when it actually is.',
+        'Library entries are checked against the open project\'s package.json. No project open means nothing can be detected.',
+      ] },
+      { heading: 'When to use', points: [
+        'You know the capability you need ("animated landing page", "payments") but not which tool provides it.',
+        'You want to see what is already installed before adding another dependency to the project.',
+      ] },
+      { heading: 'How to configure', points: [
+        'Type a capability in the search box. Results explain which terms matched.',
+        'Installed skills, plugins and MCP servers have a button that opens the panel where you manage them.',
+        'For a library marked Needs install, the exact install command is shown; run it in the project when you want it.',
+      ] },
+      { heading: 'Which agents use it', points: [
+        'Skills are offered to the workers whose role or configuration binds them.',
+        'Plugins and MCP servers must be enabled before a worker can use them; libraries are ordinary project dependencies.',
+      ] },
+      { heading: 'What can go wrong', points: [
+        'A library installed outside package.json (for example a global CLI) still reads as Needs install.',
+        'An empty search result means no resource matches those words; try a capability such as "animation" or "database".',
+      ] },
+    ],
+  },
+  {
     id: 'workflows',
     title: 'Workflows',
     summary: 'Chain AI, agent runs, commands and checks into a flow you can run by hand or on a schedule.',

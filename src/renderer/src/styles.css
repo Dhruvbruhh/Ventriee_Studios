@@ -1900,11 +1900,19 @@ button.gh-line:hover, button.gh-line:focus-visible { background: color-mix(in sr
 .resources-toolbar { display: flex; gap: var(--s-2); margin-bottom: var(--s-3); }
 .resources-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--s-3); }
 .resource-card { padding: var(--s-3); background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: var(--radius); display: flex; flex-direction: column; gap: var(--s-1); }
-.resource-card-header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); }
+.resource-card-header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); flex-wrap: wrap; }
 .resource-card-name { font-size: var(--fs-sm); font-weight: 600; }
 .resource-card-cat { font-size: var(--fs-xs); }
 .resource-card-desc { font-size: var(--fs-xs); line-height: 1.5; flex: 1; }
 .resource-card-foot { margin-top: auto; }
+.resource-state { font-size: var(--fs-xs); padding: 0 6px; border-radius: 999px; border: 1px solid var(--line-soft); white-space: nowrap; }
+.resource-state.is-installed { color: var(--ok); border-color: currentColor; }
+.resource-state.is-available { color: var(--warn); border-color: currentColor; }
+.resource-state.is-missing { color: var(--text-dim, #667085); }
+.resource-why { font-size: var(--fs-xs); color: var(--accent); }
+.resource-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.resource-tag { font-size: 10px; padding: 0 5px; border-radius: 4px; background: var(--surface-3, var(--surface-2)); border: 1px solid var(--line-soft); }
+.resource-install { font-size: 11px; padding: 4px 6px; border-radius: 4px; background: var(--surface-3, var(--surface-2)); border: 1px solid var(--line-soft); overflow-x: auto; white-space: nowrap; user-select: all; }
 .btn-sm { font-size: var(--fs-xs); padding: 2px 8px; }
 
 /* Analytics panel */
