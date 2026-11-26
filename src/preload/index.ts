@@ -203,7 +203,9 @@ const api: VentrieeApi = {
   graphifyBuild: (id) => ipcRenderer.invoke(IPC.graphifyBuild, id),
   graphifyQuery: (id, question) => ipcRenderer.invoke(IPC.graphifyQuery, id, question),
   cloudOrgs: () => ipcRenderer.invoke(IPC.cloudOrgs),
-  cloudSetWorkspace: (orgId) => ipcRenderer.invoke(IPC.cloudWorkspace, orgId)
+  cloudSetWorkspace: (orgId) => ipcRenderer.invoke(IPC.cloudWorkspace, orgId),
+  remoteStatus: () => ipcRenderer.invoke(IPC.remoteStatus),
+  remoteSetEnabled: (on) => ipcRenderer.invoke(IPC.remoteSetEnabled, on)
 }
 
 contextBridge.exposeInMainWorld('ventriee', api)

@@ -3,8 +3,10 @@ import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, pr
 import { join, relative, sep } from 'node:path'
 import { existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
+import { hostname } from 'node:os'
 import { StudioAuth } from './auth'
 import { SupabaseCloudClient } from './cloud'
+import { RemoteControl, type Capability } from './remote'
 import { FileService, workspacePath } from './files'
 import { GitService } from './git'
 import type { TextFile, GitAction } from '../shared/workspace'
@@ -119,6 +121,45 @@ const auth = new StudioAuth(supabaseUrl, supabaseKey, {
 })
 // Cloud data layer runs on the signed-in user's token; RLS enforces access.
 const cloud = new SupabaseCloudClient(supabaseUrl, supabaseKey, () => auth.accessToken())
+// "Jarvis" inbound remote control. Handlers close over the services assigned in
+// whenReady; they only run during polling, which starts after sign-in. The allowlist
+// is the whole safety boundary — no handler reaches a shell, so a remote peer can do
+// nothing the desktop can't already do through these exact capabilities.
+const remoteCapabilities = new Map<string, Capability>([
+  ['project.status', { handler: async (cmd) => {
+    const project = remoteProject(cmd)
+    return { projectId: project.id, name: project.name, running: Boolean(store.runningJob(project.id)) }
+  } }],
+  ['run.start', { highRisk: true, handler: async (cmd) => {
+    const project = remoteProject(cmd)
+    const instruction = String((cmd.payload as { instruction?: unknown }).instruction ?? '')
+    if (!instruction.trim()) throw new Error('run.start needs an instruction')
+    return { jobId: await orchestrator.startRun(project.id, instruction) }
+  } }],
+  ['run.stop', { highRisk: true, handler: async (cmd) => { orchestrator.stopRun(remoteProject(cmd).id); return { stopped: true } } }],
+  ['preview.open', { handler: async (cmd) => { const s = await preview.start(remoteProject(cmd)); return { url: s.url, status: s.status } } }]
+])
+const remote = new RemoteControl(cloud, remoteCapabilities, { onError: (where, e) => errors?.record(`remote-${where}`, e instanceof Error ? e.message : String(e)) })
+let remoteUserId: string | null = null
+/** Find-or-create this desktop's device row for the signed-in user, then adopt it. Idempotent per user. */
+async function syncRemoteDevice(session: { userId: string; activeOrgId: string | null } | null): Promise<void> {
+  if (!session) { remote.detach(); remoteUserId = null; return }
+  if (remoteUserId === session.userId && remote.deviceId) return
+  const name = hostname() || 'This device'
+  const platform = process.platform
+  try {
+    const mine = (await cloud.listDevices()).find((d) => d.user_id === session.userId && d.name === name && d.platform === platform)
+    remote.attach(mine ?? await cloud.registerDevice({ name, platform, orgId: session.activeOrgId }))
+    remoteUserId = session.userId
+  } catch (e) { errors?.record('remote-register', e instanceof Error ? e.message : String(e)) }
+}
+/** Resolve the target project for a remote command (its payload.projectId, else the only/first project). */
+function remoteProject(cmd: { payload: Record<string, unknown> }): Project {
+  const id = cmd.payload.projectId
+  const project = typeof id === 'string' ? store.project(id) : store.projects()[0]
+  if (!project) throw new Error('no such project on this device')
+  return project
+}
 protocol.registerSchemesAsPrivileged([{ scheme: RENDERER_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
 
 function windowProject(win: BrowserWindow): string | null {
@@ -515,16 +556,27 @@ function registerIpc() {
   handle(IPC.lspNotify, (event, id: string, language: string, method: string, params: unknown) => lsp.notify(event.sender.id, projectRoot(event, id), String(language), String(method), params))
   handle(IPC.authStatus, async (event) => {
     const session = await auth.restore(event.sender.id)
+    void syncRemoteDevice(session)
     debouncedNotify()
     return session
   })
   handle(IPC.authSignIn, async (event, input: { email: string; password: string }, signup = false) => {
     const result = await auth.signIn(event.sender.id, input, signup === true)
+    void syncRemoteDevice(result.session)
     debouncedNotify()
     return result
   })
   handle(IPC.cloudOrgs, () => cloud.listOrganizations())
   handle(IPC.cloudWorkspace, (event, orgId: string | null) => auth.setWorkspace(event.sender.id, orgId === null ? null : String(orgId)))
+  handle(IPC.remoteStatus, async () => {
+    const { device, enabled } = remote.snapshot()
+    const commands = device ? await cloud.listCommands({ deviceId: device.id, limit: 20 }).catch(() => []) : []
+    return { device, enabled, commands }
+  })
+  handle(IPC.remoteSetEnabled, async (_event, on: boolean) => {
+    await remote.setEnabled(on === true)
+    return remote.snapshot()
+  })
   handle(IPC.authRecover, (_event, email: string) => auth.recover(email))
   handle(IPC.authReset, async (event, input: { email: string; code: string; password: string }) => {
     const result = await auth.resetPassword(event.sender.id, input)
@@ -532,6 +584,7 @@ function registerIpc() {
     return result
   })
   handle(IPC.authClear, async () => {
+    remote.detach(); remoteUserId = null
     const signingOut = auth.signOut()
     terminals.closeAll()
     for (const owner of [...debugSessions.keys()]) stopDebug(owner)
@@ -1109,6 +1162,9 @@ function startScheduler() {
   if (scheduler) clearInterval(scheduler)
   scheduler = setInterval(() => {
     if (!auth.hasSession()) return
+    // Jarvis: heartbeat + drain the command bus. Both no-op when the device is
+    // unregistered or remote control is off. Realtime subscribe is a future upgrade.
+    void remote.heartbeat(); void remote.poll()
     const now = Date.now()
     for (const automation of store.automations()) {
       if (!automation.enabled || !automation.nextRunAt || automation.nextRunAt > now) continue

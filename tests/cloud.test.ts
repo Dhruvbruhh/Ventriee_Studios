@@ -63,6 +63,14 @@ class FakeCloudClient implements CloudClient {
   async assignTask() { throw new Error('nyi') }
   async registerDevice() { throw new Error('nyi') }
   async listDevices() { return [] }
+  async updateDevice() { throw new Error('nyi') }
+  async enqueueCommand() { throw new Error('nyi') }
+  async listCommands() { return [] }
+  async claimCommand() { return null }
+  async updateCommand() { return null }
+  async listGrants() { return [] }
+  async grantDevice() { throw new Error('nyi') }
+  async revokeGrant() { /* no-op */ }
   async recordAudit() { throw new Error('nyi') }
   async listAudit() { return [] }
 }
