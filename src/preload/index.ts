@@ -263,7 +263,9 @@ const api: VentrieeApi = {
   cloudOrgs: () => ipcRenderer.invoke(IPC.cloudOrgs),
   cloudSetWorkspace: (orgId) => ipcRenderer.invoke(IPC.cloudWorkspace, orgId),
   remoteStatus: () => ipcRenderer.invoke(IPC.remoteStatus),
-  remoteSetEnabled: (on) => ipcRenderer.invoke(IPC.remoteSetEnabled, on)
+  remoteSetEnabled: (on) => ipcRenderer.invoke(IPC.remoteSetEnabled, on),
+  cloudSyncStatus: () => ipcRenderer.invoke(IPC.cloudSyncStatus),
+  cloudSyncKeepDesktop: (kind, localId) => ipcRenderer.invoke(IPC.cloudSyncKeepDesktop, kind, localId)
 }
 
 contextBridge.exposeInMainWorld('ventriee', api)

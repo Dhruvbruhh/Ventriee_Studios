@@ -6,6 +6,7 @@ import { EventEmitter } from 'node:events'
 import { hostname } from 'node:os'
 import { StudioAuth } from './auth'
 import { SupabaseCloudClient } from './cloud'
+import { CloudSync } from './cloud/sync'
 import { RemoteControl, ownsAttachedDevice, type Capability } from './remote'
 import { FileService, workspacePath } from './files'
 import { GitService } from './git'
@@ -118,6 +119,7 @@ const stopDebug = (owner: number) => { debugSessions.get(owner)?.stop(); debugSe
 let tray: Tray | null = null
 let quitting = false
 let store: Store
+let cloudSync: CloudSync
 let creds: Credentials
 let errors: ErrorLog | null = null
 let memory: MemoryService
@@ -717,17 +719,29 @@ function registerIpc() {
   handle(IPC.authStatus, async (event) => {
     const session = await auth.restore(event.sender.id)
     void syncRemoteDevice(session)
+    cloudSync.setSession(session)
     debouncedNotify()
     return session
   })
   handle(IPC.authSignIn, async (event, input: { email: string; password: string }, signup = false) => {
     const result = await auth.signIn(event.sender.id, input, signup === true)
     void syncRemoteDevice(result.session)
+    cloudSync.setSession(result.session)
     debouncedNotify()
     return result
   })
   handle(IPC.cloudOrgs, () => cloud.listOrganizations())
-  handle(IPC.cloudWorkspace, (event, orgId: string | null) => auth.setWorkspace(event.sender.id, orgId === null ? null : String(orgId)))
+  handle(IPC.cloudWorkspace, (event, orgId: string | null) => {
+    const session = auth.setWorkspace(event.sender.id, orgId === null ? null : String(orgId))
+    cloudSync.setSession(session)
+    return session
+  })
+  handle(IPC.cloudSyncStatus, () => cloudSync.status())
+  handle(IPC.cloudSyncKeepDesktop, (_event, kind: string, localId: string) => {
+    if (kind !== 'project' && kind !== 'task') throw new Error('Unknown sync item')
+    cloudSync.keepDesktop(kind, String(localId))
+    return cloudSync.status()
+  })
   handle(IPC.remoteStatus, async (event) => {
     const session = auth.requireSession(event.sender.id)
     // The attached device belongs to whichever user signed in last; a second window
@@ -751,6 +765,7 @@ function registerIpc() {
   })
   handle(IPC.authClear, async () => {
     remote.detach(); remoteUserId = null
+    cloudSync.setSession(null)
     const signingOut = auth.signOut()
     terminals.closeAll()
     for (const owner of [...debugSessions.keys()]) stopDebug(owner)
@@ -1557,6 +1572,9 @@ function bootstrapData() {
   mkdirSync(userData, { recursive: true })
   store = new Store(join(userData, 'ventriee.db'))
   creds = new Credentials(store.db)
+  // Desktop -> cloud mirror; store writes only queue work, so nothing waits on the network.
+  cloudSync = new CloudSync(store, cloud, { secrets: () => creds.secretValues().filter((v): v is string => Boolean(v)), onStatus: debouncedNotify })
+  store.onChange = (kind, id) => { try { cloudSync.markDirty(kind, id) } catch (e) { errors?.record('cloud-sync', e instanceof Error ? e.message : String(e)) } }
   memory = new MemoryService(store, userData)
   skills = new SkillService(store, userData)
   plugins = new PluginService(store, skills, userData, app.getVersion())

@@ -13,6 +13,7 @@ import { ModelPicker, resolveModel } from '../components/ModelPicker'
 import { AddProviderDialog } from '../components/AddProviderDialog'
 import { TerminalView } from '../components/Terminal'
 import { Toolchains } from '../components/Toolchains'
+import { CloudSyncSection } from '../components/CloudSync'
 import { installUpdate, useUpdateState } from '../components/UpdateNotice'
 import type { CredentialInfo } from '../../../shared/ipc'
 
@@ -678,6 +679,7 @@ function SyncAndReports() {
     {missing.length ? <div className="kv-row"><div className="kv-row-main"><div className="kv-row-sub">Extensions from your other computer: {missing.join(', ')}</div></div>
       <button className="btn tiny primary" onClick={() => void (async () => { for (const id of missing) await guard(() => window.ventriee.extInstall(id)); setMissing([]) })()}>Install them</button></div> : null}
 
+    <CloudSyncSection />
     <RemoteControlSection />
 
     <div className="section-label space-above">Spending limits</div>

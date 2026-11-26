@@ -649,6 +649,8 @@ export interface AppSettings {
   }
   /** Chat-first surface for non-technical owners; false (default) keeps the full developer IDE. */
   simpleMode?: boolean
+  /** Mirror projects and tasks to the cloud workspace while signed in; undefined means on. */
+  cloudSync?: boolean
 }
 
 export type ArtifactKind =

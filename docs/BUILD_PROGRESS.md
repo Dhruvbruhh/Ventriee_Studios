@@ -25,6 +25,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W11 | Unified resource library + natural-language discovery (§14) | - | Done | registry in `src/shared/resources.ts` + `src/main/resources.ts`; IPC `resources:list`; `ResourcesPanel` rewritten over real sources; `tests/resources.test.ts` (12 tests) |
 | W12 | Security Master tooling (§11) | - | Done | read-only scan in `src/shared/security.ts` + `src/main/securityScan.ts` (secrets, code patterns, .env hygiene, npm audit); IPC `security:scan`; Security panel; scan results injected into the security worker's prompt; `tests/security.test.ts` (12 tests) |
 | W13 | Frontend Master visual QA loop (§10) | - | Done | `src/main/visualQa.ts`: after a frontend worker delivers, the sandboxed browser renders the running preview at desktop + 390px mobile, screenshots both, and collects console errors; failures send the task to rework with the specific problems; the reviewer receives the rendered-check summary; `tests/visualQa.test.ts` (4 tests) |
+| W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 
 ## Verification baseline (master, after W13)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -95,3 +96,21 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   optional structural `browser`. Known limit: screenshots live in the browser
   screens folder and the run log; the task review stores the summary, not the
   image.
+- 2026-11-26: W14. Desktop work never reached the cloud, so the web dashboard
+  and mobile app had nothing real to show. `CloudSync` (`src/main/cloud/sync.ts`)
+  listens to store writes of projects and tasks (`Store.onChange`, not the
+  orchestrator) and only marks a row dirty in a local `cloud_sync` table, which
+  holds the desktop↔cloud id mapping, the outbox, per-row backoff and conflicts.
+  A debounced flush, plus a 60 s tick while signed in, pushes projects first,
+  then tasks (title, mapped board status, raw desktop status, model, worker
+  name), redacted and checked against a column allowlist; paths, descriptions,
+  output, code and memory never leave. Updates are compare-and-set on the new
+  `updated_at` column, so a row edited on the web is recorded as a conflict and
+  shown in Settings until the owner keeps the desktop version. Tasks created in
+  the cloud on a linked project arrive once as an unread owner message, never
+  as a runnable task. Migration `0005_desktop_sync.sql` also fixes a 0001 bug:
+  any user UPDATE on `tasks` failed with infinite RLS recursion (tasks_update →
+  task_assignments → tasks); a definer `is_task_assignee()` replaces the
+  subquery. Known limits: deleting a desktop project does not delete its cloud
+  copy; there is no "take cloud version" (only keep desktop); a project already
+  linked stays in the workspace it was first pushed to.

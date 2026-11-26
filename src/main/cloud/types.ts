@@ -8,8 +8,14 @@ export type MembershipRole = 'owner' | 'admin' | 'project_manager' | 'employee'
 export interface Organization { id: string; name: string; owner_id: string; created_at: string }
 export interface Membership { id: string; org_id: string; user_id: string; role: MembershipRole; created_at: string }
 /** org_id null => the user's personal workspace. */
-export interface CloudProject { id: string; org_id: string | null; owner_id: string; name: string; status: string; created_at: string }
-export interface CloudTask { id: string; project_id: string; title: string; status: string; created_by: string; created_at: string }
+export interface CloudProject { id: string; org_id: string | null; owner_id: string; name: string; status: string; created_at: string; updated_at: string }
+export interface CloudTask {
+  id: string; project_id: string; title: string; status: string; created_by: string; created_at: string; updated_at: string
+  /** Desktop agent activity (migration 0005); '' when the task never ran on a desktop. */
+  run_status?: string; run_model?: string; run_agent?: string
+}
+/** Columns the desktop may write on a task: metadata only (see cloud/sync.ts). */
+export type CloudTaskPatch = { title?: string; status?: string; run_status?: string; run_model?: string; run_agent?: string }
 export interface TaskAssignment { id: string; task_id: string; user_id: string; assigned_at: string }
 export interface Device { id: string; user_id: string; org_id: string | null; name: string; platform: string; remote_enabled: boolean; last_seen_at: string; created_at: string }
 export interface AuditEntry { id: string; org_id: string | null; actor_id: string; action: string; target_type: string; target_id: string; metadata: Record<string, unknown>; created_at: string }
@@ -38,7 +44,13 @@ export interface CloudClient {
   listProjects(opts?: { orgId?: string | null }): Promise<CloudProject[]>
   createProject(input: { name: string; orgId?: string | null; status?: string }): Promise<CloudProject>
   listTasks(projectId: string): Promise<CloudTask[]>
-  createTask(input: { projectId: string; title: string; status?: string }): Promise<CloudTask>
+  createTask(input: { projectId: string; title: string } & CloudTaskPatch): Promise<CloudTask>
+  /**
+   * Compare-and-set update: with `expectedUpdatedAt` the row is only written if
+   * its updated_at still matches; null means someone changed it since (a conflict).
+   */
+  updateProject(projectId: string, patch: { name?: string; status?: string }, expectedUpdatedAt?: string | null): Promise<CloudProject | null>
+  updateTask(taskId: string, patch: CloudTaskPatch, expectedUpdatedAt?: string | null): Promise<CloudTask | null>
   assignTask(taskId: string, userId: string): Promise<TaskAssignment>
   registerDevice(input: { name: string; platform: string; orgId?: string | null }): Promise<Device>
   listDevices(opts?: { orgId?: string | null }): Promise<Device[]>

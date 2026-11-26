@@ -100,6 +100,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 export class Store {
   readonly db: Db
+  /** Called after a project or task row is written; cloud sync listens here. Must not throw. */
+  onChange?: (kind: 'project' | 'task', id: string) => void
   constructor(file: string) {
     this.db = new Db(file)
     // Seed the graphify MCP server once, disabled by default (owner enables it
@@ -193,6 +195,7 @@ export class Store {
       'INSERT INTO projects(id,name,path,description,client_id,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?)',
       project.id, project.name, project.path, project.description, project.clientId, now, now
     )
+    this.onChange?.('project', project.id)
     return project
   }
 
@@ -204,6 +207,7 @@ export class Store {
       'UPDATE projects SET name=?, path=?, description=?, client_id=?, updatedAt=? WHERE id=?',
       patch.name ?? cur.name, patch.path ?? cur.path, patch.description ?? cur.description, clientId ?? null, Date.now(), id
     )
+    this.onChange?.('project', id)
   }
 
   deleteProject(id: string) {
@@ -298,6 +302,7 @@ export class Store {
       JSON.stringify(t.skills ?? []),
       t.createdAt, t.updatedAt
     )
+    this.onChange?.('task', t.id)
   }
 
   updateTask(id: string, patch: Partial<Task>) {
@@ -311,6 +316,7 @@ export class Store {
       JSON.stringify(n.dependsOn), n.output, n.review, n.attempts, n.phase,
       n.engine ?? null, n.model ?? null, n.endpoint ?? null, n.routedBy ?? null, JSON.stringify(n.changedFiles ?? []), n.updatedAt, id
     )
+    this.onChange?.('task', id)
   }
 
   deleteTask(id: string) {

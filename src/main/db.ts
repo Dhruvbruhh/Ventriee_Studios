@@ -181,7 +181,18 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX IF NOT EXISTS idx_mtc_session ON mcp_tool_calls(session_id, created_at);
   `,
-  `ALTER TABLE agents ADD COLUMN mcpServers TEXT NOT NULL DEFAULT '[]';`
+  `ALTER TABLE agents ADD COLUMN mcpServers TEXT NOT NULL DEFAULT '[]';`,
+  // Desktop <-> cloud sync (cloud/sync.ts): one row per synced item, linking the
+  // local id to its cloud row, plus the outbox (dirty), retry backoff and conflicts.
+  `
+  CREATE TABLE IF NOT EXISTS cloud_sync (
+    kind TEXT NOT NULL, localId TEXT NOT NULL, cloudId TEXT, userId TEXT NOT NULL DEFAULT '',
+    cloudUpdatedAt TEXT, dirty INTEGER NOT NULL DEFAULT 1, attempts INTEGER NOT NULL DEFAULT 0,
+    nextAt INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '', conflict TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (kind, localId)
+  );
+  CREATE INDEX IF NOT EXISTS idx_cloud_sync_cloud ON cloud_sync(cloudId);
+  `
 ]
 
 export class Db {

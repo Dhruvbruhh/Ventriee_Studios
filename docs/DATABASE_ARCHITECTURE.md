@@ -13,8 +13,9 @@ identity the desktop app already signs in with (`src/main/auth.ts`).
 Source of truth: the ordered files in [`supabase/migrations/`](../supabase/migrations/):
 `0001_multitenant_foundation.sql` (tenancy, RLS), `0002_remote_control.sql`
 (command bus), `0003_web_dashboard.sql` (profiles, comments, task metadata) and
-`0004_ownership_guard.sql` (ownership integrity). `tests/migrations.test.ts`
-applies all four to an embedded PostgreSQL and exercises the policies as real
+`0004_ownership_guard.sql` (ownership integrity) and `0005_desktop_sync.sql`
+(`updated_at` + desktop run status for sync, see `src/main/cloud/sync.ts`).
+`tests/migrations.test.ts` applies all of them to an embedded PostgreSQL and exercises the policies as real
 users, so the schema is verified locally without a Supabase project.
 
 ## Tenancy model
