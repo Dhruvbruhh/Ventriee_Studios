@@ -2,13 +2,15 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildResources, packageNames, type Resource } from '../shared/resources'
 import type { McpServer, PluginInfo, SkillRecord, Workflow } from '../shared/types'
-import { ROLE_TEMPLATES } from './roles'
+import type { AgentTemplate } from '../shared/agents'
 
 export interface ResourceInput {
   skills: SkillRecord[]
   plugins: PluginInfo[]
   mcpServers: McpServer[]
   workflows: Workflow[]
+  /** Enabled agent catalogue templates (built-in and the owner's own). */
+  agents: AgentTemplate[]
   /** Project root, so libraries already in its package.json read as installed. */
   projectPath: string | null
 }
@@ -28,7 +30,7 @@ export function listResources(input: ResourceInput): Resource[] {
     plugins: input.plugins,
     mcpServers: input.mcpServers,
     workflows: input.workflows,
-    agents: ROLE_TEMPLATES.map((r) => ({ role: r.role, name: r.name, title: r.title })),
+    agents: input.agents.map((r) => ({ role: r.role, name: r.name, title: r.title })),
     deps: input.projectPath ? readProjectDeps(input.projectPath) : null
   })
 }

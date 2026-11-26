@@ -1,3 +1,5 @@
+import { DEPARTMENT_OF, type AgentTemplate } from '../shared/agents'
+
 export interface RoleTemplate {
   role: string
   name: string
@@ -330,3 +332,10 @@ export const PIPELINE = [
 ] as const
 
 export type Phase = (typeof PIPELINE)[number]
+
+/** The built-in roles as catalogue templates: the seeds the owner can edit, disable or reset. */
+export const builtinTemplates = (): AgentTemplate[] => ROLE_TEMPLATES.map((t) => ({
+  role: t.role, name: t.name, title: t.title, description: t.instructions.split('. ')[0] + '.', department: DEPARTMENT_OF[t.role] ?? 'project-management',
+  color: t.color, instructions: t.instructions, engine: '', model: '', skills: t.skills, mcpServers: [], writesCode: t.writesCode,
+  budgetUsd: 5, requiresApproval: false, enabled: true, builtin: true
+}))
