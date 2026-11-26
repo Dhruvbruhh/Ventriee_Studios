@@ -1,7 +1,7 @@
 import type { StartRunInput } from '../shared/types'
 import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol, Notification } from 'electron'
 import { join, relative, sep } from 'node:path'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
 import { hostname } from 'node:os'
 import { StudioAuth } from './auth'
@@ -52,6 +52,7 @@ import { inspectMcp } from './mcpInspect'
 import { installServer, searchRegistry } from './mcpRegistry'
 import { PluginService } from './plugins'
 import { listResources } from './resources'
+import { parseManifest, toManifest } from '../shared/agents'
 import { scanProject } from './securityScan'
 import { RemoteJobs, E2BProvider } from './remote'
 import { fileMatches, runWorkflow, triggerOf } from './workflows'
@@ -530,8 +531,34 @@ function registerIpc() {
       plugins: plugins.list(),
       mcpServers: store.settings().mcpServers,
       workflows: store.workflows(),
+      agents: store.agentCatalogue().templates.filter((t) => t.enabled),
       projectPath: project?.path ?? null
     })
+  })
+  handle(IPC.agentCatalogue, () => store.agentCatalogue())
+  handle(IPC.agentTemplateSave, (_e, template: unknown, create: boolean) => { const t = store.saveAgentTemplate(template, create === true); debouncedNotify(); return t })
+  handle(IPC.agentTemplateDelete, (_e, role: string) => { store.deleteAgentTemplate(String(role)); debouncedNotify() })
+  handle(IPC.agentDepartmentsSave, (_e, departments: unknown) => store.saveDepartments(departments))
+  handle(IPC.agentExport, async (event, pick: { role?: unknown; department?: unknown }) => {
+    const manifest = toManifest(store.agentCatalogue(), { role: typeof pick?.role === 'string' ? pick.role : undefined, department: typeof pick?.department === 'string' ? pick.department : undefined })
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showSaveDialog(parent ?? undefined!, { defaultPath: `${pick?.role ?? pick?.department ?? 'agents'}.agents.json`, filters: [{ name: 'Agent manifest', extensions: ['json'] }] })
+    if (result.canceled || !result.filePath) return null
+    writeFileSync(result.filePath, JSON.stringify(manifest, null, 2))
+    return result.filePath
+  })
+  handle(IPC.agentImport, async (event) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showOpenDialog(parent ?? undefined!, { properties: ['openFile'], filters: [{ name: 'Agent manifest', extensions: ['json'] }] })
+    const file = result.canceled ? null : result.filePaths[0]
+    if (!file) return null
+    if (statSync(file).size > 2_000_000) throw new Error('That file is too large to be an agent manifest')
+    let raw: unknown
+    try { raw = JSON.parse(readFileSync(file, 'utf8')) } catch { throw new Error('That file is not valid JSON') }
+    const parsed = parseManifest(raw, { skills: skills.scan().map((s) => s.id), mcpServers: store.settings().mcpServers.map((s) => s.name) })
+    store.importAgents(parsed)
+    debouncedNotify()
+    return { added: parsed.templates.map((t) => t.role), missing: parsed.missing }
   })
   handle(IPC.securityScan, async (_e, projectId: string) => {
     const project = store.project(String(projectId))

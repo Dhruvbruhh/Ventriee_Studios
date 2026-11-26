@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { guard, useStore, type Panel } from '../store'
 import { AccountButton } from '../auth'
-import { IconChartBar, IconFlow, IconGlobe, IconCloud, IconStore, IconChevron, IconClock, IconFolder, IconGrid, IconHelp, IconMemory, IconPlus, IconPulse, IconSettings, IconShield, IconSkill, IconWindow, IconBriefcase, IconBooks } from '../icons'
+import { IconChartBar, IconFlow, IconGlobe, IconCloud, IconStore, IconChevron, IconClock, IconFolder, IconGrid, IconHelp, IconMemory, IconPlus, IconPulse, IconSettings, IconShield, IconSkill, IconWindow, IconBriefcase, IconBooks, IconUsers } from '../icons'
 
 function NavItem({ icon, label, active, onClick }: { icon: ReactNode; label: string; active?: boolean; onClick: () => void }) {
   return <button className={`side-nav-item${active ? ' on' : ''}`} onClick={onClick} aria-current={active ? 'page' : undefined}>{icon}<span>{label}</span></button>
@@ -45,6 +45,7 @@ export function Sidebar({ onNewProject }: { onNewProject: () => void }) {
     <div className="side-nav">
       <NavItem icon={<IconGrid width={15} height={15} />} label="Dashboard" active={workspace === 'home' && panel === 'none'} onClick={() => { setPanel('none'); useStore.getState().setWorkspace('home') }} />
       <NavItem icon={<IconPulse width={15} height={15} />} label="Runs" active={panel === 'runs'} onClick={() => open('runs')} />
+      <NavItem icon={<IconUsers width={15} height={15} />} label="Agents" active={panel === 'agents'} onClick={() => open('agents')} />
       <NavItem icon={<IconSkill width={15} height={15} />} label="Skills" active={panel === 'skills'} onClick={() => open('skills')} />
       <NavItem icon={<IconMemory width={15} height={15} />} label="Memory" active={panel === 'memory'} onClick={() => open('memory')} />
       <NavItem icon={<IconClock width={15} height={15} />} label="Automations" active={panel === 'automations'} onClick={() => open('automations')} />

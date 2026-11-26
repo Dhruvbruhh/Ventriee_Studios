@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { Db } from './db'
+import { builtinTemplates } from './roles'
+import { applyImport, checkDepartment, checkTemplate, mergeCatalogue, type AgentCatalogue, type AgentTemplate, type Department, type ParsedManifest, type StoredCatalogue } from '../shared/agents'
 import type {
   Agent,
   AppSettings,
@@ -531,6 +533,54 @@ export class Store {
 
   recordSkillUse(id: string, success: boolean) {
     this.db.run('UPDATE skills SET uses = uses + 1, successes = successes + ? WHERE id = ?', success ? 1 : 0, id)
+  }
+
+  // ---------- agent catalogue ----------
+  // Only the owner's own templates and edits to built-ins are stored; unedited built-ins come from roles.ts.
+  private storedCatalogue(): StoredCatalogue {
+    const raw = this.db.kvGet('agentCatalogue')
+    return raw ? JSON.parse(raw) : { departments: null, templates: [] }
+  }
+
+  private saveStoredCatalogue(c: StoredCatalogue) {
+    this.db.kvSet('agentCatalogue', JSON.stringify(c))
+  }
+
+  agentCatalogue(): AgentCatalogue {
+    return mergeCatalogue(builtinTemplates(), this.storedCatalogue())
+  }
+
+  /** Create (create=true refuses an existing role key) or edit a template. Input is untrusted. */
+  saveAgentTemplate(raw: unknown, create = false): AgentTemplate {
+    const catalogue = this.agentCatalogue()
+    const existing = catalogue.templates.find((t) => t.role === (raw as { role?: unknown })?.role)
+    if (create && existing) throw new Error(`An agent with the role key "${existing.role}" already exists`)
+    const t = checkTemplate(raw, existing?.builtin ?? false)
+    if (!catalogue.departments.some((d) => d.id === t.department)) throw new Error(`No department "${t.department}"`)
+    const stored = this.storedCatalogue()
+    this.saveStoredCatalogue({ ...stored, templates: [...stored.templates.filter((x) => x.role !== t.role), t] })
+    return t
+  }
+
+  /** Deletes an owner template; for a built-in this resets it to the shipped default. */
+  deleteAgentTemplate(role: string) {
+    const stored = this.storedCatalogue()
+    this.saveStoredCatalogue({ ...stored, templates: stored.templates.filter((t) => t.role !== role) })
+  }
+
+  /** Replace the department list (create, rename, delete, reorder). A department that still has agents cannot be dropped. */
+  saveDepartments(raw: unknown): Department[] {
+    if (!Array.isArray(raw) || !raw.length || raw.length > 100) throw new Error('Keep between 1 and 100 departments')
+    const departments = raw.map(checkDepartment)
+    if (new Set(departments.map((d) => d.id)).size !== departments.length) throw new Error('Department ids must be unique')
+    const orphan = this.agentCatalogue().templates.find((t) => !departments.some((d) => d.id === t.department))
+    if (orphan) throw new Error(`Move ${orphan.name} (${orphan.role}) to another department first`)
+    this.saveStoredCatalogue({ ...this.storedCatalogue(), departments })
+    return departments
+  }
+
+  importAgents(parsed: ParsedManifest) {
+    this.saveStoredCatalogue(applyImport(this.storedCatalogue(), parsed, this.agentCatalogue()))
   }
 
   // ---------- automations ----------
