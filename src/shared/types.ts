@@ -536,3 +536,24 @@ export interface ChatRequest {
   signal?: AbortSignal
   onDelta?: (text: string) => void
 }
+
+/** A file the Project Intelligence Engine judged relevant to a task. */
+export interface RetrievedFile {
+  path: string
+  score: number
+}
+
+/** What one incremental index sync changed. `indexed` excludes renames (content unchanged). */
+export interface IndexSyncResult {
+  indexed: string[]
+  removed: string[]
+  renamed: Array<{ from: string; to: string }>
+  unchanged: number
+  total: number
+}
+
+/** The bounded context package a worker receives: memory docs plus relevant code. */
+export interface CompiledContext {
+  files: RetrievedFile[]
+  text: string
+}
