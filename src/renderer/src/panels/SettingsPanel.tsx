@@ -573,13 +573,13 @@ function RemoteControlSection() {
             : <>Sign in to register this device. Then turn this on to let an authorized phone or web client ask for project status, start or stop a run, or open a preview.</>}
         </div>
       </div>
-      <Switch on={Boolean(status?.enabled)} disabled={!device}
-        onClick={() => device && void guard(() => window.ventriee.remoteSetEnabled(!status?.enabled), status?.enabled ? 'Remote control off' : 'Remote control on').then(() => load())}
-        label="Remote control" />
+      {device ? <Switch on={Boolean(status?.enabled)}
+        onClick={() => void guard(() => window.ventriee.remoteSetEnabled(!status?.enabled), status?.enabled ? 'Remote control off' : 'Remote control on').then(() => load())}
+        label="Remote control" /> : null}
     </div>
     {device && status?.commands.length ? <div className="kv-row"><div className="kv-row-main">
       <div className="kv-row-sub">Recent commands</div>
-      <ul className="plain-list" aria-label="Recent remote commands">
+      <ul aria-label="Recent remote commands">
         {status.commands.slice(0, 8).map((c) => <li key={c.id} className="kv-row-sub">
           <code>{c.type}</code> — {c.status}{c.requires_confirmation ? ' (confirmed)' : ''}{c.error ? `: ${c.error}` : ''}
         </li>)}
