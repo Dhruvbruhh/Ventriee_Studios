@@ -749,6 +749,23 @@ export class Store {
     this.db.run('DELETE FROM chat_messages WHERE id = ?', id)
   }
 
+  /**
+   * Edit/regenerate: drops an owner message and everything after it in its conversation.
+   * shortcut: the old turns are discarded, not kept as a branch; add branching if owners ask for it.
+   */
+  rewindChat(projectId: string, conversationId: string, messageId: string) {
+    const msg = this.db.get<ChatMessage & { rowid: number }>('SELECT rowid, * FROM chat_messages WHERE id = ?', messageId)
+    if (!msg || msg.projectId !== projectId || msg.conversationId !== conversationId || msg.role !== 'owner') {
+      throw new Error('That message is not in this session')
+    }
+    const where = 'conversationId = ? AND (createdAt > ? OR (createdAt = ? AND rowid >= ?))'
+    const args = [conversationId, msg.createdAt, msg.createdAt, msg.rowid]
+    if (this.db.get(`SELECT 1 FROM chat_messages WHERE ${where} AND status = 'streaming'`, ...args)) {
+      throw new Error('Wait for the current reply to finish')
+    }
+    this.db.run(`DELETE FROM chat_messages WHERE ${where}`, ...args)
+  }
+
   // ---------- planning: prompts ----------
   prompts(projectId: string): PromptDoc[] {
     return this.db.all<PromptDoc>(

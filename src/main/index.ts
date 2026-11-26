@@ -1254,11 +1254,11 @@ function registerIpc() {
     store.setActiveConversation(projectId, conversationId)
     debouncedNotify()
   })
-  handle(IPC.chatSend, async (_e, input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string; images?: string[] }) => {
+  handle(IPC.chatSend, async (_e, input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string; images?: string[]; replaceFrom?: string }) => {
     const project = store.project(input.projectId)
     if (!project) throw new Error('Project not found')
     capCheck(project.id)
-    const result = await planning.sendChat(project, input.text, input, attachmentPaths(project.path, input.images))
+    const result = await planning.sendChat(project, input.text, input, attachmentPaths(project.path, input.images), typeof input.replaceFrom === 'string' ? input.replaceFrom : undefined)
     debouncedNotify()
     return result.assistant
   })

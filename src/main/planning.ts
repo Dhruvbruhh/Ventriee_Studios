@@ -100,9 +100,11 @@ export class PlanningService {
     project: Project,
     text: string,
     choice: { engine: EngineKind; model: string; endpoint: string },
-    images: string[] = []
+    images: string[] = [],
+    replaceFrom?: string
   ): Promise<{ owner: ChatMessage; assistant: ChatMessage }> {
     const conversation = this.store.conversation(project.id)
+    if (replaceFrom) this.store.rewindChat(project.id, conversation.id, replaceFrom)
     const owner = this.store.addChatMessage({
       projectId: project.id,
       conversationId: conversation.id,

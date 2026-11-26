@@ -1,6 +1,6 @@
 # Ventriee Studios — Feature Status
 
-Last updated: 2026-11-25
+Last updated: 2026-11-26
 
 ## Legend
 - ✅ Implemented & wired
@@ -42,8 +42,8 @@ Last updated: 2026-11-25
 | Secure credential storage | ✅ | integrationCredentials.ts AES-256-GCM |
 | Streaming responses | ✅ | SSE on all API adapters |
 | Token / cost tracking | ✅ | sessions table, RunSummary |
-| Fallback models | ❌ | Not implemented |
-| Intelligent model routing | 🟡 | routingMode + costPreference settings |
+| Fallback models | ✅ | Agent runs: routed fallback chain; a failed task escalates to the next model (`routeModels` in `shared/routing.ts`, orchestrator). Planning chat uses the picked model only |
+| Intelligent model routing | ✅ | Capability profiles per model + task shape + costPreference (`shared/routing.ts`); profiles are derived from model names, owner overrides in Settings |
 
 ## Phase 3 — AI Chat & Prompt Studio
 | Feature | Status | Notes |
@@ -60,7 +60,7 @@ Last updated: 2026-11-25
 | Prompt enhancement via optimizer model | ✅ | promptEnhance IPC, Ollama supported |
 | Prompt history | ✅ | PromptPanel with version list |
 | Reusable templates | ❌ | Not implemented |
-| Message editing / regeneration | ❌ | Not implemented |
+| Message editing / regeneration | ✅ | Planning chat: edit any of your messages or regenerate the last reply; later turns are replaced (`Store.rewindChat`). Attached images are not resent |
 | Conversation export | ❌ | Not implemented |
 | Branching | ❌ | Not implemented |
 
