@@ -25,6 +25,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W11 | Unified resource library + natural-language discovery (§14) | - | Done | registry in `src/shared/resources.ts` + `src/main/resources.ts`; IPC `resources:list`; `ResourcesPanel` rewritten over real sources; `tests/resources.test.ts` (12 tests) |
 | W12 | Security Master tooling (§11) | - | Done | read-only scan in `src/shared/security.ts` + `src/main/securityScan.ts` (secrets, code patterns, .env hygiene, npm audit); IPC `security:scan`; Security panel; scan results injected into the security worker's prompt; `tests/security.test.ts` (12 tests) |
 | W13 | Frontend Master visual QA loop (§10) | - | Done | `src/main/visualQa.ts`: after a frontend worker delivers, the sandboxed browser renders the running preview at desktop + 390px mobile, screenshots both, and collects console errors; failures send the task to rework with the specific problems; the reviewer receives the rendered-check summary; `tests/visualQa.test.ts` (4 tests) |
+| W15 | Isolated Git worktrees for parallel code tasks (§9/§16) | - | Done | `src/main/worktrees.ts`: in a clean Git project with parallel runs on, each code task runs in its own worktree (branch `ventriee/task-<id>`, under the app data dir); after its evidence check it is committed and merged `--no-ff` one at a time; a conflict is aborted and the task goes to rework with the files listed; a dirty project is never merged into (branch kept). Falls back to in-place serialized work for non-git, uncommitted or setting-off projects. Boot recovery removes orphans and keeps unmerged branches. Setting "Isolate parallel code tasks". `tests/worktrees.test.ts` (5), `tests/orchestrator-worktrees.test.ts` (3) |
 
 ## Verification baseline (master, after W13)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -95,3 +96,23 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   optional structural `browser`. Known limit: screenshots live in the browser
   screens folder and the run log; the task review stores the summary, not the
   image.
+- 2026-11-26: W15. Parallel code tasks wrote straight into the project folder, so
+  writers whose role scopes overlapped had to wait for each other. Now, when the
+  project is a Git repository with a commit, no uncommitted owner changes, the
+  run allows more than one session and the new "Isolate parallel code tasks"
+  setting is on (default), each code-writing task gets its own `git worktree` on
+  branch `ventriee/task-<id>` under `<userData>/worktrees/<project>/<task>`
+  (node_modules is linked in, never committed). After the evidence check passes
+  the task's changes are committed and merged into the checked-out branch, one
+  merge at a time per project, before deploy approval, visual QA and review (so
+  the preview and the reviewer see the merged result). A conflict is aborted
+  and the task goes to rework with the conflicting files; the rework starts
+  from the merged project. If the owner has edited the project meanwhile, the
+  merge is skipped and the task's branch is kept (task failed, owner told).
+  Worktrees and branches are removed on success, failure and stop; at boot,
+  orphans are removed and branches with unmerged commits are kept and reported.
+  The run log records which worktree a task used and the merge result. Also
+  fixed in `runQueue`: a lone task cooling down in rework ended the run
+  instead of retrying. Known limits: stashing uncommitted owner work (with
+  approval) is not built, so a dirty project falls back to in-place work;
+  intelligence retrieval still indexes the project folder, not the worktree.
