@@ -17,7 +17,7 @@ import { ROLE_TEMPLATES, roleByName, MANDATORY_SKILLS, WEBSITE_ROLES, type Phase
 import { scopeToRole, DELIVERABLE_BY_ROLE } from './brief'
 import { heuristicPlan, orderTasks, parsePlanAnswer, pickSpecialists, type Plan } from './planner'
 import { promotable } from './queue'
-import { routeModel } from './routing'
+import { routeModel, routeModels, type RouteChoice } from './routing'
 import { newId } from './store'
 import { redact } from './redact'
 import type {
@@ -642,13 +642,18 @@ JSON shape:
     // Automatic routing picks per task, so an easy task can run on a cheaper model than a hard one.
     const run = { engine: agent.engine, model: agent.model, endpoint: agent.endpoint }
     const settings = this.deps.store.settings()
+    // The ranked candidate chain; the run loop below escalates to the next entry when a model fails.
+    const runFromChoice = (choice: RouteChoice) => {
+      const config = this.deps.providerConfigs().find((p) => p.id === choice.option.provider)
+      return { engine: (config?.engine ?? choice.option.provider) as EngineKind, model: choice.option.model, endpoint: config?.baseUrl ?? '' }
+    }
+    let chain: RouteChoice[] = []
     if (settings.routingMode === 'automatic' || (settings.routingMode === 'hybrid' && !agent.model.trim())) {
-      const choice = routeModel({ role: task.role, models: this.deps.models(), costPreference: settings.costPreference, difficulty: task.difficulty })
-      if (choice) {
-        const config = this.deps.providerConfigs().find((p) => p.id === choice.option.provider)
-        Object.assign(run, { engine: (config?.engine ?? choice.option.provider) as EngineKind, model: choice.option.model, endpoint: config?.baseUrl ?? '' })
+      chain = routeModels({ role: task.role, models: this.deps.models(), costPreference: settings.costPreference, difficulty: task.difficulty, profiles: settings.modelProfiles })
+      if (chain[0]) {
+        Object.assign(run, runFromChoice(chain[0]))
         this.deps.store.updateTask(task.id, { ...run, routedBy: settings.routingMode })
-        this.log(project.id, agent.id, task.id, 'plan', `Routed "${task.title}" to ${run.model}: ${choice.reason}`)
+        this.log(project.id, agent.id, task.id, 'plan', `Routed "${task.title}" to ${run.model}: ${chain[0].reason}${chain.length > 1 ? ` (+${chain.length - 1} fallback${chain.length > 2 ? 's' : ''})` : ''}`)
       }
     }
 
@@ -731,65 +736,86 @@ JSON shape:
       return outcome
     }
 
-    let result = await runOnce(sessionId, effort, WORKER_MAX_TOKENS)
-    // Probes on Deploy: 'none' delivers files in seconds, while low/minimal/absent all
-    // burn the whole budget thinking. Some models keep thinking even with it off (a
-    // probe of Deploy's GLM 5.3 flash: 50 of 53 tokens were reasoning), so the one
-    // automatic retry also gets twice the output room: the thinking fits and the answer
-    // still comes after it. It runs even when the worker is already set to Off. CLI
-    // engines are skipped: they manage their own loop and the flag differs per tool.
-    if (result.ok && result.reasoningOnly && !isCliEngine(run.engine)) {
-      const retryId = newId('ses')
-      this.deps.store.insertSession({ ...session, id: retryId, reasoning: 'none', startedAt: Date.now() })
-      this.log(
-        project.id,
-        agent.id,
-        task.id,
-        'note',
-        `${agent.name}'s model spent its budget reasoning; retrying once with thinking off and ${WORKER_RETRY_TOKENS} tokens of room`
-      )
-      this.deps.store.addMessage({
-        projectId: project.id,
-        taskId: task.id,
-        sender: agent.id,
-        recipient: 'orchestrator',
-        type: 'note',
-        content: `${agent.name}'s first attempt produced only reasoning. Retried with thinking off and a ${WORKER_RETRY_TOKENS}-token output limit.${effort === 'none' ? ' This model thinks even when told not to; a model without built-in thinking avoids the extra session.' : ' Set "Off" on this worker in Settings to avoid the extra session.'}`,
-        status: 'read'
-      })
-      result = await runOnce(retryId, 'none', WORKER_RETRY_TOKENS)
-    }
-    // A reply cut off at the cap is half a deliverable. Repeating the prompt just hits
-    // the same wall, and a bigger budget only moves it: run #20 retried a designer at
-    // 16000 then 32000 and both were cut off. So ask for the remainder instead and
-    // stitch the parts together, keeping every finished file. CLI engines run their own
-    // loop and their own budget.
-    let whole = result.text
-    for (
-      let part = 0;
-      result.ok && result.truncated && !result.reasoningOnly && !isCliEngine(run.engine) && part < WORKER_CONTINUATIONS;
-      part++
-    ) {
-      const retryId = newId('ses')
-      this.deps.store.insertSession({ ...session, id: retryId, reasoning: effort, startedAt: Date.now() })
-      this.log(
-        project.id,
-        agent.id,
-        task.id,
-        'note',
-        `${agent.name}'s reply was cut off; asking for the rest (${part + 1} of ${WORKER_CONTINUATIONS})`
-      )
-      this.deps.store.addMessage({
-        projectId: project.id,
-        taskId: task.id,
-        sender: agent.id,
-        recipient: 'orchestrator',
-        type: 'note',
-        content: `${agent.name}'s reply was cut off at the ${capUsed}-token output limit. Asked it to continue from where it stopped, keeping the ${whole.length} characters already produced.`,
-        status: 'read'
-      })
-      result = await runOnce(retryId, effort, WORKER_RETRY_TOKENS, continuePrompt(prompt, whole))
-      if (!result.reasoningOnly) whole = mergeAnswer(whole, result.text)
+    // Try the routed candidates in order, escalating to the next only when a model
+    // hard-fails (engine error, model unavailable). The reasoning-off and truncation
+    // retries below stay per-model, so one model is never retried more than before.
+    let result!: Awaited<ReturnType<typeof runOnce>>
+    let whole = ''
+    const attempts = Math.max(chain.length, 1)
+    for (let ci = 0; ci < attempts; ci++) {
+      let attemptSessionId = sessionId
+      if (ci > 0) {
+        Object.assign(run, runFromChoice(chain[ci]!))
+        attemptSessionId = newId('ses')
+        this.deps.store.insertSession({ ...session, id: attemptSessionId, engine: run.engine, model: run.model, startedAt: Date.now() })
+        this.deps.store.updateTask(task.id, { ...run, routedBy: settings.routingMode })
+        this.log(project.id, agent.id, task.id, 'plan', `Escalated "${task.title}" to fallback ${run.model}: ${chain[ci]!.reason}`)
+      }
+
+      result = await runOnce(attemptSessionId, effort, WORKER_MAX_TOKENS)
+      // Probes on Deploy: 'none' delivers files in seconds, while low/minimal/absent all
+      // burn the whole budget thinking. Some models keep thinking even with it off (a
+      // probe of Deploy's GLM 5.3 flash: 50 of 53 tokens were reasoning), so the one
+      // automatic retry also gets twice the output room: the thinking fits and the answer
+      // still comes after it. It runs even when the worker is already set to Off. CLI
+      // engines are skipped: they manage their own loop and the flag differs per tool.
+      if (result.ok && result.reasoningOnly && !isCliEngine(run.engine)) {
+        const retryId = newId('ses')
+        this.deps.store.insertSession({ ...session, id: retryId, engine: run.engine, model: run.model, reasoning: 'none', startedAt: Date.now() })
+        this.log(
+          project.id,
+          agent.id,
+          task.id,
+          'note',
+          `${agent.name}'s model spent its budget reasoning; retrying once with thinking off and ${WORKER_RETRY_TOKENS} tokens of room`
+        )
+        this.deps.store.addMessage({
+          projectId: project.id,
+          taskId: task.id,
+          sender: agent.id,
+          recipient: 'orchestrator',
+          type: 'note',
+          content: `${agent.name}'s first attempt produced only reasoning. Retried with thinking off and a ${WORKER_RETRY_TOKENS}-token output limit.${effort === 'none' ? ' This model thinks even when told not to; a model without built-in thinking avoids the extra session.' : ' Set "Off" on this worker in Settings to avoid the extra session.'}`,
+          status: 'read'
+        })
+        result = await runOnce(retryId, 'none', WORKER_RETRY_TOKENS)
+      }
+      // A reply cut off at the cap is half a deliverable. Repeating the prompt just hits
+      // the same wall, and a bigger budget only moves it: run #20 retried a designer at
+      // 16000 then 32000 and both were cut off. So ask for the remainder instead and
+      // stitch the parts together, keeping every finished file. CLI engines run their own
+      // loop and their own budget.
+      whole = result.text
+      for (
+        let part = 0;
+        result.ok && result.truncated && !result.reasoningOnly && !isCliEngine(run.engine) && part < WORKER_CONTINUATIONS;
+        part++
+      ) {
+        const retryId = newId('ses')
+        this.deps.store.insertSession({ ...session, id: retryId, engine: run.engine, model: run.model, reasoning: effort, startedAt: Date.now() })
+        this.log(
+          project.id,
+          agent.id,
+          task.id,
+          'note',
+          `${agent.name}'s reply was cut off; asking for the rest (${part + 1} of ${WORKER_CONTINUATIONS})`
+        )
+        this.deps.store.addMessage({
+          projectId: project.id,
+          taskId: task.id,
+          sender: agent.id,
+          recipient: 'orchestrator',
+          type: 'note',
+          content: `${agent.name}'s reply was cut off at the ${capUsed}-token output limit. Asked it to continue from where it stopped, keeping the ${whole.length} characters already produced.`,
+          status: 'read'
+        })
+        result = await runOnce(retryId, effort, WORKER_RETRY_TOKENS, continuePrompt(prompt, whole))
+        if (!result.reasoningOnly) whole = mergeAnswer(whole, result.text)
+      }
+
+      // A clean run, or no fallback left: stop here and let the handling below decide.
+      if (result.ok || ci >= attempts - 1) break
+      this.log(project.id, agent.id, task.id, 'note', `${agent.name}'s model ${run.model} failed (${this.safe(result.error ?? 'engine error')}); escalating to the next routed model`)
     }
     // Redact once: everything downstream (task output, mail, review) reads this.
     // A continued answer is only whole when its parts are joined: the last reply is
@@ -1629,7 +1655,8 @@ Answer with a JSON object only: {"verdict":"pass"|"fail","reasoning":"...","bloc
       role: agent.role,
       models: this.deps.models(),
       costPreference: this.deps.store.settings().costPreference,
-      inUse
+      inUse,
+      profiles: this.deps.store.settings().modelProfiles
     })
     if (!choice) {
       // No discovered models: keep the worker's own config rather than guessing.

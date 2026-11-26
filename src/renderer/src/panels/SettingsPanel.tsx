@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { guard, useStore } from '../store'
 import { Modal, Switch } from '../shell'
-import { ENGINE_LABELS, type Agent, type EngineKind } from '../../../shared/types'
+import { ENGINE_LABELS, type Agent, type EngineKind, type Difficulty, type ModelProfile } from '../../../shared/types'
+import { effectiveProfile, routeModels } from '../../../shared/routing'
 // CLI adapters spawn a process per request; mirrors isCliEngine in main.
 const isCliEngine = (engine: EngineKind) => engine.startsWith('cli-')
 import { IconClose, IconCheck, IconCpu, IconDatabase, IconKey, IconPlug, IconPlus, IconRefresh, IconSliders, IconTrash, IconUsers } from '../icons'
@@ -615,6 +616,100 @@ function SyncAndReports() {
   </>
 }
 
+/** View and override a model's capability profile, and preview the routing decision it produces. */
+function ModelProfiles() {
+  const snapshot = useStore((s) => s.snapshot)!
+  const settings = snapshot.settings
+  const models = useMemo(() => snapshot.models.filter((m) => m.model.trim()), [snapshot.models])
+  const [key, setKey] = useState('')
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium')
+
+  const selected = models.find((m) => `${m.provider}::${m.model}` === key) ?? models[0]
+  const selectedKey = selected ? `${selected.provider}::${selected.model}` : ''
+  const profile = selected ? effectiveProfile(selected, settings.modelProfiles) : null
+  const overridden = Boolean(settings.modelProfiles[selectedKey])
+
+  const saveProfile = (next: Partial<ModelProfile>) => {
+    if (!profile) return
+    const profiles = { ...settings.modelProfiles, [selectedKey]: { ...profile, ...next } }
+    void guard(() => window.ventriee.saveSettings({ modelProfiles: profiles }))
+  }
+  const reset = () => {
+    const profiles = { ...settings.modelProfiles }
+    delete profiles[selectedKey]
+    void guard(() => window.ventriee.saveSettings({ modelProfiles: profiles }))
+  }
+
+  const chain = useMemo(
+    () => routeModels({ role: '', models, costPreference: settings.costPreference, difficulty, profiles: settings.modelProfiles }),
+    [models, settings.costPreference, settings.modelProfiles, difficulty]
+  )
+
+  if (!models.length) return <div className="kv-row-sub">No models discovered yet. Add an engine, then reopen Settings.</div>
+  if (!selected || !profile) return null
+
+  return (
+    <div className="profile-editor">
+      <div className="kv-row">
+        <div className="kv-row-main">
+          <div className="kv-row-title">Capability profile</div>
+          <div className="kv-row-sub">What the router knows about a model. Edits override the value derived from the model name{overridden ? '; this model is overridden.' : '.'}</div>
+        </div>
+        <select className="select w-md" value={selectedKey} onChange={(e) => setKey(e.target.value)} aria-label="Model">
+          {models.map((m) => <option key={`${m.provider}::${m.model}`} value={`${m.provider}::${m.model}`}>{m.model} · {m.providerLabel}</option>)}
+        </select>
+      </div>
+      <div className="profile-grid">
+        <label>Context window
+          <input className="input w-xs" type="number" min={0} value={profile.contextWindow} onChange={(e) => saveProfile({ contextWindow: Math.max(0, Number(e.target.value) || 0) })} />
+        </label>
+        <label>Coding score
+          <input className="input w-xs" type="number" min={0} max={100} value={profile.codingScore} onChange={(e) => saveProfile({ codingScore: clamp100(e.target.value) })} />
+        </label>
+        <label>Reasoning score
+          <input className="input w-xs" type="number" min={0} max={100} value={profile.reasoningScore} onChange={(e) => saveProfile({ reasoningScore: clamp100(e.target.value) })} />
+        </label>
+        <label>Cost tier
+          <select className="select w-sm" value={profile.costTier} onChange={(e) => saveProfile({ costTier: e.target.value as ModelProfile['costTier'] })}>
+            {(['free', 'low', 'medium', 'high'] as const).map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </label>
+        <label>Latency
+          <select className="select w-sm" value={profile.latencyTier} onChange={(e) => saveProfile({ latencyTier: e.target.value as ModelProfile['latencyTier'] })}>
+            {(['fast', 'medium', 'slow'] as const).map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </label>
+        <label>Availability
+          <select className="select w-sm" value={profile.availability} onChange={(e) => saveProfile({ availability: e.target.value as ModelProfile['availability'] })}>
+            {(['available', 'degraded', 'unavailable'] as const).map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </label>
+        <label className="profile-check"><input type="checkbox" checked={profile.toolCalling} onChange={(e) => saveProfile({ toolCalling: e.target.checked })} /> Tool calling</label>
+        <label className="profile-check"><input type="checkbox" checked={profile.vision} onChange={(e) => saveProfile({ vision: e.target.checked })} /> Vision</label>
+      </div>
+      {overridden ? <button className="btn tiny" onClick={reset}>Reset to derived</button> : null}
+
+      <div className="kv-row space-above">
+        <div className="kv-row-main">
+          <div className="kv-row-title">Routing decision</div>
+          <div className="kv-row-sub">Order the router would try for a {difficulty}-difficulty task at the current cost preference. The top entry runs; the rest are fallbacks.</div>
+        </div>
+        <select className="select w-sm" value={difficulty} onChange={(e) => setDifficulty(e.target.value as Difficulty)} aria-label="Difficulty">
+          {(['low', 'medium', 'high'] as const).map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+      </div>
+      <ol className="route-chain">
+        {chain.slice(0, 6).map((c, i) => (
+          <li key={`${c.option.provider}::${c.option.model}`}><span className="route-rank">{i === 0 ? 'picks' : `#${i}`}</span> {c.option.model} — {c.reason}</li>
+        ))}
+        {chain.length === 0 ? <li className="kv-row-sub">Every model is marked unavailable.</li> : null}
+      </ol>
+    </div>
+  )
+}
+
+const clamp100 = (v: string) => Math.max(0, Math.min(100, Number(v) || 0))
+
 function RunPolicy() {
   const snapshot = useStore((s) => s.snapshot)!
   const settings = snapshot.settings
@@ -663,6 +758,7 @@ function RunPolicy() {
           <option value="quality">Best quality</option>
         </select>
       </div>
+      <ModelProfiles />
 
       <div className="section-label space-above">Prompt optimizer</div>
       <div className="kv-row">

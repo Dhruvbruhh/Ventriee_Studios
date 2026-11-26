@@ -1480,6 +1480,18 @@
   .clamp-10 { -webkit-line-clamp: 10; }
   .w-xs { width: 72px; }
   .w-sm { width: 140px; }
+  .w-md { width: 220px; }
+  .profile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px 16px;
+    margin: 10px 0;
+  }
+  .profile-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; opacity: 0.85; }
+  .profile-grid label.profile-check { flex-direction: row; align-items: center; gap: 6px; }
+  .route-chain { margin: 8px 0 0; padding-left: 0; list-style: none; font-size: 12px; }
+  .route-chain li { padding: 3px 0; opacity: 0.9; }
+  .route-rank { display: inline-block; min-width: 42px; font-weight: 600; opacity: 0.7; }
   .max-h-sm { max-height: 200px; }
   .sr-only {
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;

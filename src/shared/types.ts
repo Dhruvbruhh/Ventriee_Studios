@@ -164,6 +164,26 @@ export interface ModelOption {
   note?: string
 }
 
+/**
+ * What a model can do, so routing can pick on capability instead of a name regex.
+ * Derived from the model id (and the provider's `free` flag) by `deriveProfile`;
+ * the owner may override any field per model in Settings.
+ */
+export interface ModelProfile {
+  /** Tokens the model can take in one request. */
+  contextWindow: number
+  toolCalling: boolean
+  vision: boolean
+  /** 0-100 fit for writing/fixing code. */
+  codingScore: number
+  /** 0-100 fit for multi-step reasoning. */
+  reasoningScore: number
+  costTier: 'free' | 'low' | 'medium' | 'high'
+  latencyTier: 'fast' | 'medium' | 'slow'
+  /** 'unavailable' takes the model out of routing; 'degraded' deprioritises it. */
+  availability: 'available' | 'degraded' | 'unavailable'
+}
+
 export interface ModelPrefs {
   /** `${provider}::${model}` */
   favorites: string[]
@@ -390,6 +410,8 @@ export interface AppSettings {
   /** Who picks models: the owner, the orchestrator, or both. */
   routingMode: RoutingMode
   costPreference: CostPreference
+  /** Owner overrides for a model's capability profile, keyed by `${provider}::${model}`. Only the fields present override the derived defaults. */
+  modelProfiles: Record<string, Partial<ModelProfile>>
   /** Engine used for planning chat, prompt generation and enhancement. */
   plannerEngine: EngineKind
   plannerModel: string
