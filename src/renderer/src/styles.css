@@ -1506,6 +1506,9 @@
   .profile-grid label.profile-check { flex-direction: row; align-items: center; gap: 6px; }
   .route-chain { margin: 8px 0 0; padding-left: 0; list-style: none; font-size: 12px; }
   .route-chain li { padding: 3px 0; opacity: 0.9; }
+  .mem-history { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 6px; }
+  .outcome-table { width: 100%; margin-top: 6px; font-size: 12px; border-collapse: collapse; }
+  .outcome-table th, .outcome-table td { padding: 3px 6px; text-align: left; }
   .route-rank { display: inline-block; min-width: 42px; font-weight: 600; opacity: 0.7; }
   .max-h-sm { max-height: 200px; }
   .sr-only {

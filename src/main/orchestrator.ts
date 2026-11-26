@@ -753,7 +753,7 @@ JSON shape:
     }
     let chain: RouteChoice[] = []
     if (settings.routingMode === 'automatic' || (settings.routingMode === 'hybrid' && !agent.model.trim())) {
-      chain = routeModels({ role: task.role, models: this.deps.models(), costPreference: settings.costPreference, difficulty: task.difficulty, profiles: settings.modelProfiles })
+      chain = routeModels({ role: task.role, models: this.deps.models(), costPreference: settings.costPreference, difficulty: task.difficulty, profiles: settings.modelProfiles, outcomes: this.deps.store.modelOutcomeStats() })
       if (chain[0]) {
         Object.assign(run, runFromChoice(chain[0]))
         this.deps.store.updateTask(task.id, { ...run, routedBy: settings.routingMode })
@@ -929,6 +929,7 @@ JSON shape:
 
       // A clean run, or no fallback left: stop here and let the handling below decide.
       if (result.ok || ci >= attempts - 1) break
+      if (!controller.signal.aborted) this.deps.store.recordModelOutcome(task.id, agent.id, 'failed')
       this.log(project.id, agent.id, task.id, 'note', `${agent.name}'s model ${run.model} failed (${this.safe(result.error ?? 'engine error')}); escalating to the next routed model`)
     }
     // Redact once: everything downstream (task output, mail, review) reads this.
@@ -951,6 +952,7 @@ JSON shape:
         status: 'rework',
         review: `Worker reported failure: ${error}. ${text.slice(-800)}`
       })
+      if (!controller.signal.aborted) this.deps.store.recordModelOutcome(task.id, agent.id, 'failed')
       this.deps.store.addMessage({
         projectId: project.id,
         taskId: task.id,
@@ -971,6 +973,7 @@ JSON shape:
       const why = `${agent.name}'s model spent its whole ${capUsed}-token output budget reasoning and never produced an answer. Pick a model without extended thinking for worker roles, or split the brief into smaller tasks.`
       this.deps.store.updateAgent(agent.id, { status: 'error', lastError: why, currentTaskId: null })
       this.deps.store.updateTask(task.id, { status: 'failed', review: `No answer: ${why}` })
+      this.deps.store.recordModelOutcome(task.id, agent.id, 'failed')
       this.deps.store.addMessage({
         projectId: project.id,
         taskId: task.id,
@@ -992,6 +995,7 @@ JSON shape:
       const why = `${agent.name}'s model stopped at its ${capUsed}-token output limit, so its reply is incomplete and was not written. Split the task into smaller pieces.`
       this.deps.store.updateAgent(agent.id, { status: 'error', lastError: why, currentTaskId: null })
       this.deps.store.updateTask(task.id, { status: 'failed', review: `Incomplete answer: ${why}` })
+      this.deps.store.recordModelOutcome(task.id, agent.id, 'failed')
       this.deps.store.addMessage({
         projectId: project.id,
         taskId: task.id,
@@ -1040,6 +1044,7 @@ JSON shape:
         ? `Produce the actual deliverable in ${cwd}, then report back.`
         : 'Reply with the deliverable as === FILE: … === blocks and nothing else outside them.'
       this.deps.store.updateTask(task.id, { status: 'rework', review: `Evidence check failed: ${evidence.summary}` })
+      this.deps.store.recordModelOutcome(task.id, agent.id, 'rework')
       this.deps.store.addMessage({
         projectId: project.id,
         taskId: task.id,
@@ -1084,6 +1089,7 @@ JSON shape:
           if (!visual.ok) {
             const detail = visual.problems.slice(0, 4).join(' | ')
             this.deps.store.updateTask(task.id, { status: 'rework', review: `Visual QA failed: ${detail}. ${evidence.summary}` })
+            this.deps.store.recordModelOutcome(task.id, agent.id, 'rework')
             this.deps.store.addMessage({
               projectId: project.id,
               taskId: task.id,
@@ -1297,6 +1303,7 @@ ${rules}
       const note = `Evidence pass only — independent review did not run (${reason}). ${evidence.summary}`
       this.deps.store.updateTask(taskId, { status: 'done', review: note })
       this.deps.memory.recordTaskOutcome(task, worker, project, true, evidence.summary)
+      this.deps.store.recordModelOutcome(taskId, worker.id, 'passed')
       this.log(project.id, worker.id, taskId, 'review', `Accepted on evidence alone: ${reason}`)
       return
     }
@@ -1397,6 +1404,7 @@ Answer with a JSON object only: {"verdict":"pass"|"fail","reasoning":"...","bloc
       const note = `Evidence pass only — independent review did not run (${reason}). ${evidence.summary}`
       this.deps.store.updateTask(taskId, { status: 'done', review: note.slice(0, 900) })
       this.deps.memory.recordTaskOutcome(task, worker, project, true, evidence.summary)
+      this.deps.store.recordModelOutcome(taskId, worker.id, 'passed')
       this.deps.store.addMessage({
         projectId: project.id,
         taskId,
@@ -1417,6 +1425,7 @@ Answer with a JSON object only: {"verdict":"pass"|"fail","reasoning":"...","bloc
       review: `Reviewer ${reviewer.name}: ${passed ? 'pass' : 'fail'} — ${parsed.reasoning}${blockers}`.slice(0, 900)
     })
     this.deps.memory.recordTaskOutcome(task, worker, project, passed, evidence.summary)
+    this.deps.store.recordModelOutcome(taskId, worker.id, passed ? 'passed' : 'rework')
     this.deps.store.addMessage({
       projectId: project.id,
       taskId,
@@ -1823,7 +1832,8 @@ Answer with a JSON object only: {"verdict":"pass"|"fail","reasoning":"...","bloc
       models: this.deps.models(),
       costPreference: this.deps.store.settings().costPreference,
       inUse,
-      profiles: this.deps.store.settings().modelProfiles
+      profiles: this.deps.store.settings().modelProfiles,
+      outcomes: this.deps.store.modelOutcomeStats()
     })
     if (!choice) {
       // No discovered models: keep the worker's own config rather than guessing.

@@ -1,16 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { guard, useStore } from '../store'
 import { Modal } from '../shell'
 import { IconCheck, IconEdit, IconPin, IconPlus, IconSearch, IconTrash } from '../icons'
-import type { MemoryDoc } from '../../../shared/types'
+import type { MemoryDoc, MemoryVersion } from '../../../shared/types'
 
-const SCOPES: Record<string, string> = { global: 'Everywhere', project: 'This project', agent: 'Workers', skill: 'Skills' }
+const SCOPES: Record<string, string> = { global: 'Everywhere', org: 'Organization', project: 'This project', agent: 'Workers', skill: 'Skills' }
 
 export function MemoryPanel({ onClose }: { onClose: () => void }) {
   const snapshot = useStore((s) => s.snapshot)!
   const [query, setQuery] = useState('')
   const [editing, setEditing] = useState<Partial<MemoryDoc> | null>(null)
   const [open, setOpen] = useState<string | null>(null)
+  const [history, setHistory] = useState<string | null>(null)
 
   const docs = useMemo(() => {
     if (!query.trim()) return snapshot.memories
@@ -46,6 +47,7 @@ export function MemoryPanel({ onClose }: { onClose: () => void }) {
         </button>
       }
     >
+      <OrgWorkspace />
       <div className="list-toolbar">
         <label className="search-field">
           <IconSearch width={14} height={14} />
@@ -77,8 +79,10 @@ export function MemoryPanel({ onClose }: { onClose: () => void }) {
                     {doc.body.slice(0, 1200)}
                   </button>
                   <p className="item-meta">{Math.round(doc.confidence * 100)}% confidence, {doc.source}, updated {new Date(doc.updatedAt).toLocaleDateString()}</p>
+                  {history === doc.id ? <VersionHistory doc={doc} /> : null}
                 </div>
                 <div className="item-actions">
+                  <button className={`btn tiny${history === doc.id ? ' active' : ''}`} onClick={() => setHistory(history === doc.id ? null : doc.id)} aria-expanded={history === doc.id} aria-label={`History of ${doc.title}`}>History</button>
                   <button className="icon-btn" onClick={() => setEditing(doc)} aria-label={`Edit ${doc.title}`} title="Edit"><IconEdit /></button>
                   <button className={`icon-btn${doc.pinned ? ' active' : ''}`} onClick={() => void guard(() => window.ventriee.pinMemory(doc.id), doc.pinned ? 'Unpinned' : 'Pinned')} aria-label={doc.pinned ? `Unpin ${doc.title}` : `Pin ${doc.title}`} title={doc.pinned ? 'Unpin' : 'Pin'}>
                     <IconPin />
@@ -112,7 +116,8 @@ function MemoryEditor({ doc, onClose }: { doc: Partial<MemoryDoc>; onClose: () =
   const [body, setBody] = useState(doc.body ?? '')
   const [scope, setScope] = useState<MemoryDoc['scope']>(doc.scope ?? 'project')
 
-  const suggested = path || (doc.scope === 'global' ? 'global/notes.md' : `projects/${snapshot.activeProjectId}/notes.md`)
+  // Org docs: main files them under orgs/<active org>/, so only the file name matters.
+  const suggested = path || (scope === 'global' ? 'global/notes.md' : scope === 'org' ? 'notes.md' : `projects/${snapshot.activeProjectId}/notes.md`)
 
   return (
     <div className="inset-form space-below">
@@ -124,7 +129,7 @@ function MemoryEditor({ doc, onClose }: { doc: Partial<MemoryDoc>; onClose: () =
         <div className="field field-narrow">
           <label className="field-label" htmlFor="mem-scope">Scope</label>
           <select id="mem-scope" className="select" value={scope} onChange={(e) => setScope(e.target.value as MemoryDoc['scope'])}>
-            {['global', 'project', 'agent', 'skill'].map((s) => <option key={s} value={s}>{SCOPES[s]}</option>)}
+            {['global', 'org', 'project', 'agent', 'skill'].map((s) => <option key={s} value={s}>{SCOPES[s]}</option>)}
           </select>
         </div>
       </div>
@@ -160,6 +165,83 @@ function MemoryEditor({ doc, onClose }: { doc: Partial<MemoryDoc>; onClose: () =
           <IconCheck /> Save
         </button>
       </div>
+    </div>
+  )
+}
+
+/** Saved states of a doc, newest first; restoring writes the old content as a new version. */
+function VersionHistory({ doc }: { doc: MemoryDoc }) {
+  const [versions, setVersions] = useState<MemoryVersion[] | null>(null)
+  const [shown, setShown] = useState<string | null>(null)
+  useEffect(() => {
+    void window.ventriee.memoryVersions(doc.id).then(setVersions, () => setVersions([]))
+  }, [doc.id, doc.updatedAt])
+  if (!versions) return <p className="item-meta">Loading history…</p>
+  if (!versions.length) return <p className="item-meta">No changes recorded yet.</p>
+  return (
+    <ol className="mem-history">
+      {versions.map((v, i) => (
+        <li key={v.id}>
+          <div className="item-meta">
+            {new Date(v.createdAt).toLocaleString()} · {v.source || 'unknown'}{v.taskId ? ` · task ${v.taskId}` : ''}{i === 0 ? ' · current' : ''}
+          </div>
+          <div className="row">
+            <button className="btn tiny" onClick={() => setShown(shown === v.id ? null : v.id)} aria-expanded={shown === v.id}>{shown === v.id ? 'Hide' : 'View'}</button>
+            {i > 0 ? (
+              <button className="btn tiny" onClick={() => void guard(() => window.ventriee.restoreMemoryVersion(v.id), 'Version restored')}>Restore</button>
+            ) : null}
+          </div>
+          {shown === v.id ? <pre className="debug-output max-h-sm">{v.body}</pre> : null}
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+/**
+ * Which org's memory this window sees. Org memory stays on this desktop; a project
+ * sees the org it was created in, or the one it is added to here.
+ */
+function OrgWorkspace() {
+  const snapshot = useStore((s) => s.snapshot)!
+  const [orgs, setOrgs] = useState<Array<{ id: string; name: string }> | null>(null)
+  const [active, setActive] = useState<string | null>(null)
+  useEffect(() => {
+    void window.ventriee.authStatus().then(async (session) => {
+      if (!session) return
+      setActive(session.activeOrgId)
+      setOrgs(await window.ventriee.cloudOrgs())
+    }).catch(() => setOrgs(null))
+  }, [])
+  if (!orgs?.length) return null
+  const project = snapshot.projects.find((p) => p.id === snapshot.activeProjectId)
+  const projectOrg = orgs.find((o) => o.id === project?.orgId)
+  return (
+    <div className="kv-row space-below">
+      <div className="kv-row-main">
+        <div className="kv-row-title">Organization memory</div>
+        <div className="kv-row-sub">
+          {project ? (projectOrg ? `${project.name} uses ${projectOrg.name}'s memory.` : `${project.name} is not in an organization.`) : 'No project open.'}
+          {' '}Kept on this desktop only.
+        </div>
+      </div>
+      <select
+        className="select w-sm"
+        aria-label="Organization workspace"
+        value={active ?? ''}
+        onChange={async (e) => {
+          const next = e.target.value || null
+          if (await guard(() => window.ventriee.cloudSetWorkspace(next))) setActive(next)
+        }}
+      >
+        <option value="">Personal</option>
+        {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+      </select>
+      {project && active && project.orgId !== active ? (
+        <button className="btn tiny" onClick={() => void guard(() => window.ventriee.updateProject(project.id, { orgId: active }), 'Project added to organization')}>
+          Use in this project
+        </button>
+      ) : null}
     </div>
   )
 }
