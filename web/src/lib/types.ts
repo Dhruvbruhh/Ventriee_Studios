@@ -1,5 +1,6 @@
 // Row shapes for the shared Supabase backend. Mirrors
-// supabase/migrations/0001_multitenant_foundation.sql and 0002_web_dashboard.sql.
+// supabase/migrations/0001_multitenant_foundation.sql, 0002_remote_control.sql,
+// 0003_web_dashboard.sql and 0004_ownership_guard.sql.
 // RLS on the server is the authority on access; these are just the wire shapes.
 
 export type MembershipRole = 'owner' | 'admin' | 'project_manager' | 'employee'

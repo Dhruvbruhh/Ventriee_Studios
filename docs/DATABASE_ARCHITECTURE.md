@@ -10,7 +10,12 @@ It does not replace the local database. It is the shared, multi-tenant data mode
 that those clients read and write through Supabase, using the same Supabase
 identity the desktop app already signs in with (`src/main/auth.ts`).
 
-Source of truth: [`supabase/migrations/0001_multitenant_foundation.sql`](../supabase/migrations/0001_multitenant_foundation.sql).
+Source of truth: the ordered files in [`supabase/migrations/`](../supabase/migrations/):
+`0001_multitenant_foundation.sql` (tenancy, RLS), `0002_remote_control.sql`
+(command bus), `0003_web_dashboard.sql` (profiles, comments, task metadata) and
+`0004_ownership_guard.sql` (ownership integrity). `tests/migrations.test.ts`
+applies all four to an embedded PostgreSQL and exercises the policies as real
+users, so the schema is verified locally without a Supabase project.
 
 ## Tenancy model
 
@@ -35,6 +40,10 @@ switching is local state that scopes queries — access itself is enforced by RL
 | `devices` | Desktop runtime registry — each IDE instance a user signs into. | personal device |
 | `audit_log` | Append-only trail of actions. | personal action |
 | `shared_resources` | Metadata for shared files/links/prompts. | personal resource |
+| `device_grants` | Explicit per-device remote-control grants (`0002`). | — |
+| `commands` | Durable remote command queue addressed to a device (`0002`). | — |
+| `profiles` | Readable mirror of `auth.users` so rosters render names (`0003`). | — |
+| `task_comments` | Append-only progress notes on a task (`0003`). | — |
 
 ### Roles
 

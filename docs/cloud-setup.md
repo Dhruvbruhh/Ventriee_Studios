@@ -5,8 +5,16 @@ step the project owner runs; the desktop app already signs in with Supabase Auth
 (see [supabase-authentication.md](./supabase-authentication.md)).
 
 The schema and access model are described in
-[DATABASE_ARCHITECTURE.md](./DATABASE_ARCHITECTURE.md). The migration lives in
-[`supabase/migrations/0001_multitenant_foundation.sql`](../supabase/migrations/0001_multitenant_foundation.sql).
+[DATABASE_ARCHITECTURE.md](./DATABASE_ARCHITECTURE.md). The migrations live in
+[`supabase/migrations/`](../supabase/migrations/) and must be applied in filename
+order:
+
+| File | Adds |
+| --- | --- |
+| `0001_multitenant_foundation.sql` | orgs, memberships, projects, tasks, assignments, devices, audit log, shared resources + RLS |
+| `0002_remote_control.sql` | per-device remote control, grants, command queue |
+| `0003_web_dashboard.sql` | profiles (names instead of UUIDs), task comments, task priority/deadline/description |
+| `0004_ownership_guard.sql` | prevents an org ever losing its last owner; admins cannot remove or demote an owner |
 
 ## Prerequisites
 
@@ -29,8 +37,11 @@ Pick one.
 ### Option A — Supabase SQL editor (no tooling)
 
 1. Open your project → **SQL Editor** → **New query**.
-2. Paste the contents of `supabase/migrations/0001_multitenant_foundation.sql`.
-3. Run it. It is idempotent (`if not exists`, `or replace`), so re-running is safe.
+2. Paste and run each file **in order**, `0001` through `0004`.
+3. Tables use `if not exists`, so re-running is safe. Policies and triggers are not
+   all idempotent on a second manual run: if you re-paste a file you already ran,
+   `drop policy`/`create policy` pairs after `0001` will error. Use the CLI (below)
+   for repeatable application, or only re-run files that have not been applied.
 
 ### Option B — Supabase CLI (recommended, version-controlled)
 
@@ -43,9 +54,22 @@ supabase db push
 ```
 
 Add later schema changes as new numbered files in `supabase/migrations/`
-(`0002_*.sql`, …); `supabase db push` applies the ones not yet run.
+(`0005_*.sql`, …); `supabase db push` applies the ones not yet run. Never reuse a
+version prefix: two files starting with the same number are treated as one
+migration by the CLI.
 
-## Verify
+## Verify locally first (no Supabase project needed)
+
+`npm test` runs `tests/migrations.test.ts`, which applies all migrations to an
+embedded PostgreSQL (PGlite) and signs in as test users to check the access rules
+(cross-org isolation, ownership invariants, remote-control grants, audit log
+append-only). Run just that file with:
+
+```bash
+npx vitest run tests/migrations.test.ts
+```
+
+## Verify the deployed project
 
 After applying, confirm RLS is on and policies exist (SQL editor):
 
@@ -54,8 +78,9 @@ select tablename, rowsecurity
 from pg_tables
 where schemaname = 'public'
 order by tablename;
--- rowsecurity must be true for: organizations, memberships, projects, tasks,
--- task_assignments, devices, audit_log, shared_resources
+-- rowsecurity must be true for all 12 public tables (organizations, memberships,
+-- projects, tasks, task_assignments, devices, audit_log, shared_resources,
+-- device_grants, commands, profiles, task_comments)
 
 select tablename, count(*) as policies
 from pg_policies

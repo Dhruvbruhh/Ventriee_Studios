@@ -4,10 +4,8 @@
 -- Every table below has RLS enabled and explicit policies; nothing is world-readable.
 --
 -- Apply with the Supabase CLI (`supabase db push`) or paste into the SQL editor.
--- See docs/cloud-setup.md. Requires the pgcrypto extension for gen_random_uuid()
--- and Supabase's built-in auth schema (auth.users, auth.uid()).
-
-create extension if not exists pgcrypto;
+-- See docs/cloud-setup.md. Needs Supabase's built-in auth schema (auth.users,
+-- auth.uid()). gen_random_uuid() is core in PostgreSQL 13+, so no extension.
 
 -- ---------------------------------------------------------------------------
 -- Roles

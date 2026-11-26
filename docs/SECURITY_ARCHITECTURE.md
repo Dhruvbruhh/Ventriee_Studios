@@ -81,17 +81,19 @@ The preload surface (`src/preload/index.ts`) only exposes the typed
 - The Supabase `apikey` header carries the **publishable** key only; the app
   rejects administrative/service keys at startup (`isPublicSupabaseKey`).
 
-## Row-Level Security summary (migrations 0001-0002)
+## Row-Level Security summary (migrations 0001-0004)
 
 All tables have RLS enabled; every policy is caller-scoped (no
 `using (true)`). The security-definer helpers (`is_org_member`,
 `has_org_role`, `can_control_device`, `owns_device`, `shares_org_with`) pin
-`search_path = ''` to block function hijacking.
+`search_path = ''` to block function hijacking. `tests/migrations.test.ts` runs
+these policies against an embedded PostgreSQL as real signed-in users, so the
+invariants below are executed, not just read.
 
 | Area | Policy essence |
 | --- | --- |
 | Organizations | members read; owner creates; owners/admins update; only owner deletes. **Ownership is immutable through the API** (`no_owner_transfer` trigger) — an admin cannot reassign `owner_id`. |
-| Memberships | co-members read roster; owners/admins manage. **Only the owner may create/change rows with role `owner`** — no admin self-promotion (`role <> 'owner' or has_org_role(..., ['owner'])`). |
+| Memberships | co-members read roster; owners/admins manage. **Only the owner may create/change rows with role `owner`** — no admin self-promotion. Since 0004 an admin also cannot demote or delete an owner row (per-command policies), and the last owner cannot be removed ([`keep_org_owner`](../supabase/migrations/0004_ownership_guard.sql)). |
 | Projects/Tasks | personal = own rows (`org_id null`); org = role-gated (manager+ write, employees read). Task updates by assigned employee allowed. |
 | Task assignments | visible with the task; manager+ (or personal owner) assign. |
 | Devices | a user manages their own; org owners/admins see org-registered devices. **A device may only be placed in (or moved to) an org the user belongs to.** |
@@ -131,13 +133,10 @@ All tables have RLS enabled; every policy is caller-scoped (no
 2. **Machine trust.** A local attacker with access to the logged-in session
    can do anything that session can do (by design; the studio is a local
    developer tool). The OS keychain is the boundary.
-3. **Owner self-demotion.** An owner may delete their own membership row,
-   leaving an org with no owner (availability/operations gap, not an
-   escalation). Not prevented — flagged for a future pass.
-4. **Admin rename still allowed.** Admins may edit org names (intended); only
+3. **Admin rename still allowed.** Admins may edit org names (intended); only
    `owner_id` is immutable.
-5. **E2B provider errors** echo up to 300 chars of the upstream response body.
+4. **E2B provider errors** echo up to 300 chars of the upstream response body.
    Never the API key, but body text crosses the IPC boundary; acceptable while
    the sandbox API is trusted.
-6. **No server-side rate limiting** beyond Supabase's built-in 429 handling;
+5. **No server-side rate limiting** beyond Supabase's built-in 429 handling;
    the desktop maps 429 to a friendly retry message.
