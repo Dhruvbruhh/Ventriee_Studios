@@ -9,6 +9,7 @@ import type {
   CreateAgentInput,
   EngineKind,
   MemoryDoc,
+  MemoryVersion,
   Message,
   ModelOption,
   ModelPrefs,
@@ -92,6 +93,8 @@ export const IPC = {
   deleteMemory: 'memory:delete',
   pinMemory: 'memory:pin',
   searchMemory: 'memory:search',
+  memoryVersions: 'memory:versions',
+  restoreMemoryVersion: 'memory:restore-version',
   importSkill: 'skill:import',
   toggleSkill: 'skill:toggle',
   refreshSkills: 'skill:refresh',
@@ -328,6 +331,8 @@ export interface VentrieeApi {
   deleteMemory(id: string): Promise<void>
   pinMemory(id: string): Promise<void>
   searchMemory(query: string): Promise<MemoryDoc[]>
+  memoryVersions(id: string): Promise<MemoryVersion[]>
+  restoreMemoryVersion(versionId: string): Promise<MemoryDoc>
   importSkill(): Promise<SkillImportResult | null>
   toggleSkill(id: string): Promise<void>
   refreshSkills(): Promise<SkillRecord[]>

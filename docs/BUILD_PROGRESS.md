@@ -28,6 +28,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W16 | Requirements clarification before planning (§8) | - | Done | `src/main/clarify.ts` (prompt, defensive parse capped at 5, fold answers into a "Clarifications" block); `Orchestrator.clarify` + IPC `run:clarify`; question panel in Simple mode, Assign dialog (orchestrator mode) and command bar; setting "Ask clarifying questions"; `tests/clarify.test.ts` (6 tests) |
 | W17 | Agent catalogue with departments + importable manifests (§9) | - | Done | branch `claude/w17-agent-catalogue-7ba21e`: `src/shared/agents.ts` (template format, manifest validation), catalogue in the app DB (`Store.agentCatalogue`), planner/hiring read enabled templates, Agents panel; `tests/agents-catalogue.test.ts` (18 tests) |
 | W15 | Isolated Git worktrees for parallel code tasks (§9/§16) | - | Done | `src/main/worktrees.ts`: in a clean Git project with parallel runs on, each code task runs in its own worktree (branch `ventriee/task-<id>`, under the app data dir); after its evidence check it is committed and merged `--no-ff` one at a time; a conflict is aborted and the task goes to rework with the files listed; a dirty project is never merged into (branch kept). Falls back to in-place serialized work for non-git, uncommitted or setting-off projects. Boot recovery removes orphans and keeps unmerged branches. Setting "Isolate parallel code tasks". `tests/worktrees.test.ts` (5), `tests/orchestrator-worktrees.test.ts` (3) |
+| W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 
 ## Verification baseline (master, after W13)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -151,3 +152,22 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   instead of retrying. Known limits: stashing uncommitted owner work (with
   approval) is not built, so a dirty project falls back to in-place work;
   intelligence retrieval still indexes the project folder, not the worktree.
+- 2026-11-26: W18. Memory gains an organization layer: docs under
+  `memory/orgs/<orgId>/` (scope `org`, local to this desktop, never uploaded) are
+  visible only to projects whose new `projects.org_id` names that org. A project
+  takes the org active in the window that created it; the Memory panel can switch
+  the window's org workspace and add the open project to it. Every content change
+  to a memory doc (lessons/progress from finished tasks, owner edits, restores)
+  writes a `memory_versions` row with time, source and task id; a doc that predates
+  history saves its prior state on its first change. The Memory panel shows each
+  doc's history and restores any version (restore is itself a new version).
+  Routing: finished tasks record model × role × difficulty outcomes
+  (`model_outcomes`: passed / rework / failed, tokens, latency) from the worker's
+  last session; hard failures before a fallback escalation count against that
+  model. `routeModels` adds a measured term once a bucket has 5+ samples: the pass
+  rate shrunk toward 50% by 4 phantom samples, ×10, so 5/5 is +2.8 and the cap is
+  ±5 (capability fit alone spans ~10). The route reason states it ("measured 5/5
+  passed (+2.8)" or "3 measured (<5, ignored)"); Settings' routing preview gains a
+  role picker and the measured table. Stats key on the model id, so one model served
+  by two providers shares its record. The migration is appended to `db.ts`: a
+  sibling migration merged first must stay ahead of it.

@@ -181,7 +181,23 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX IF NOT EXISTS idx_mtc_session ON mcp_tool_calls(session_id, created_at);
   `,
-  `ALTER TABLE agents ADD COLUMN mcpServers TEXT NOT NULL DEFAULT '[]';`
+  `ALTER TABLE agents ADD COLUMN mcpServers TEXT NOT NULL DEFAULT '[]';`,
+  // W18: org memory layer, memory version history, measured routing outcomes.
+  `
+  ALTER TABLE projects ADD COLUMN org_id TEXT;
+  ALTER TABLE memories ADD COLUMN orgId TEXT;
+  CREATE TABLE IF NOT EXISTS memory_versions (
+    id TEXT PRIMARY KEY, memoryId TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT '', taskId TEXT, createdAt INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_mv_memory ON memory_versions(memoryId, createdAt DESC);
+  CREATE TABLE IF NOT EXISTS model_outcomes (
+    id TEXT PRIMARY KEY, taskId TEXT NOT NULL, model TEXT NOT NULL, role TEXT NOT NULL,
+    difficulty TEXT NOT NULL, outcome TEXT NOT NULL, tokens INTEGER NOT NULL DEFAULT 0,
+    latencyMs INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_mo_bucket ON model_outcomes(role, difficulty, model);
+  `
 ]
 
 export class Db {

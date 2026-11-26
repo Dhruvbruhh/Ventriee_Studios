@@ -12,6 +12,8 @@ import type {
   EngineKind,
   Job,
   MemoryDoc,
+  MemoryVersion,
+  ModelOutcomeStat,
   Message,
   ModelOption,
   ModelPrefs,
@@ -172,17 +174,15 @@ export class Store {
 
   // ---------- projects ----------
   projects(): Project[] {
-    return this.db.all<Project & { client_id?: string | null }>('SELECT *, client_id as clientId FROM projects ORDER BY updatedAt DESC')
-      .map((r) => ({ ...r, clientId: r.clientId ?? r.client_id ?? null }))
+    return this.db.all<ProjectRow>('SELECT * FROM projects ORDER BY updatedAt DESC').map(mapProject)
   }
 
   project(id: string): Project | undefined {
-    const r = this.db.get<Project & { client_id?: string | null }>('SELECT *, client_id as clientId FROM projects WHERE id = ?', id)
-    if (!r) return undefined
-    return { ...r, clientId: r.clientId ?? r.client_id ?? null }
+    const r = this.db.get<ProjectRow>('SELECT * FROM projects WHERE id = ?', id)
+    return r ? mapProject(r) : undefined
   }
 
-  createProject(input: { name: string; path: string; description: string; clientId?: string | null }): Project {
+  createProject(input: { name: string; path: string; description: string; clientId?: string | null; orgId?: string | null }): Project {
     const now = Date.now()
     const project: Project = {
       id: `prj_${randomUUID().slice(0, 8)}`,
@@ -190,12 +190,13 @@ export class Store {
       path: input.path,
       description: input.description,
       clientId: input.clientId ?? null,
+      orgId: input.orgId ?? null,
       createdAt: now,
       updatedAt: now
     }
     this.db.run(
-      'INSERT INTO projects(id,name,path,description,client_id,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?)',
-      project.id, project.name, project.path, project.description, project.clientId, now, now
+      'INSERT INTO projects(id,name,path,description,client_id,org_id,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?)',
+      project.id, project.name, project.path, project.description, project.clientId, project.orgId, now, now
     )
     return project
   }
@@ -204,9 +205,10 @@ export class Store {
     const cur = this.project(id)
     if (!cur) return
     const clientId = 'clientId' in patch ? patch.clientId : cur.clientId
+    const orgId = 'orgId' in patch ? patch.orgId : cur.orgId
     this.db.run(
-      'UPDATE projects SET name=?, path=?, description=?, client_id=?, updatedAt=? WHERE id=?',
-      patch.name ?? cur.name, patch.path ?? cur.path, patch.description ?? cur.description, clientId ?? null, Date.now(), id
+      'UPDATE projects SET name=?, path=?, description=?, client_id=?, org_id=?, updatedAt=? WHERE id=?',
+      patch.name ?? cur.name, patch.path ?? cur.path, patch.description ?? cur.description, clientId ?? null, orgId ?? null, Date.now(), id
     )
   }
 
@@ -214,6 +216,7 @@ export class Store {
     for (const t of ['agents', 'tasks', 'messages', 'events', 'sessions', 'memories', 'automations', 'jobs']) {
       this.db.run(`DELETE FROM ${t} WHERE projectId = ?`, id)
     }
+    this.db.run('DELETE FROM memory_versions WHERE memoryId NOT IN (SELECT id FROM memories)')
     this.db.run('DELETE FROM projects WHERE id = ?', id)
     if (this.activeProjectId() === id) this.setActiveProject(null)
   }
@@ -433,10 +436,13 @@ export class Store {
 
   // ---------- memories ----------
   memories(projectId?: string | null): MemoryDoc[] {
+    // Org docs are visible only to projects created in that org.
     const rows = projectId
       ? this.db.all<Record<string, unknown>>(
-        "SELECT * FROM memories WHERE projectId = ? OR projectId IS NULL ORDER BY pinned DESC, updatedAt DESC",
-        projectId
+        `SELECT * FROM memories WHERE projectId = ?
+           OR (projectId IS NULL AND (orgId IS NULL OR orgId = (SELECT org_id FROM projects WHERE id = ?)))
+         ORDER BY pinned DESC, updatedAt DESC`,
+        projectId, projectId
       )
       : this.db.all<Record<string, unknown>>('SELECT * FROM memories ORDER BY pinned DESC, updatedAt DESC')
     return rows.map(mapMemory)
@@ -447,7 +453,8 @@ export class Store {
     return row ? mapMemory(row) : undefined
   }
 
-  saveMemory(input: Partial<MemoryDoc> & { path: string; title: string; body: string }): MemoryDoc {
+  /** `taskId` traces which task's run made the change; it lands on the version row, not the doc. */
+  saveMemory(input: Partial<MemoryDoc> & { path: string; title: string; body: string }, taskId: string | null = null): MemoryDoc {
     const existing = input.id
       ? this.memory(input.id)
       : this.db.get<Record<string, unknown>>('SELECT * FROM memories WHERE path = ?', input.path)
@@ -458,6 +465,7 @@ export class Store {
       id: existing?.id ?? `mem_${randomUUID().slice(0, 10)}`,
       scope: input.scope ?? existing?.scope ?? 'project',
       projectId: input.projectId ?? existing?.projectId ?? null,
+      orgId: input.orgId ?? existing?.orgId ?? null,
       agentId: input.agentId ?? existing?.agentId ?? null,
       path: input.path,
       title: input.title,
@@ -470,19 +478,72 @@ export class Store {
       updatedAt: now
     }
     this.db.run(
-      `INSERT INTO memories(id,scope,projectId,agentId,path,title,body,tags,pinned,confidence,source,evidence,updatedAt)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
-       ON CONFLICT(id) DO UPDATE SET scope=excluded.scope, projectId=excluded.projectId, agentId=excluded.agentId,
+      `INSERT INTO memories(id,scope,projectId,orgId,agentId,path,title,body,tags,pinned,confidence,source,evidence,updatedAt)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(id) DO UPDATE SET scope=excluded.scope, projectId=excluded.projectId, orgId=excluded.orgId, agentId=excluded.agentId,
          path=excluded.path, title=excluded.title, body=excluded.body, tags=excluded.tags, pinned=excluded.pinned,
          confidence=excluded.confidence, source=excluded.source, evidence=excluded.evidence, updatedAt=excluded.updatedAt`,
-      doc.id, doc.scope, doc.projectId, doc.agentId, doc.path, doc.title, doc.body,
+      doc.id, doc.scope, doc.projectId, doc.orgId, doc.agentId, doc.path, doc.title, doc.body,
       JSON.stringify(doc.tags), bolt(doc.pinned), doc.confidence, doc.source, doc.evidence, doc.updatedAt
     )
+    // Version only content changes (not pins or metadata). A doc that predates
+    // history gets its prior state saved first, so the first edit is reversible.
+    if (!existing || existing.body !== doc.body || existing.title !== doc.title) {
+      const addVersion = (v: { title: string; body: string; source: string; taskId: string | null; createdAt: number }) =>
+        this.db.run('INSERT INTO memory_versions(id,memoryId,title,body,source,taskId,createdAt) VALUES(?,?,?,?,?,?,?)',
+          newId('mv'), doc.id, v.title, v.body, v.source, v.taskId, v.createdAt)
+      if (existing && !this.db.get('SELECT 1 FROM memory_versions WHERE memoryId = ? LIMIT 1', doc.id)) {
+        addVersion({ title: existing.title, body: existing.body, source: existing.source, taskId: null, createdAt: existing.updatedAt })
+      }
+      addVersion({ title: doc.title, body: doc.body, source: doc.source, taskId, createdAt: now })
+    }
     return doc
+  }
+
+  /** Saved states of a doc, newest first. */
+  memoryVersions(memoryId: string): MemoryVersion[] {
+    return this.db.all<MemoryVersion>('SELECT * FROM memory_versions WHERE memoryId = ? ORDER BY createdAt DESC, rowid DESC', memoryId)
+  }
+
+  memoryVersion(id: string): MemoryVersion | undefined {
+    return this.db.get<MemoryVersion>('SELECT * FROM memory_versions WHERE id = ?', id)
   }
 
   deleteMemory(id: string) {
     this.db.run('DELETE FROM memories WHERE id = ?', id)
+    this.db.run('DELETE FROM memory_versions WHERE memoryId = ?', id)
+  }
+
+  // ---------- measured routing ----------
+  /**
+   * Record how a finished task went for the model that last ran it: the latest
+   * session the worker (not the reviewer) ran for the task gives model, tokens and latency.
+   */
+  recordModelOutcome(taskId: string, agentId: string, outcome: 'passed' | 'rework' | 'failed') {
+    const task = this.db.get<{ role: string | null; difficulty: string | null }>('SELECT role, difficulty FROM tasks WHERE id = ?', taskId)
+    const s = this.db.get<{ model: string | null; inputTokens: number | null; outputTokens: number | null; startedAt: number; endedAt: number | null }>(
+      'SELECT model, inputTokens, outputTokens, startedAt, endedAt FROM sessions WHERE taskId = ? AND agentId = ? ORDER BY startedAt DESC, rowid DESC LIMIT 1',
+      taskId, agentId
+    )
+    if (!task || !s?.model) return
+    this.db.run(
+      'INSERT INTO model_outcomes(id,taskId,model,role,difficulty,outcome,tokens,latencyMs,createdAt) VALUES(?,?,?,?,?,?,?,?,?)',
+      newId('mo'), taskId, s.model, task.role ?? '', task.difficulty ?? 'unrated', outcome,
+      (s.inputTokens ?? 0) + (s.outputTokens ?? 0), Math.max(0, (s.endedAt ?? s.startedAt) - s.startedAt), Date.now()
+    )
+  }
+
+  modelOutcomeStats(): ModelOutcomeStat[] {
+    return this.db.all<Record<string, unknown>>(
+      `SELECT model, role, difficulty, COUNT(*) AS samples,
+         SUM(outcome = 'passed') AS passed, SUM(outcome = 'rework') AS rework, SUM(outcome = 'failed') AS failed,
+         AVG(tokens) AS avgTokens, AVG(latencyMs) AS avgLatencyMs
+       FROM model_outcomes GROUP BY model, role, difficulty ORDER BY model, role, difficulty`
+    ).map((r) => ({
+      model: String(r.model), role: String(r.role), difficulty: String(r.difficulty),
+      samples: Number(r.samples), passed: Number(r.passed), rework: Number(r.rework), failed: Number(r.failed),
+      avgTokens: Math.round(Number(r.avgTokens)), avgLatencyMs: Math.round(Number(r.avgLatencyMs))
+    }))
   }
 
   searchMemory(query: string, projectId?: string | null): MemoryDoc[] {
@@ -983,6 +1044,7 @@ export class Store {
       events: projectId ? this.events(projectId) : [],
       sessions: projectId ? this.sessions(projectId) : [],
       memories: this.memories(projectId),
+      modelOutcomes: this.modelOutcomeStats(),
       skills: this.skills(),
       automations: projectId ? this.automations(projectId) : [],
       providers,
@@ -1026,6 +1088,12 @@ function safeJson<T>(raw: string, fallback: T): T {
   } catch {
     return fallback
   }
+}
+
+type ProjectRow = Omit<Project, 'clientId' | 'orgId'> & { client_id?: string | null; org_id?: string | null }
+
+function mapProject({ client_id, org_id, ...rest }: ProjectRow): Project {
+  return { ...rest, clientId: client_id ?? null, orgId: org_id ?? null }
 }
 
 function mapMemory(r: Record<string, unknown>): MemoryDoc {

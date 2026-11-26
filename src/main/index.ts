@@ -816,7 +816,9 @@ function registerIpc() {
     if (!existsSync(path)) mkdirSync(path, { recursive: true })
     const brief = applyTemplate(path, input.template ?? 'empty')
     const description = [input.description?.trim(), brief].filter(Boolean).join('\n\n')
-    const project = store.createProject({ name: input.name.trim() || 'Untitled project', path, description, clientId: input.clientId ?? null })
+    // A project made while an org workspace is active belongs to that org and sees its memory.
+    const orgId = auth.session(event.sender.id)?.activeOrgId ?? null
+    const project = store.createProject({ name: input.name.trim() || 'Untitled project', path, description, clientId: input.clientId ?? null, orgId })
     store.setActiveProject(project.id)
     // The window that created it switches to it; other windows keep theirs.
     const entry = windows.get(event.sender.id)
@@ -860,8 +862,12 @@ function registerIpc() {
     debouncedNotify()
   })
 
-  handle(IPC.updateProject, async (_e, id: string, patch: Partial<Project>) => {
+  handle(IPC.updateProject, async (event, id: string, patch: Partial<Project>) => {
+    // A project can join only the org this window is signed into (or leave to personal).
+    if (patch.orgId && patch.orgId !== auth.session(event.sender.id)?.activeOrgId) throw new Error('Switch to that organization first')
     store.updateProject(id, patch)
+    const project = store.project(id)
+    if (project && 'orgId' in patch) memory.bootstrap(project)
     debouncedNotify()
   })
 
@@ -1061,10 +1067,30 @@ function registerIpc() {
     debouncedNotify()
   })
 
-  handle(IPC.saveMemory, async (_e, input: Partial<MemoryDoc> & { path: string; title: string; body: string }) => {
-    const doc = memory.save(input)
+  handle(IPC.saveMemory, async (event, input: Partial<MemoryDoc> & { path: string; title: string; body: string }) => {
+    // Org docs take the org from the signed-in session, never from the renderer.
+    if (input.scope === 'org') {
+      const orgId = auth.session(event.sender.id)?.activeOrgId
+      if (!orgId) throw new Error('Switch to an organization workspace to save organization memory')
+      const existing = input.id ? store.memory(input.id) : undefined
+      if (existing && existing.orgId !== orgId) throw new Error('This memory belongs to another organization')
+      if (input.path.includes('..')) throw new Error('Memory paths cannot contain ..')
+      input = { ...input, orgId, projectId: null, path: existing?.path ?? `orgs/${orgId}/${input.path.replace(/^orgs\/[^/]+\//, '')}` }
+    }
+    const doc = memory.save({ ...input, source: 'owner' })
     debouncedNotify()
     return doc
+  })
+
+  handle(IPC.memoryVersions, async (_e, id: string) => store.memoryVersions(String(id)))
+
+  handle(IPC.restoreMemoryVersion, async (_e, versionId: string) => {
+    const version = store.memoryVersion(String(versionId))
+    const doc = version ? store.memory(version.memoryId) : undefined
+    if (!version || !doc) throw new Error('That version no longer exists')
+    const restored = memory.save({ ...doc, title: version.title, body: version.body, source: `owner:restore ${new Date(version.createdAt).toISOString().slice(0, 16)}` })
+    debouncedNotify()
+    return restored
   })
 
   handle(IPC.deleteMemory, async (_e, id: string) => {

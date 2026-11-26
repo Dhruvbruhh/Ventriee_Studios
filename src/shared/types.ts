@@ -425,6 +425,8 @@ export interface Project {
   description: string
   /** Client this project was created for; null if internal or unlinked. */
   clientId: string | null
+  /** Cloud org the project was created in; null for the personal workspace. Picks which org memory it sees. */
+  orgId?: string | null
   createdAt: number
   updatedAt: number
 }
@@ -532,8 +534,10 @@ export interface SessionRecord {
 
 export interface MemoryDoc {
   id: string
-  scope: 'global' | 'project' | 'agent' | 'session' | 'skill'
+  scope: 'global' | 'org' | 'project' | 'agent' | 'session' | 'skill'
   projectId: string | null
+  /** Org this doc belongs to (scope 'org'); local only, never uploaded. */
+  orgId?: string | null
   agentId: string | null
   path: string
   title: string
@@ -544,6 +548,31 @@ export interface MemoryDoc {
   source: string
   evidence: string
   updatedAt: number
+}
+
+/** One saved state of a memory doc: who/what wrote it, and for which task. */
+export interface MemoryVersion {
+  id: string
+  memoryId: string
+  title: string
+  body: string
+  source: string
+  taskId: string | null
+  createdAt: number
+}
+
+/** Finished-task outcomes for one model × role × difficulty bucket, for measured routing. */
+export interface ModelOutcomeStat {
+  model: string
+  role: string
+  /** 'unrated' when the planner gave no difficulty. */
+  difficulty: string
+  samples: number
+  passed: number
+  rework: number
+  failed: number
+  avgTokens: number
+  avgLatencyMs: number
 }
 
 export interface SkillScanReport {
@@ -724,6 +753,7 @@ export interface Snapshot {
   events: RunEvent[]
   sessions: SessionRecord[]
   memories: MemoryDoc[]
+  modelOutcomes: ModelOutcomeStat[]
   skills: SkillRecord[]
   automations: Automation[]
   providers: ProviderStatus[]

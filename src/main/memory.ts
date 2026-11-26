@@ -8,18 +8,21 @@ import type { Agent, MemoryDoc, Project, Task } from '../shared/types'
  * Memory is markdown-first: SQLite is the search index, the files under
  * <userData>/memory are the human-readable source of truth. Every write goes
  * to both, and files edited by hand are re-imported on boot.
+ *
+ * Layers: global, org (orgs/<orgId>, local only, seen by projects created in that
+ * org), project, agent, and session. Every content change keeps a version row.
  */
 export class MemoryService {
   readonly root: string
 
   constructor(private store: Store, userData: string) {
     this.root = join(userData, 'memory')
-    for (const dir of ['global', 'projects', 'agents', 'sessions', 'skills', 'index']) {
+    for (const dir of ['global', 'orgs', 'projects', 'agents', 'sessions', 'skills', 'index']) {
       mkdirSync(join(this.root, dir), { recursive: true })
     }
   }
 
-  private write(path: string, doc: { title: string; body: string; scope: string; projectId?: string | null; tags?: string[] }) {
+  private write(path: string, doc: { title: string; body: string; scope: string; projectId?: string | null; orgId?: string | null; tags?: string[] }) {
     const full = join(this.root, path)
     if (!isInside(this.root, full)) throw new Error(`Memory path escapes the memory folder: ${path}`)
     mkdirSync(dirname(full), { recursive: true })
@@ -28,6 +31,7 @@ export class MemoryService {
       `title: ${doc.title}`,
       `scope: ${doc.scope}`,
       doc.projectId ? `project: ${doc.projectId}` : null,
+      doc.orgId ? `org: ${doc.orgId}` : null,
       `updated: ${new Date().toISOString()}`,
       doc.tags?.length ? `tags: [${doc.tags.join(', ')}]` : null,
       '---',
@@ -48,14 +52,15 @@ export class MemoryService {
     return { title, body: raw.slice(match?.[0].length ?? 0), tags }
   }
 
-  save(input: Partial<MemoryDoc> & { path: string; title: string; body: string }): MemoryDoc {
-    const doc = this.store.saveMemory(input)
+  /** `taskId` records which task's run made the change in the doc's version history. */
+  save(input: Partial<MemoryDoc> & { path: string; title: string; body: string }, taskId: string | null = null): MemoryDoc {
+    const doc = this.store.saveMemory(input, taskId)
     this.write(doc.path, doc)
     return doc
   }
 
   /** Create a doc only when it does not exist yet, so re-bootstrapping never clobbers edits. */
-  ensure(path: string, doc: { title: string; body: string; scope: MemoryDoc['scope']; projectId?: string | null; agentId?: string | null; tags?: string[]; pinned?: boolean }) {
+  ensure(path: string, doc: { title: string; body: string; scope: MemoryDoc['scope']; projectId?: string | null; orgId?: string | null; agentId?: string | null; tags?: string[]; pinned?: boolean }) {
     const existing = this.store.memories().find((m) => m.path === path)
     if (existing) return existing
     return this.save({
@@ -64,6 +69,7 @@ export class MemoryService {
       body: doc.body,
       scope: doc.scope,
       projectId: doc.projectId ?? null,
+      orgId: doc.orgId ?? null,
       agentId: doc.agentId ?? null,
       tags: doc.tags ?? [],
       pinned: doc.pinned ?? false,
@@ -94,6 +100,15 @@ export class MemoryService {
       body: `# Conventions\n\n- TypeScript strict everywhere.\n- Small focused modules; no premature abstraction.\n- Tests for non-trivial logic.\n- Never commit secrets; keys live in the OS keychain.\n`
     })
     if (!project) return
+    if (project.orgId) {
+      this.ensure(`orgs/${project.orgId}/standards.md`, {
+        title: 'Organization standards',
+        scope: 'org',
+        orgId: project.orgId,
+        tags: ['org', 'standards'],
+        body: `# Organization standards\n\nShared by every project in this organization. Kept on this desktop only.\n`
+      })
+    }
     const base = `projects/${project.id}`
     this.ensure(`${base}/overview.md`, {
       title: `${project.name} overview`,
@@ -162,7 +177,7 @@ export class MemoryService {
       let score = 0
       for (const w of words) if (hay.includes(w)) score += 2
       if (doc.pinned) score += 3
-      if (doc.scope === 'global') score += 1
+      if (doc.scope === 'global' || doc.scope === 'org') score += 1
       if (doc.projectId === projectId) score += 1
       score += Math.max(0, 2 - (Date.now() - doc.updatedAt) / (1000 * 60 * 60 * 24 * 30))
       return { doc, score }
@@ -180,7 +195,7 @@ export class MemoryService {
   }
 
   /** Notes that agents append after a task. Owner corrections always win over agent inference. */
-  appendProgress(projectId: string, line: string) {
+  appendProgress(projectId: string, line: string, taskId: string | null = null) {
     const path = `projects/${projectId}/progress.md`
     const current = this.store.memories(projectId).find((m) => m.path === path)
     const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ')
@@ -190,11 +205,12 @@ export class MemoryService {
       body: `${current?.body.trim() ?? '# Progress'}\n\n- ${stamp} — ${line}`,
       scope: 'project',
       projectId,
-      tags: ['progress']
-    })
+      tags: ['progress'],
+      source: 'orchestrator'
+    }, taskId)
   }
 
-  appendLesson(agent: Agent, line: string, projectId: string | null) {
+  appendLesson(agent: Agent, line: string, projectId: string | null, taskId: string | null = null) {
     const path = `agents/${agent.id}/lessons.md`
     const current = this.store.memories().find((m) => m.path === path)
     const stamp = new Date().toISOString().slice(0, 10)
@@ -207,14 +223,14 @@ export class MemoryService {
       agentId: agent.id,
       tags: ['lessons'],
       source: `agent:${agent.id}`
-    })
+    }, taskId)
   }
 
   recordTaskOutcome(task: Task, agent: Agent | null, project: Project, accepted: boolean, evidence: string) {
     const line = `Task "${task.title}" ${accepted ? 'accepted' : 'returned for rework'}${evidence ? ` (evidence: ${evidence.slice(0, 160)})` : ''}`
-    this.appendProgress(project.id, line)
+    this.appendProgress(project.id, line, task.id)
     if (agent && accepted) {
-      this.appendLesson(agent, `Reusable approach for "${task.title}": ${task.acceptance.slice(0, 200)} — verified by ${evidence || 'review'}`.replace(/\s+/g, ' '), project.id)
+      this.appendLesson(agent, `Reusable approach for "${task.title}": ${task.acceptance.slice(0, 200)} — verified by ${evidence || 'review'}`.replace(/\s+/g, ' '), project.id, task.id)
     }
   }
 
@@ -236,6 +252,8 @@ export class MemoryService {
       const existing = this.store.memories().find((m) => m.path === rel)
       const scope: MemoryDoc['scope'] = rel.startsWith('projects/')
         ? 'project'
+        : rel.startsWith('orgs/')
+          ? 'org'
         : rel.startsWith('agents/')
           ? 'agent'
           : rel.startsWith('sessions/')
@@ -244,6 +262,7 @@ export class MemoryService {
               ? 'skill'
               : 'global'
       const projectId = rel.startsWith('projects/') ? rel.split('/')[1] ?? null : existing?.projectId ?? null
+      const orgId = rel.startsWith('orgs/') ? rel.split('/')[1] ?? null : null
       this.store.saveMemory({
         id: existing?.id,
         path: rel,
@@ -251,6 +270,7 @@ export class MemoryService {
         body: parsed.body,
         scope,
         projectId,
+        orgId,
         tags: parsed.tags,
         pinned: existing?.pinned ?? false,
         confidence: existing?.confidence ?? 0.7,
