@@ -106,6 +106,8 @@ export function Workspace() {
     )
   }
 
+  const linkedClient = project.clientId ? (snapshot.clients ?? []).find((c) => c.id === project.clientId) : null
+
   return (
     <div className="plan">
       <div className="plan-main">
@@ -119,6 +121,7 @@ export function Workspace() {
         />
         {/* Sessions are listed in the sidebar; this row only explains how to reach another one. */}
         <div className="session-tabs">
+          {linkedClient ? <span className="client-badge"><span className="client-badge-dot" />Client: {linkedClient.name}{linkedClient.niche ? ` · ${linkedClient.niche}` : ''}</span> : null}
           {snapshot.conversations.length > 1 ? <span className="session-hint">Type @Session 2 to bring another session into this one</span> : null}
         </div>
         <ChatThread chat={chat} stream={chatStream} />

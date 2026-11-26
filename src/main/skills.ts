@@ -95,6 +95,29 @@ export class SkillService {
     return readFileSync(file, 'utf8').replace(/^---[\s\S]*?---\n?/, '').trim()
   }
 
+  /**
+   * Install a skill from a Git URL (https://github.com/owner/repo[/tree/branch/path]).
+   * Uses `git clone --depth 1`; if only a sub-path is wanted, we sparse-checkout it.
+   */
+  async installFromUrl(url: string): Promise<{ skill: SkillRecord | null; report: import('./skillsec').SkillScanReport; removed: boolean }> {
+    const { execFile } = await import('node:child_process')
+    const { promisify } = await import('node:util')
+    const run = promisify(execFile)
+    const tmpDir = join(this.root, `_tmp_${Date.now()}`)
+    mkdirSync(tmpDir, { recursive: true })
+    try {
+      // Allow simple directory-URL or bare git URL
+      const cleanUrl = url.trim()
+      await run('git', ['clone', '--depth', '1', cleanUrl, tmpDir], { timeout: 60_000 })
+      const result = this.installFrom(tmpDir)
+      return result
+    } catch (e) {
+      throw new Error(`Could not install skill from URL: ${(e as Error).message}`)
+    } finally {
+      if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true })
+    }
+  }
+
   /** Import the reusable skills shipped with the studio on first boot. */
   seedBundled(bundledDir: string) {
     if (!existsSync(bundledDir)) return

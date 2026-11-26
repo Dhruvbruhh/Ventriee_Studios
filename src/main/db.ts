@@ -130,7 +130,58 @@ const MIGRATIONS: string[] = [
   // Specialist skills the planner attached to one task, on top of the worker's own.
   `
   ALTER TABLE tasks ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';
+  `,
+  // Link a project to a CRM client.
   `
+  ALTER TABLE projects ADD COLUMN client_id TEXT;
+  `,
+  // Client CRM — prospects tracked through the agency pipeline.
+  `
+  CREATE TABLE IF NOT EXISTS clients (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL DEFAULT '',
+    niche TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'prospect',
+    notes TEXT NOT NULL DEFAULT '',
+    project_id TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  `,
+  `
+  CREATE TABLE IF NOT EXISTS workflows (
+    id TEXT PRIMARY KEY,
+    project_id TEXT,
+    name TEXT NOT NULL,
+    graph TEXT NOT NULL DEFAULT '{"nodes":[],"edges":[]}',
+    schedule_minutes INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    last_run_at INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  `,
+  `
+  CREATE TABLE IF NOT EXISTS workflow_versions (
+    id TEXT PRIMARY KEY,
+    workflow_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    graph TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_wv_workflow ON workflow_versions(workflow_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS mcp_tool_calls (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    args_summary TEXT NOT NULL DEFAULT '',
+    duration_ms INTEGER,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_mtc_session ON mcp_tool_calls(session_id, created_at);
+  `,
+  `ALTER TABLE agents ADD COLUMN mcpServers TEXT NOT NULL DEFAULT '[]';`
 ]
 
 export class Db {

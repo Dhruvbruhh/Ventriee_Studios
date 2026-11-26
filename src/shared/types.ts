@@ -85,9 +85,189 @@ export interface UpdateState {
   url?: string
 }
 
-export interface McpServer { name: string; command: string; args: string[]; enabled: boolean }
+export interface McpServer {
+  name: string
+  /** Program for a local (stdio) server; empty for a remote one. */
+  command: string
+  args: string[]
+  enabled: boolean
+  env?: Record<string, string>
+  /** A remote server's address; set instead of command. */
+  url?: string
+  transport?: 'http' | 'sse'
+  headers?: Record<string, string>
+  /** Where it came from: a registry name, or plugin:<id>. */
+  source?: string
+}
+
+/** What a live handshake with an MCP server returned. */
+export interface McpInspectResult {
+  ok: boolean
+  serverName: string
+  serverVersion: string
+  tools: Array<{ name: string; description: string }>
+  resources?: Array<{ name: string; uri: string }>
+  prompts?: Array<{ name: string; description: string }>
+  ms: number
+  error?: string
+}
+
+export interface RegistryInput { name: string; description: string; required: boolean; secret: boolean; /** Header template such as "Bearer {token}". */ template?: string }
+export interface RegistryInstall {
+  kind: 'npm' | 'pypi' | 'oci' | 'remote'
+  label: string
+  identifier: string
+  version: string
+  url?: string
+  transport: 'stdio' | 'http' | 'sse'
+  env: RegistryInput[]
+  headers: RegistryInput[]
+}
+export interface RegistryServer {
+  name: string
+  title: string
+  description: string
+  version: string
+  repository: string
+  website: string
+  publishedAt: string
+  status: string
+  installs: RegistryInstall[]
+}
+
+export interface VoiceSettings {
+  /** cloud: the planner engine; local: the Ollama model below. */
+  source: 'cloud' | 'local'
+  localModel: string
+  localEndpoint: string
+  /** An OpenAI-compatible /audio/transcriptions server on this computer (whisper.cpp, faster-whisper); '' uses the built-in transcriber. */
+  sttEndpoint: string
+  sttModel: string
+  tts: 'system' | 'openai'
+  ttsModel: string
+  /** System voice name, or an OpenAI voice id such as "alloy". */
+  voiceName: string
+  rate: number
+  volume: number
+  /** Language hint for speech recognition; auto lets Whisper detect Hindi, English or a mix. */
+  language: 'auto' | 'en' | 'hi'
+  /** Let the owner talk over the assistant to cut it off. */
+  bargeIn: boolean
+  /** Silence that ends a turn. */
+  endSilenceMs: number
+}
+
+export type WorkflowNodeKind = 'trigger' | 'ai' | 'agent' | 'shell' | 'http' | 'condition' | 'notify' | 'wait' | 'workflow' | 'browser' | 'approval' | 'switch' | 'loop' | 'parallel'
+export interface WorkflowNode { id: string; kind: WorkflowNodeKind; x: number; y: number; label: string; config: Record<string, string> }
+export interface WorkflowEdge { id: string; from: string; to: string; branch?: 'true' | 'false'; /** For switch nodes: take this edge only when output contains this value. */ case?: string }
+export interface Workflow {
+  id: string
+  projectId: string | null
+  name: string
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
+  /** 0 = manual only. */
+  scheduleMinutes: number
+  enabled: boolean
+  lastRunAt: number | null
+  createdAt: number
+  updatedAt: number
+}
+export interface PluginAgentTemplate { role: string; name: string; title: string; instructions: string; skills: string[] }
+export interface PluginTheme { id: string; name: string; base: 'dark' | 'light'; colors: Record<string, string> }
+export interface PluginCommand { id: string; title: string; prompt: string }
+export interface PluginInfo {
+  id: string
+  name: string
+  version: string
+  description: string
+  author: string
+  source: { type: 'folder' | 'git'; value: string }
+  installedAt: number
+  dependencies: Record<string, string>
+  /** What it can do, in plain words, shown before install. */
+  permissions: string[]
+  agents: PluginAgentTemplate[]
+  themes: PluginTheme[]
+  commands: PluginCommand[]
+  /** What it added, so removal takes exactly that back. */
+  added: { skills: string[]; mcpServers: string[]; workflows: string[] }
+  errors: string[]
+}
+
+export interface RemoteJobInput {
+  provider?: 'ssh' | 'e2b'
+  /** user@host, or an alias from ~/.ssh/config; optional :port. For E2B, leave empty. */
+  host: string
+  repo: string
+  branch: string
+  setup: string
+  /** Runs inside the checkout; the task is in $VENTRIEE_TASK. */
+  agentCommand: string
+  task: string
+  env: Record<string, string>
+  timeoutMinutes: number
+  memoryMb: number
+  push: boolean
+}
+export interface RemoteJob extends RemoteJobInput {
+  id: string
+  provider: 'ssh' | 'e2b'
+  workBranch: string
+  status: 'starting' | 'running' | 'done' | 'failed' | 'cancelled' | 'lost' | 'cleaned'
+  exitCode: number | null
+  log: string
+  createdAt: number
+  updatedAt: number
+  error?: string
+}
+
+/** Workflow webhooks listen here, on 127.0.0.1 only. */
+export const WEBHOOK_PORT = 47615
+
+export interface BrowserLog { at: number; level: 'info' | 'warn' | 'error'; text: string }
+export interface BrowserStepResult { line: number; action: string; ok: boolean; output: string; ms: number; /** PNG data URL preview for screenshot steps. */ image?: string }
+export interface BrowserRunResult { ok: boolean; results: BrowserStepResult[]; error?: string }
+
+export interface WorkflowVersion {
+  id: string
+  workflowId: string
+  name: string
+  graph: string
+  createdAt: number
+}
+
+export interface McpToolCall {
+  id: string
+  sessionId: string
+  toolName: string
+  argsSummary: string
+  durationMs: number | null
+  createdAt: number
+}
+
+export interface WorkflowRunEvent {
+  workflowId: string
+  runId: string
+  nodeId: string | null
+  status: 'running' | 'done' | 'failed' | 'skipped' | 'finished'
+  output: string
+  at: number
+}
 
 export interface UsageRow { name: string; sessions: number; inputTokens: number; outputTokens: number; costUsd: number; seconds: number }
+
+export interface AnalyticsDayBucket { date: string; costUsd: number; inputTokens: number; outputTokens: number; sessions: number }
+export interface AnalyticsOverview {
+  totalCostUsd: number
+  totalSessions: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  successRate: number
+  byModel: UsageRow[]
+  byProject: Array<{ id: string; name: string; sessions: number; costUsd: number }>
+  daily: AnalyticsDayBucket[]
+}
 export interface RunSummary {
   jobId: string
   instruction: string
@@ -215,6 +395,8 @@ export interface Project {
   name: string
   path: string
   description: string
+  /** Client this project was created for; null if internal or unlinked. */
+  clientId: string | null
   createdAt: number
   updatedAt: number
 }
@@ -234,6 +416,8 @@ export interface Agent {
   reasoning: ReasoningEffort
   /** Skill ids offered to this worker. Empty means the skills of its role template. */
   skills: string[]
+  /** MCP server names offered to this worker. Empty means all enabled servers. */
+  mcpServers: string[]
   concurrency: number
   budgetUsd: number
   color: string
@@ -428,6 +612,19 @@ export interface AppSettings {
   completionEndpoint: string
   /** Set true once the first-run engine onboarding has been dismissed. */
   onboardingSeen?: boolean
+  /** A built-in theme, or `plugin:<plugin id>:<theme id>`. */
+  theme: 'dark' | 'light' | 'system' | `plugin:${string}`
+  voice: VoiceSettings
+  /** API keys for outbound services injected into agent environment. */
+  connectors: {
+    resendKey: string
+    posthogKey: string
+    posthogHost: string
+    sentryDsn: string
+    firecrawlKey: string
+    stripeKey: string
+    e2bKey: string
+  }
 }
 
 export type ArtifactKind =
@@ -470,6 +667,18 @@ export interface Job {
   error: string | null
 }
 
+export interface Client {
+  id: string
+  name: string
+  url: string
+  niche: string
+  status: 'prospect' | 'active' | 'review' | 'shipped'
+  notes: string
+  projectId: string | null
+  createdAt: number
+  updatedAt: number
+}
+
 export interface Snapshot {
   projects: Project[]
   activeProjectId: string | null
@@ -497,6 +706,7 @@ export interface Snapshot {
   modelPrefs: ModelPrefs
   /** Model options discovered from real providers; never a hardcoded catalogue. */
   models: ModelOption[]
+  clients: Client[]
 }
 
 export interface StartRunInput {
@@ -522,6 +732,7 @@ export interface CreateAgentInput {
   autonomy: Autonomy
   reasoning: ReasoningEffort
   skills?: string[]
+  mcpServers?: string[]
   color: string
   budgetUsd: number
 }

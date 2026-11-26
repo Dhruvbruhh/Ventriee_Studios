@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { guard, useStore, type Panel } from '../store'
 import { AccountButton } from '../auth'
-import { IconChevron, IconClock, IconFolder, IconGrid, IconMemory, IconPlus, IconPulse, IconSettings, IconSkill, IconWindow } from '../icons'
+import { IconChartBar, IconFlow, IconGlobe, IconCloud, IconStore, IconChevron, IconClock, IconFolder, IconGrid, IconMemory, IconPlus, IconPulse, IconSettings, IconSkill, IconWindow, IconBriefcase, IconBooks } from '../icons'
 
 function NavItem({ icon, label, active, onClick }: { icon: ReactNode; label: string; active?: boolean; onClick: () => void }) {
   return <button className={`side-nav-item${active ? ' on' : ''}`} onClick={onClick} aria-current={active ? 'page' : undefined}>{icon}<span>{label}</span></button>
@@ -48,6 +48,13 @@ export function Sidebar({ onNewProject }: { onNewProject: () => void }) {
       <NavItem icon={<IconSkill width={15} height={15} />} label="Skills" active={panel === 'skills'} onClick={() => open('skills')} />
       <NavItem icon={<IconMemory width={15} height={15} />} label="Memory" active={panel === 'memory'} onClick={() => open('memory')} />
       <NavItem icon={<IconClock width={15} height={15} />} label="Automations" active={panel === 'automations'} onClick={() => open('automations')} />
+      <NavItem icon={<IconFlow width={15} height={15} />} label="Workflows" active={panel === 'workflows'} onClick={() => open('workflows')} />
+      <NavItem icon={<IconGlobe width={15} height={15} />} label="Browser" active={panel === 'browser'} onClick={() => open('browser')} />
+      <NavItem icon={<IconCloud width={15} height={15} />} label="Remote agents" active={panel === 'remote'} onClick={() => open('remote')} />
+      <NavItem icon={<IconStore width={15} height={15} />} label="Marketplace" active={panel === 'marketplace'} onClick={() => open('marketplace')} />
+      <NavItem icon={<IconBriefcase width={15} height={15} />} label="Clients" active={panel === 'clients'} onClick={() => open('clients')} />
+      <NavItem icon={<IconBooks width={15} height={15} />} label="Resources" active={panel === 'resources'} onClick={() => open('resources')} />
+      <NavItem icon={<IconChartBar width={15} height={15} />} label="Analytics" active={panel === 'analytics'} onClick={() => open('analytics')} />
     </div>
 
     <div className="side-projects" aria-label="Projects">

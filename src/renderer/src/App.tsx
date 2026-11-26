@@ -16,6 +16,14 @@ import { MemoryPanel } from './panels/MemoryPanel'
 import { AutomationsPanel, SkillsPanel } from './panels/SkillsPanel'
 import { ProjectPanel } from './panels/ProjectPanel'
 import { RunsPanel } from './panels/RunsPanel'
+import { ClientsPanel } from './panels/ClientsPanel'
+import { ResourcesPanel } from './panels/ResourcesPanel'
+import { AnalyticsPanel } from './panels/AnalyticsPanel'
+import { WorkflowsPanel } from './panels/WorkflowsPanel'
+import { BrowserPanel } from './panels/BrowserPanel'
+import { RemotePanel } from './panels/RemotePanel'
+import { MarketplacePanel } from './panels/MarketplacePanel'
+import { VoiceAssistant } from './components/VoiceAssistant'
 import { IconSidebar, IconSpark } from './icons'
 import { Sidebar } from './components/Sidebar'
 import { UpdateNotice } from './components/UpdateNotice'
@@ -55,6 +63,27 @@ export function App() {
   }, [])
   const [codeOpened, setCodeOpened] = useState(false)
   useEffect(() => { if (workspace === 'code') setCodeOpened(true) }, [workspace])
+  const theme = snapshot?.settings.theme ?? 'dark'
+  useEffect(() => {
+    const root = document.documentElement
+    const media = window.matchMedia('(prefers-color-scheme: light)')
+    let vars: string[] = []
+    let cancelled = false
+    const apply = () => { if (!theme.startsWith('plugin:')) root.dataset.theme = theme === 'system' ? (media.matches ? 'light' : 'dark') : theme }
+    apply()
+    if (theme.startsWith('plugin:')) {
+      const [, pluginId, themeId] = theme.split(':')
+      void window.ventriee.pluginList().then((list) => {
+        if (cancelled) return
+        const t = list.find((p) => p.id === pluginId)?.themes.find((x) => x.id === themeId)
+        root.dataset.theme = t?.base ?? 'dark'
+        for (const [k, v] of Object.entries(t?.colors ?? {})) root.style.setProperty(k, v)
+        vars = Object.keys(t?.colors ?? {})
+      }).catch(() => { root.dataset.theme = 'dark' })
+    }
+    media.addEventListener('change', apply)
+    return () => { cancelled = true; media.removeEventListener('change', apply); for (const k of vars) root.style.removeProperty(k) }
+  }, [theme])
 
   useEffect(() => {
     let mounted = true
@@ -201,6 +230,14 @@ export function App() {
       {panel === 'skills' ? <SkillsPanel onClose={() => setPanel('none')} /> : null}
       {panel === 'automations' ? <AutomationsPanel onClose={() => setPanel('none')} /> : null}
       {panel === 'project' ? <ProjectPanel onClose={() => setPanel('none')} /> : null}
+      {panel === 'clients' ? <ClientsPanel onClose={() => setPanel('none')} /> : null}
+      {panel === 'resources' ? <ResourcesPanel onClose={() => setPanel('none')} /> : null}
+      {panel === 'analytics' ? <AnalyticsPanel onClose={() => setPanel('none')} /> : null}
+      {panel === 'workflows' ? <WorkflowsPanel onClose={() => setPanel('none')} /> : null}
+      {panel === 'browser' ? <BrowserPanel onClose={() => setPanel('none')} /> : null}
+      {panel === 'remote' ? <RemotePanel onClose={() => setPanel('none')} /> : null}
+      {panel === 'marketplace' ? <MarketplacePanel onClose={() => setPanel('none')} /> : null}
+      <VoiceAssistant />
       {!project && snapshot.projects.length > 0 ? (
         <Modal title="No active project" onClose={() => setPanel('none')} narrow>
           <p className="dim text-sm">

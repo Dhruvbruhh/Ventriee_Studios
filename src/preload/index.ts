@@ -201,7 +201,63 @@ const api: VentrieeApi = {
   testProvider: (input) => ipcRenderer.invoke(IPC.testProvider, input),
   graphifyStatus: (id) => ipcRenderer.invoke(IPC.graphifyStatus, id),
   graphifyBuild: (id) => ipcRenderer.invoke(IPC.graphifyBuild, id),
-  graphifyQuery: (id, question) => ipcRenderer.invoke(IPC.graphifyQuery, id, question)
+  graphifyQuery: (id, question) => ipcRenderer.invoke(IPC.graphifyQuery, id, question),
+  clientList: () => ipcRenderer.invoke(IPC.clientList),
+  clientCreate: (input) => ipcRenderer.invoke(IPC.clientCreate, input),
+  clientUpdate: (id, patch) => ipcRenderer.invoke(IPC.clientUpdate, id, patch),
+  clientDelete: (id) => ipcRenderer.invoke(IPC.clientDelete, id),
+  analyticsOverview: (sinceMs) => ipcRenderer.invoke(IPC.analyticsOverview, sinceMs),
+  voiceAsk: (input) => ipcRenderer.invoke(IPC.voiceAsk, input),
+  onVoiceChunk: (cb) => {
+    const listener = (_e: unknown, payload: { requestId: string; chunk: string }) => cb(payload)
+    ipcRenderer.on(IPC.voiceChunk, listener)
+    return () => ipcRenderer.removeListener(IPC.voiceChunk, listener)
+  },
+  voiceCancel: (requestId) => ipcRenderer.invoke(IPC.voiceCancel, requestId),
+  voiceTranscribe: (audio) => ipcRenderer.invoke(IPC.voiceTranscribe, audio),
+  voiceSpeak: (text) => ipcRenderer.invoke(IPC.voiceSpeak, text),
+  mcpInspect: (name) => ipcRenderer.invoke(IPC.mcpInspect, name),
+  workflowList: () => ipcRenderer.invoke(IPC.workflowList),
+  workflowSave: (input) => ipcRenderer.invoke(IPC.workflowSave, input),
+  workflowDelete: (id) => ipcRenderer.invoke(IPC.workflowDelete, id),
+  workflowRun: (id) => ipcRenderer.invoke(IPC.workflowRun, id),
+  workflowStop: (id) => ipcRenderer.invoke(IPC.workflowStop, id),
+  workflowVersions: (id) => ipcRenderer.invoke(IPC.workflowVersions, id),
+  workflowRestore: (id, versionId) => ipcRenderer.invoke(IPC.workflowRestore, id, versionId),
+  workflowApprove: (runId, nodeId, approved) => ipcRenderer.invoke(IPC.workflowApprove, runId, nodeId, approved),
+  skillRead: (id) => ipcRenderer.invoke(IPC.skillRead, id),
+  skillWrite: (id, content) => ipcRenderer.invoke(IPC.skillWrite, id, content),
+  skillInstallUrl: (url) => ipcRenderer.invoke(IPC.skillInstallUrl, url),
+  mcpToolCalls: (sessionId) => ipcRenderer.invoke(IPC.mcpToolCalls, sessionId),
+  onWorkflowEvent: (cb) => {
+    const listener = (_e: unknown, event: Parameters<typeof cb>[0]) => cb(event)
+    ipcRenderer.on(IPC.workflowEvent, listener)
+    return () => ipcRenderer.removeListener(IPC.workflowEvent, listener)
+  },
+  browserRun: (script) => ipcRenderer.invoke(IPC.browserRun, script),
+  browserLogs: () => ipcRenderer.invoke(IPC.browserLogs),
+  browserClose: () => ipcRenderer.invoke(IPC.browserClose),
+  githubAuth: () => ipcRenderer.invoke(IPC.githubAuth),
+  pluginList: () => ipcRenderer.invoke(IPC.pluginList),
+  pluginPreview: (source) => ipcRenderer.invoke(IPC.pluginPreview, source),
+  pluginInstall: (token) => ipcRenderer.invoke(IPC.pluginInstall, token),
+  pluginDiscard: (token) => ipcRenderer.invoke(IPC.pluginDiscard, token),
+  pluginRemove: (id) => ipcRenderer.invoke(IPC.pluginRemove, id),
+  remoteList: () => ipcRenderer.invoke(IPC.remoteList),
+  remoteTest: (host) => ipcRenderer.invoke(IPC.remoteTest, host),
+  remoteStart: (input) => ipcRenderer.invoke(IPC.remoteStart, input),
+  remoteRefresh: (id) => ipcRenderer.invoke(IPC.remoteRefresh, id),
+  remoteCancel: (id) => ipcRenderer.invoke(IPC.remoteCancel, id),
+  remotePatch: (id) => ipcRenderer.invoke(IPC.remotePatch, id),
+  remoteCleanup: (id) => ipcRenderer.invoke(IPC.remoteCleanup, id),
+  remoteForget: (id) => ipcRenderer.invoke(IPC.remoteForget, id),
+  mcpSearch: (query, cursor) => ipcRenderer.invoke(IPC.mcpSearch, query, cursor),
+  mcpInstall: (server, option, values) => ipcRenderer.invoke(IPC.mcpInstall, server, option, values),
+  onBrowserEvent: (cb) => {
+    const listener = (_e: unknown, r: Parameters<typeof cb>[0]) => cb(r)
+    ipcRenderer.on(IPC.browserEvent, listener)
+    return () => ipcRenderer.removeListener(IPC.browserEvent, listener)
+  }
 }
 
 contextBridge.exposeInMainWorld('ventriee', api)

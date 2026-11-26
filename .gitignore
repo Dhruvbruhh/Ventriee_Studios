@@ -5,6 +5,7 @@ node_modules/
 out/
 dist/
 artifacts/
+dist-update-test/
 *.log
 
 # electron-builder

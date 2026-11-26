@@ -80,32 +80,76 @@ export function Toast() {
   )
 }
 
+type ProjectProfile = { id: string; label: string; description: string; template: 'empty' | 'static' | 'react-vite' | 'express-api' | 'fastapi' }
+const PROJECT_PROFILES: ProjectProfile[] = [
+  { id: 'full', label: 'Full Project', description: 'Research → frontend → backend → DB → deploy → SEO. The complete agency pipeline.', template: 'react-vite' },
+  { id: 'mvp', label: 'Prototype / MVP', description: 'Fast frontend + mock API. Ship something reviewable in days.', template: 'react-vite' },
+  { id: 'landing', label: 'Landing Page', description: 'Single-page marketing site. Full SEO/AEO treatment included.', template: 'static' },
+  { id: 'feature', label: 'Full-Stack Feature', description: 'Add one feature to an existing product. Backend + frontend only.', template: 'express-api' },
+  { id: 'custom', label: 'Custom', description: 'Pick agents and templates manually. Full control.', template: 'empty' },
+]
+
 export function NewProjectDialog({ onClose }: { onClose: () => void }) {
+  const snapshot = useStore((s) => s.snapshot)
+  const clients = snapshot?.clients ?? []
+  const [step, setStep] = useState<'profile' | 'details'>('profile')
+  const [profile, setProfile] = useState<ProjectProfile | null>(null)
+  const [clientId, setClientId] = useState<string>('')
   const [name, setName] = useState('')
   const [path, setPath] = useState('')
   const [description, setDescription] = useState('')
   const [template, setTemplate] = useState<'empty' | 'static' | 'react-vite' | 'express-api' | 'fastapi'>('empty')
   const [busy, setBusy] = useState(false)
 
+  const selectProfile = (p: ProjectProfile) => {
+    setProfile(p)
+    setTemplate(p.template)
+    setStep('details')
+  }
+
   const submit = async () => {
     if (!name.trim() || !path.trim() || busy) return
     if (useStore.getState().editorDirty && !window.confirm('Discard unsaved code edits and create a project?')) return
     setBusy(true)
     const project = await guard(
-      () => window.ventriee.createProject({ name, path, description, template }),
+      () => window.ventriee.createProject({ name, path, description, template, clientId: clientId || null }),
       'Project created'
     )
     setBusy(false)
     if (project) onClose()
   }
 
+  if (step === 'profile') {
+    return (
+      <Modal title="New project" subtitle="Choose a project profile to get started." onClose={onClose}>
+        <div className="profile-grid">
+          {PROJECT_PROFILES.map((p) => (
+            <button key={p.id} className="profile-card" onClick={() => selectProfile(p)}>
+              <div className="profile-card-label">{p.label}</div>
+              <div className="profile-card-desc">{p.description}</div>
+            </button>
+          ))}
+        </div>
+      </Modal>
+    )
+  }
+
   return (
     <Modal
-      title="New project"
+      title={profile ? `New project — ${profile.label}` : 'New project'}
       subtitle="A workspace folder and a squad are created for you."
       onClose={onClose}
       narrow
     >
+      {clients.length > 0 ? (
+        <div className="field">
+          <label className="field-label" htmlFor="proj-client">Client (optional)</label>
+          <select id="proj-client" className="select" value={clientId} onChange={(e) => setClientId(e.target.value)}>
+            <option value="">No client / internal</option>
+            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.niche ? ` — ${c.niche}` : ''}</option>)}
+          </select>
+        </div>
+      ) : null}
       <div className="field">
         <label className="field-label" htmlFor="proj-name">Project name</label>
         <input id="proj-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Client site refresh" autoFocus />
@@ -152,6 +196,7 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
       </div>
       <div className="modal-foot">
         <p className="hint">Creating a project seeds the 14 default workers and the memory files for this project.</p>
+        <button className="btn ghost" onClick={() => setStep('profile')}>← Back</button>
         <button className="btn ghost" onClick={onClose}>Cancel</button>
         <button className="btn primary" onClick={submit} disabled={!name.trim() || !path.trim() || busy}>
           {busy ? 'Creating…' : 'Create project'}

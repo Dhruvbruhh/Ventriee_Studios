@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { guard, useStore } from '../store'
 import { Modal, Switch } from '../shell'
-import { ENGINE_LABELS, type Agent, type EngineKind } from '../../../shared/types'
+import { ENGINE_LABELS, type Agent, type AppSettings, type EngineKind } from '../../../shared/types'
 // CLI adapters spawn a process per request; mirrors isCliEngine in main.
 const isCliEngine = (engine: EngineKind) => engine.startsWith('cli-')
-import { IconClose, IconCheck, IconCpu, IconDatabase, IconKey, IconPlug, IconPlus, IconRefresh, IconSliders, IconTrash, IconUsers } from '../icons'
+import { IconClose, IconCheck, IconCpu, IconDatabase, IconGithub, IconKey, IconMic, IconPalette, IconPlug, IconPlus, IconRefresh, IconSliders, IconTrash, IconUsers } from '../icons'
+import { pickVoice } from '../voice/speaker'
+import type { McpInspectResult, VoiceSettings } from '../../../shared/types'
 import { ModelPicker, resolveModel } from '../components/ModelPicker'
 import { AddProviderDialog } from '../components/AddProviderDialog'
 import { TerminalView } from '../components/Terminal'
@@ -12,7 +14,7 @@ import { Toolchains } from '../components/Toolchains'
 import { installUpdate, useUpdateState } from '../components/UpdateNotice'
 import type { CredentialInfo } from '../../../shared/ipc'
 
-type Tab = 'subscriptions' | 'engines' | 'workers' | 'run' | 'tools' | 'data'
+type Tab = 'subscriptions' | 'engines' | 'workers' | 'run' | 'tools' | 'data' | 'connectors' | 'voice' | 'appearance' | 'github'
 
 /** Subscriptions reach the studio through each vendor's own CLI login; the studio never sees the password. */
 const SUBSCRIPTIONS: Array<{ engine: EngineKind; name: string; plan: string; install: string; login: string; hint: string }> = [
@@ -30,7 +32,11 @@ const TABS: Array<[Tab, string, ReactNode]> = [
   ['workers', 'Workers', <IconUsers key="i" />],
   ['run', 'Run policy', <IconSliders key="i" />],
   ['tools', 'MCP tools', <IconPlug key="i" />],
-  ['data', 'Data', <IconDatabase key="i" />]
+  ['data', 'Data', <IconDatabase key="i" />],
+  ['connectors', 'Connectors', <IconPlug key="i" />],
+  ['github', 'GitHub', <IconGithub key="i" />],
+  ['voice', 'Voice', <IconMic key="i" />],
+  ['appearance', 'Appearance', <IconPalette key="i" />]
 ]
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
@@ -56,6 +62,10 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       {tab === 'run' ? <RunPolicy /> : null}
       {tab === 'tools' ? <McpTools /> : null}
       {tab === 'data' ? <DataTab /> : null}
+      {tab === 'connectors' ? <ConnectorsTab /> : null}
+      {tab === 'voice' ? <VoiceTab /> : null}
+      {tab === 'github' ? <GithubTab /> : null}
+      {tab === 'appearance' ? <AppearanceTab /> : null}
     </Modal>
   )
 }
@@ -71,18 +81,42 @@ function McpTools() {
   const [args, setArgs] = useState('')
   const save = (next: typeof servers, done?: string) => guard(() => window.ventriee.saveSettings({ mcpServers: next }), done)
   const nameOk = /^[A-Za-z0-9_-]{1,40}$/.test(name) && !servers.some((s) => s.name === name)
+  const [checks, setChecks] = useState<Record<string, McpInspectResult | 'testing'>>({})
+  const test = async (server: string) => {
+    setChecks((c) => ({ ...c, [server]: 'testing' }))
+    const result = await window.ventriee.mcpInspect(server).catch((e: Error) => ({ ok: false, serverName: server, serverVersion: '', tools: [], ms: 0, error: e.message }) as McpInspectResult)
+    setChecks((c) => ({ ...c, [server]: result }))
+  }
   return <>
     <PaneHead title="MCP tools">
       MCP servers give workers extra tools (a browser, a database, GitHub…). Enabled servers are passed to <b>Claude Code</b> workers on every run.
       Codex and Gemini CLI read MCP servers from their own config files (<code>~/.codex/config.toml</code>, <code>~/.gemini/settings.json</code>), so add them there for those engines.
       A server runs as a program on this computer with your permissions: add only ones you trust.
     </PaneHead>
-    {!servers.length ? <p className="settings-empty">No MCP servers yet. Add one below.</p> : <div className="settings-list">{servers.map((s, i) => <div className="provider-line" key={s.name}>
-      <span className="prov-name">{s.name}</span>
-      <span className="prov-detail mono" title={`${s.command} ${s.args.join(' ')}`}>{s.command} {s.args.join(' ')}</span>
-      <Switch on={s.enabled} onClick={() => void save(servers.map((x, j) => (j === i ? { ...x, enabled: !x.enabled } : x)))} label={`Enable ${s.name}`} />
-      <button className="btn tiny" onClick={() => void save(servers.filter((_, j) => j !== i), `Removed ${s.name}`)} aria-label={`Remove ${s.name}`}><IconTrash /></button>
-    </div>)}</div>}
+    {!servers.length ? <p className="settings-empty">No MCP servers yet. Add one below.</p> : <div className="settings-list">{servers.map((s, i) => {
+      const check = checks[s.name]
+      return <div key={s.name}>
+        <div className="provider-line">
+          <span className="prov-name">{s.name}</span>
+          <span className="prov-detail mono" title={s.url ?? `${s.command} ${s.args.join(' ')}`}>{s.url ? `${s.transport ?? 'http'} ${s.url}` : `${s.command} ${s.args.join(' ')}`}{s.env && Object.keys(s.env).length ? ` · env: ${Object.keys(s.env).join(', ')}` : ''}</span>
+          <button className="btn tiny" onClick={() => void test(s.name)} disabled={check === 'testing'} title="Start the server, list its tools, then stop it">{check === 'testing' ? 'Testing…' : 'Test'}</button>
+          <Switch on={s.enabled} onClick={() => void save(servers.map((x, j) => (j === i ? { ...x, enabled: !x.enabled } : x)))} label={`Enable ${s.name}`} />
+          <button className="btn tiny" onClick={() => void save(servers.filter((_, j) => j !== i), `Removed ${s.name}`)} aria-label={`Remove ${s.name}`}><IconTrash /></button>
+        </div>
+        {check && check !== 'testing' ? <div className={`mcp-inspect${check.ok ? '' : ' bad'}`} role="status">
+          {check.ok
+            ? <><b>Connected</b> to {check.serverName}{check.serverVersion ? ` ${check.serverVersion}` : ''} in {check.ms} ms · {check.tools.length} tool{check.tools.length === 1 ? '' : 's'}
+              {check.resources?.length ? ` · ${check.resources.length} resource${check.resources.length === 1 ? '' : 's'}` : ''}
+              {check.prompts?.length ? ` · ${check.prompts.length} prompt${check.prompts.length === 1 ? '' : 's'}` : ''}
+              {check.tools.length || check.resources?.length || check.prompts?.length ? <ul>
+                {check.tools.map((t) => <li key={`t-${t.name}`}><code>{t.name}</code><span>{t.description.split('\n')[0]}</span></li>)}
+                {check.resources?.map((r) => <li key={`r-${r.uri}`}><code>{r.name}</code><span>Resource · {r.uri}</span></li>)}
+                {check.prompts?.map((p) => <li key={`p-${p.name}`}><code>{p.name}</code><span>Prompt · {p.description.split('\n')[0]}</span></li>)}
+              </ul> : null}</>
+            : <><b>Could not connect.</b> {check.error}</>}
+        </div> : null}
+      </div>
+    })}</div>}
     <form className="mcp-add" onSubmit={(e) => { e.preventDefault(); if (!nameOk || !command.trim()) return
       void save([...servers, { name, command: command.trim(), args: args.trim() ? args.trim().split(/\s+/) : [], enabled: true }], `Added ${name}`).then(() => { setName(''); setCommand(''); setArgs('') }) }}>
       <input className="input" aria-label="Server name" placeholder="name, e.g. filesystem" value={name} onChange={(e) => setName(e.target.value)} />
@@ -304,6 +338,7 @@ function AgentForm({ agent }: { agent: Agent }) {
           autonomy: draft.autonomy,
           reasoning: draft.reasoning,
           skills: draft.skills,
+          mcpServers: draft.mcpServers,
           budgetUsd: draft.budgetUsd,
           enabled: draft.enabled
         }),
@@ -430,6 +465,36 @@ function AgentForm({ agent }: { agent: Agent }) {
           {draft.skills.length
             ? 'This worker is offered exactly these skills, and told to read each SKILL.md before relying on it.'
             : 'No skills picked, so this worker uses the defaults for its role.'}
+        </div>
+      </div>
+      <div className="field">
+        <label className="field-label">MCP servers</label>
+        <div className="flex gap-8 flex-wrap">
+          {(snapshot.settings.mcpServers ?? []).filter((s) => s.enabled).map((server) => {
+            const on = (draft.mcpServers ?? []).includes(server.name)
+            return (
+              <button
+                key={server.name}
+                className={`btn tiny ${on ? 'primary' : ''}`}
+                onClick={() =>
+                  setDraft({
+                    ...draft,
+                    mcpServers: on
+                      ? (draft.mcpServers ?? []).filter((n) => n !== server.name)
+                      : [...(draft.mcpServers ?? []), server.name]
+                  })
+                }
+              >
+                {server.name}
+              </button>
+            )
+          })}
+          {!(snapshot.settings.mcpServers ?? []).filter((s) => s.enabled).length ? <span className="faint text-xs">No MCP servers enabled — add them under MCP tools.</span> : null}
+        </div>
+        <div className="hint">
+          {(draft.mcpServers ?? []).length
+            ? 'This worker only receives these MCP servers.'
+            : 'No restriction — this worker receives all enabled MCP servers.'}
         </div>
       </div>
       <div className="row items-end">
@@ -811,4 +876,232 @@ function DataTab() {
       </div>
     </>
   )
+}
+
+type ConnectorField = { key: keyof AppSettings['connectors']; label: string; placeholder: string; hint: string; password?: boolean }
+const CONNECTOR_FIELDS: ConnectorField[] = [
+  { key: 'resendKey', label: 'Resend API key', placeholder: 're_…', hint: 'Transactional email. Used by the outreach agent.', password: true },
+  { key: 'firecrawlKey', label: 'Firecrawl API key', placeholder: 'fc-…', hint: 'Web scraping. Used by the researcher agent.', password: true },
+  { key: 'posthogKey', label: 'PostHog API key', placeholder: 'phc_…', hint: 'Product analytics injected into client builds.', password: true },
+  { key: 'posthogHost', label: 'PostHog host', placeholder: 'https://app.posthog.com', hint: 'Self-hosted or cloud PostHog endpoint.' },
+  { key: 'sentryDsn', label: 'Sentry DSN', placeholder: 'https://…@sentry.io/…', hint: 'Error monitoring injected into client builds.' },
+  { key: 'stripeKey', label: 'Stripe secret key', placeholder: 'sk_live_… or sk_test_…', hint: 'Payments. Used when billing features are added.', password: true },
+  { key: 'e2bKey', label: 'E2B API key', placeholder: 'e2b_…', hint: 'Cloud sandboxes for remote runs. Get a key at e2b.dev.', password: true },
+]
+
+function ConnectorsTab() {
+  const settings = useStore((s) => s.snapshot?.settings)
+  const connectors = settings?.connectors ?? { resendKey: '', posthogKey: '', posthogHost: 'https://app.posthog.com', sentryDsn: '', firecrawlKey: '', stripeKey: '', e2bKey: '' }
+  const [draft, setDraft] = useState<AppSettings['connectors']>(connectors)
+  const [saved, setSaved] = useState(false)
+
+  const save = async () => {
+    await guard(() => window.ventriee.saveSettings({ connectors: draft }))
+    setSaved(true)
+    setTimeout(() => setSaved(false), 1500)
+  }
+
+  return (
+    <>
+      <div className="section-label">Outbound service credentials</div>
+      <p className="hint" style={{ marginBottom: 16 }}>
+        Keys are stored in Studio settings and handed to CLI agent workers as environment variables
+        (RESEND_API_KEY, FIRECRAWL_API_KEY, POSTHOG_API_KEY, POSTHOG_HOST, SENTRY_DSN, STRIPE_SECRET_KEY). They are not written into project files.
+      </p>
+      {CONNECTOR_FIELDS.map((f) => (
+        <div className="field" key={f.key}>
+          <label className="field-label">{f.label}</label>
+          <input
+            className="input mono"
+            type={f.password ? 'password' : 'text'}
+            value={draft[f.key]}
+            placeholder={f.placeholder}
+            onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+            autoComplete="off"
+          />
+          <div className="hint">{f.hint}</div>
+        </div>
+      ))}
+      <div className="flex gap-8 space-above">
+        <button className="btn primary" onClick={save}>{saved ? '✓ Saved' : 'Save connectors'}</button>
+      </div>
+    </>
+  )
+}
+
+const OPENAI_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer']
+const SAMPLE = 'Namaste! Main Ventriee hoon. Aaj kya banana hai?'
+
+function VoiceTab() {
+  const settings = useStore((s) => s.snapshot!.settings)
+  const [draft, setDraft] = useState<VoiceSettings>(settings.voice)
+  const [systemVoices, setSystemVoices] = useState<SpeechSynthesisVoice[]>(() => speechSynthesis.getVoices())
+  useEffect(() => {
+    const update = () => setSystemVoices(speechSynthesis.getVoices())
+    speechSynthesis.addEventListener('voiceschanged', update)
+    return () => speechSynthesis.removeEventListener('voiceschanged', update)
+  }, [])
+  const set = <K extends keyof VoiceSettings>(key: K, value: VoiceSettings[K]) => setDraft((d) => ({ ...d, [key]: value }))
+  const save = () => guard(() => window.ventriee.saveSettings({ voice: draft }), 'Voice settings saved')
+  const test = async () => {
+    await save()
+    if (draft.tts === 'system') {
+      speechSynthesis.cancel()
+      const u = new SpeechSynthesisUtterance(SAMPLE)
+      u.lang = 'en-IN'
+      const v = pickVoice(draft.voiceName, u.lang)
+      if (v) u.voice = v
+      u.rate = draft.rate
+      u.volume = draft.volume
+      speechSynthesis.speak(u)
+      return
+    }
+    const bytes = await guard(() => window.ventriee.voiceSpeak(SAMPLE))
+    if (!bytes) return
+    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'audio/mpeg' }))
+    const audio = new Audio(url)
+    audio.playbackRate = draft.rate
+    audio.volume = draft.volume
+    audio.onended = () => URL.revokeObjectURL(url)
+    void audio.play()
+  }
+  const indian = systemVoices.filter((v) => /-IN$/i.test(v.lang))
+  const others = systemVoices.filter((v) => !/-IN$/i.test(v.lang))
+
+  return <>
+    <PaneHead title="Voice assistant">
+      Ventriee listens for Hindi, English and Hinglish and talks back. Open it with the pill in the corner or <kbd>Ctrl+Alt+V</kbd>.
+      The assistant shows how long each step took on this computer, so you can compare settings.
+    </PaneHead>
+
+    <div className="section-label">Who answers</div>
+    <div className="field">
+      <select className="input" value={draft.source} onChange={(e) => set('source', e.target.value as VoiceSettings['source'])} aria-label="Voice model source">
+        <option value="cloud">Planner engine ({ENGINE_LABELS[settings.plannerEngine]}{settings.plannerModel ? `, ${settings.plannerModel}` : ''})</option>
+        <option value="local">Local Ollama model</option>
+      </select>
+      <div className="hint">API engines stream words as they are written, so speech starts sooner. CLI engines start a program per answer and are slower to first word.</div>
+    </div>
+    {draft.source === 'local' ? <>
+      <div className="field"><label className="field-label">Ollama model</label>
+        <input className="input mono" value={draft.localModel} placeholder="empty = the first model Ollama lists, e.g. llama3.2:3b" onChange={(e) => set('localModel', e.target.value)} /></div>
+      <div className="field"><label className="field-label">Ollama address</label>
+        <input className="input mono" value={draft.localEndpoint} placeholder="empty = Ollama's default address" onChange={(e) => set('localEndpoint', e.target.value)} /></div>
+    </> : null}
+
+    <div className="section-label">Speech recognition</div>
+    <div className="field"><label className="field-label">Local Whisper server (OpenAI-compatible)</label>
+      <input className="input mono" value={draft.sttEndpoint} placeholder="http://127.0.0.1:8000/v1" onChange={(e) => set('sttEndpoint', e.target.value)} />
+      <div className="hint">
+        Fastest private option: run faster-whisper-server, or whisper.cpp's server with <code>--inference-path /v1/audio/transcriptions</code>, and paste its address.
+        Empty uses the built-in transcriber: a local <code>whisper</code> install (accurate but loads its model every turn, so several seconds), else your OpenAI or Mistral key.
+      </div>
+    </div>
+    <div className="flex gap-8">
+      <div className="field grow"><label className="field-label">Model on that server</label>
+        <input className="input mono" value={draft.sttModel} placeholder="whisper-1" onChange={(e) => set('sttModel', e.target.value)} /></div>
+      <div className="field grow"><label className="field-label">Language</label>
+        <select className="input" value={draft.language} onChange={(e) => set('language', e.target.value as VoiceSettings['language'])}>
+          <option value="auto">Auto (Hindi, English, Hinglish)</option>
+          <option value="en">English</option>
+          <option value="hi">Hindi</option>
+        </select></div>
+    </div>
+
+    <div className="section-label">Speaking voice</div>
+    <div className="flex gap-8">
+      <div className="field grow"><label className="field-label">Engine</label>
+        <select className="input" value={draft.tts} onChange={(e) => { set('tts', e.target.value as VoiceSettings['tts']); set('voiceName', '') }}>
+          <option value="system">System voices (on this computer)</option>
+          <option value="openai">OpenAI voices (natural, needs an OpenAI key)</option>
+        </select></div>
+      <div className="field grow"><label className="field-label">Voice</label>
+        <select className="input" value={draft.voiceName} onChange={(e) => set('voiceName', e.target.value)}>
+          <option value="">{draft.tts === 'system' ? 'Automatic (matches the language)' : 'alloy'}</option>
+          {draft.tts === 'system'
+            ? <>{indian.length ? <optgroup label="Indian">{indian.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}</optgroup> : null}
+              <optgroup label="Other">{others.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}</optgroup></>
+            : OPENAI_VOICES.map((v) => <option key={v} value={v}>{v}</option>)}
+        </select></div>
+    </div>
+    {draft.tts === 'system' && !indian.length ? <p className="hint">No Indian voice is installed. On Windows add one under Settings → Time &amp; language → Speech (for example Hindi or English (India)).</p> : null}
+    <div className="flex gap-8">
+      <div className="field grow"><label className="field-label">Speed {draft.rate.toFixed(2)}×</label>
+        <input type="range" min={0.6} max={1.8} step={0.05} value={draft.rate} onChange={(e) => set('rate', Number(e.target.value))} /></div>
+      <div className="field grow"><label className="field-label">Volume {Math.round(draft.volume * 100)}%</label>
+        <input type="range" min={0} max={1} step={0.05} value={draft.volume} onChange={(e) => set('volume', Number(e.target.value))} /></div>
+    </div>
+
+    <div className="section-label">Conversation</div>
+    <div className="provider-line">
+      <span className="prov-name">Interrupt by talking</span>
+      <span className="prov-detail">Talk over Ventriee to cut it off. With speakers instead of headphones its own voice can trigger this; turn it off and use Esc.</span>
+      <Switch on={draft.bargeIn} onClick={() => set('bargeIn', !draft.bargeIn)} label="Interrupt by talking" />
+    </div>
+    <div className="field"><label className="field-label">Pause that ends your turn: {draft.endSilenceMs} ms</label>
+      <input type="range" min={400} max={1600} step={50} value={draft.endSilenceMs} onChange={(e) => set('endSilenceMs', Number(e.target.value))} />
+      <div className="hint">Shorter answers faster; longer lets you think mid-sentence.</div></div>
+
+    <div className="flex gap-8 space-above">
+      <button className="btn primary" onClick={() => void save()}>Save voice settings</button>
+      <button className="btn" onClick={() => void test()}>Save and test voice</button>
+    </div>
+  </>
+}
+
+const GH_COMMANDS = {
+  install: navigator.userAgent.includes('Windows') ? 'winget install --id GitHub.cli -e --source winget' : 'brew install gh',
+  login: 'gh auth login --hostname github.com --git-protocol https --web',
+  logout: 'gh auth logout --hostname github.com'
+}
+
+function GithubTab() {
+  const snapshot = useStore((s) => s.snapshot)!
+  const project = snapshot.projects.find((p) => p.id === snapshot.activeProjectId) ?? null
+  const [status, setStatus] = useState<Awaited<ReturnType<typeof window.ventriee.githubAuth>> | null>(null)
+  const [running, setRunning] = useState<keyof typeof GH_COMMANDS | null>(null)
+  const check = async () => setStatus(await guard(() => window.ventriee.githubAuth()))
+  useEffect(() => { void check() }, [])
+  return <>
+    <PaneHead title="GitHub">
+      Pull requests, issues, reviews and merges in Source Control use the official GitHub CLI. Sign in once here: it opens github.com in your browser with a one-time code.
+      Ventriee never sees your password or token; <code>gh</code> keeps it in your system's credential store.
+    </PaneHead>
+    <div className="provider-line">
+      <span className="prov-name">github.com</span>
+      <span className={`prov-detail${status?.signedIn ? ' ok-text' : ''}`}>{status ? status.detail : 'Checking…'}</span>
+      <button className="btn tiny" onClick={() => void check()}>Refresh</button>
+    </div>
+    <div className="flex gap-8 space-above">
+      {status && !status.installed ? <button className="btn primary" disabled={!project} onClick={() => setRunning('install')}>Install GitHub CLI</button> : null}
+      {status?.installed && !status.signedIn ? <button className="btn primary" disabled={!project} onClick={() => setRunning('login')}>Sign in to GitHub</button> : null}
+      {status?.signedIn ? <button className="btn" disabled={!project} onClick={() => setRunning('logout')}>Sign out</button> : null}
+    </div>
+    {!project ? <p className="hint">Open a project first: the terminal starts in its folder.</p> : null}
+    {running && project ? <div className="subscription-terminal">
+      <p className="hint"><b>{running === 'install' ? 'Installing the GitHub CLI.' : running === 'login' ? 'Signing in: copy the one-time code, finish in the browser, then press Refresh.' : 'Signing out.'}</b>
+        {' '}<button className="ghost-link" onClick={() => { setRunning(null); void check() }}>Close terminal</button></p>
+      <TerminalView key={running} projectId={project.id} slot={`github-${running}`} label={`GitHub ${running}`} command={GH_COMMANDS[running]} closeOnUnmount />
+    </div> : null}
+  </>
+}
+
+function AppearanceTab() {
+  const theme = useStore((s) => s.snapshot!.settings.theme)
+  const [pluginThemes, setPluginThemes] = useState<Array<[AppSettings['theme'], string]>>([])
+  useEffect(() => { void window.ventriee.pluginList().then((list) => setPluginThemes(list.flatMap((p) => p.themes.map((t): [AppSettings['theme'], string] => [`plugin:${p.id}:${t.id}`, `${t.name} (${p.name})`])))) }, [])
+  const options: Array<[AppSettings['theme'], string]> = [['dark', 'Dark'], ['light', 'Light'], ['system', 'Match Windows']]
+  const pick = (id: AppSettings['theme']) => void guard(() => window.ventriee.saveSettings({ theme: id }))
+  return <>
+    <PaneHead title="Appearance">The studio's colours. The code editor keeps its own theme (Code → editor theme).</PaneHead>
+    <div className="vx-modes" role="radiogroup" aria-label="Theme" style={{ maxWidth: 360 }}>
+      {options.map(([id, label]) => (
+        <button key={id} role="radio" aria-checked={theme === id} className={theme === id ? 'on' : ''} onClick={() => pick(id)}>{label}</button>
+      ))}
+    </div>
+    {pluginThemes.length ? <>
+      <div className="section-label space-above">From plugins</div>
+      <div className="mk-chips">{pluginThemes.map(([id, label]) => <button key={id} className="vx-chip" aria-pressed={theme === id} onClick={() => pick(id)}>{theme === id ? '✓ ' : ''}{label}</button>)}</div>
+    </> : null}
+  </>
 }

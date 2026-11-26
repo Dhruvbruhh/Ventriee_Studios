@@ -8,7 +8,7 @@ declare global {
   }
 }
 
-export type Panel = 'none' | 'settings' | 'memory' | 'skills' | 'automations' | 'project' | 'runs'
+export type Panel = 'none' | 'settings' | 'memory' | 'skills' | 'automations' | 'project' | 'runs' | 'clients' | 'resources' | 'analytics' | 'workflows' | 'browser' | 'remote' | 'marketplace'
 export type RailTab = 'plan' | 'activity' | 'mail'
 /** The dashboard is the landing view; plan is where ideas start; the office is where work happens. */
 export type Workspace = 'home' | 'plan' | 'office' | 'code'

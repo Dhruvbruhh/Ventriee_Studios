@@ -8,7 +8,7 @@ import { EventEmitter } from 'node:events'
 import type { Store } from './store'
 import type { MemoryService } from './memory'
 import type { Credentials } from './credentials'
-import { runEngine, isCliEngine, modelFor, detectProviders } from './engines'
+import { runEngine, isCliEngine, modelFor, detectProviders, connectorEnv } from './engines'
 import { deliverFiles } from './deliver'
 import { Mailbox, parseMessageBlocks } from './mailbox'
 import type { CheckpointService } from './checkpoint'
@@ -51,7 +51,7 @@ export interface OrchestratorDeps {
   /** Pre-run snapshots; optional so tests can run without Git. */
   checkpoints?: CheckpointService
   /** Path of the MCP servers file for Claude Code workers, or '' when none are enabled. */
-  mcpConfig?: () => string
+  mcpConfig?: (filter?: string[]) => string
   /** The project's running preview URL, if any, so browser-capable workers can test it. */
   previewUrl?: (projectId: string) => string | null
 }
@@ -258,6 +258,7 @@ export class Orchestrator {
       autonomy: 'scoped',
       reasoning: 'auto',
       skills: tpl.skills,
+      mcpServers: [],
       concurrency: 1,
       budgetUsd: 5,
       color: tpl.color,
@@ -692,7 +693,8 @@ JSON shape:
           engine: run.engine,
           model: run.model,
           endpoint: run.endpoint,
-          mcpConfig: run.engine === 'cli-claude' ? this.deps.mcpConfig?.() || undefined : undefined,
+          mcpConfig: run.engine === 'cli-claude' ? this.deps.mcpConfig?.(agent.mcpServers?.length ? agent.mcpServers : undefined) || undefined : undefined,
+          env: connectorEnv(this.deps.store.settings().connectors),
           system: withRules(agent.instructions, project.path),
           prompt: ask,
           images: this.images.get(project.id),

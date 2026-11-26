@@ -1,8 +1,14 @@
 ﻿import { useMemo, useState } from 'react'
 import { guard, useStore } from '../store'
 import { Modal, Switch } from '../shell'
-import { IconClock, IconExternal, IconPlus, IconRefresh, IconSearch, IconTrash } from '../icons'
+import { IconClock, IconEdit, IconExternal, IconPlus, IconRefresh, IconSearch, IconTrash } from '../icons'
 import type { SkillScanReport } from '../../../shared/types'
+
+const FEATURED_SKILLS = [
+  { name: 'ponytail', description: 'Lazy senior developer — minimal complete changes', url: 'https://github.com/anthropics/claude-code/tree/main/.claude/skills/ponytail' },
+  { name: 'antislop', description: 'Avoid clichéd and repetitive AI output', url: 'https://github.com/doomguy/antislop-sampler' },
+  { name: 'impeccable', description: 'Impeccable code quality and style standards', url: 'https://github.com/doomguy/impeccable' }
+]
 
 function ScanBadge({ scan }: { scan?: SkillScanReport | null }) {
   if (!scan) return <span className="badge">scanning…</span>
@@ -13,6 +19,7 @@ function ScanBadge({ scan }: { scan?: SkillScanReport | null }) {
 }
 
 type Filter = 'all' | 'on' | 'off' | 'review'
+type Tab = 'installed' | 'marketplace'
 
 export function SkillsPanel({ onClose }: { onClose: () => void }) {
   const snapshot = useStore((s) => s.snapshot)!
@@ -24,6 +31,11 @@ export function SkillsPanel({ onClose }: { onClose: () => void }) {
   const [reportSkill, setReportSkill] = useState('')
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
+  const [tab, setTab] = useState<Tab>('installed')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editContent, setEditContent] = useState('')
+  const [installUrl, setInstallUrl] = useState('')
+  const [installing, setInstalling] = useState(false)
 
   const skills = snapshot.skills
   const review = (s: (typeof skills)[number]) => Boolean(s.scan && s.scan.recommendation !== 'SAFE')
@@ -47,25 +59,101 @@ export function SkillsPanel({ onClose }: { onClose: () => void }) {
     }
   }
 
+  const openEditor = async (id: string) => {
+    const content = await guard(() => window.ventriee.skillRead(id))
+    if (content != null) { setEditContent(content as string); setEditingId(id) }
+  }
+
+  const saveEditor = async () => {
+    if (!editingId) return
+    await guard(() => window.ventriee.skillWrite(editingId, editContent), 'Skill saved')
+    setEditingId(null)
+  }
+
+  const installFromUrl = async (url: string) => {
+    if (!url.trim()) return
+    setInstalling(true)
+    const result = await guard(() => window.ventriee.skillInstallUrl(url.trim()))
+    setInstalling(false)
+    if (result) {
+      const r = result as { skill: { name: string } | null; report: SkillScanReport; removed: boolean }
+      if (r.removed) { setReport(r.report); setReportSkill('Installed skill') }
+      else if (r.report?.findings.length) { setReport(r.report); setReportSkill(r.skill?.name ?? 'Installed skill') }
+      setInstallUrl('')
+    }
+  }
+
   return (
     <Modal
       title="Skills"
       subtitle={`${counts.on} enabled of ${counts.all}. Enabled skills are offered to workers in their task brief.`}
       onClose={onClose}
       actions={
-        <>
-          <button className="btn" onClick={() => void guard(() => window.ventriee.refreshSkills(), 'Registry rescanned')}>
-            <IconRefresh /> Rescan
-          </button>
-          <button className="btn" onClick={importSkill} title="Pick a skill folder to scan and install">
-            <IconPlus /> Import
-          </button>
-          <button className="btn primary" onClick={() => setCreating((v) => !v)} aria-expanded={creating}>
-            <IconPlus /> New skill
-          </button>
-        </>
+        tab === 'installed' ? (
+          <>
+            <button className="btn" onClick={() => void guard(() => window.ventriee.refreshSkills(), 'Registry rescanned')}>
+              <IconRefresh /> Rescan
+            </button>
+            <button className="btn" onClick={importSkill} title="Pick a skill folder to scan and install">
+              <IconPlus /> Import
+            </button>
+            <button className="btn primary" onClick={() => setCreating((v) => !v)} aria-expanded={creating}>
+              <IconPlus /> New skill
+            </button>
+          </>
+        ) : undefined
       }
     >
+      <div className="seg-control space-below" role="tablist">
+        <button role="tab" aria-selected={tab === 'installed'} className={tab === 'installed' ? 'on' : ''} onClick={() => setTab('installed')}>Installed</button>
+        <button role="tab" aria-selected={tab === 'marketplace'} className={tab === 'marketplace' ? 'on' : ''} onClick={() => setTab('marketplace')}>Marketplace</button>
+      </div>
+
+      {tab === 'marketplace' ? (
+        <div>
+          <div className="inset-form space-below">
+            <div className="field">
+              <label className="field-label" htmlFor="skill-url">Install from Git URL</label>
+              <div className="row">
+                <input id="skill-url" className="input" value={installUrl} onChange={(e) => setInstallUrl(e.target.value)} placeholder="https://github.com/owner/skill-repo" />
+                <button className="btn primary" disabled={!installUrl.trim() || installing} onClick={() => void installFromUrl(installUrl)}>
+                  {installing ? 'Installing…' : 'Install'}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="section-label">Featured skills</div>
+          <div className="item-list">
+            {FEATURED_SKILLS.map((s) => {
+              const installed = snapshot.skills.some((sk) => sk.name === s.name)
+              return (
+                <div key={s.name} className="item-row">
+                  <div className="item-main">
+                    <div className="item-title"><b>{s.name}</b>{installed ? <span className="badge ok">Installed</span> : null}</div>
+                    <p className="item-desc">{s.description}</p>
+                  </div>
+                  <div className="item-actions">
+                    <a className="btn" href={s.url} target="_blank" rel="noreferrer"><IconExternal /> View</a>
+                    {!installed && (
+                      <button className="btn primary" onClick={() => void installFromUrl(s.url)}>
+                        <IconPlus /> Install
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {editingId ? (
+        <Modal title="Edit skill" onClose={() => setEditingId(null)} narrow
+          actions={<button className="btn primary" onClick={() => void saveEditor()}>Save</button>}>
+          <textarea className="textarea mono" style={{ minHeight: 400, width: '100%' }} value={editContent} onChange={(e) => setEditContent(e.target.value)} />
+        </Modal>
+      ) : null}
+
       {report ? (
         <Modal
           title={
@@ -149,7 +237,7 @@ export function SkillsPanel({ onClose }: { onClose: () => void }) {
         </form>
       ) : null}
 
-      <div className="list-toolbar">
+      {tab === 'installed' ? <><div className="list-toolbar">
         <label className="search-field">
           <IconSearch width={14} height={14} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${counts.all} skills`} aria-label="Search skills" />
@@ -184,6 +272,9 @@ export function SkillsPanel({ onClose }: { onClose: () => void }) {
                   {skill.scan.findings.length} {skill.scan.findings.length === 1 ? 'issue' : 'issues'}
                 </button>
               ) : null}
+              <button className="icon-btn" onClick={() => void openEditor(skill.id)} aria-label={`Edit ${skill.name}`} title="Edit SKILL.md">
+                <IconEdit />
+              </button>
               <button className="icon-btn" onClick={() => void guard(() => window.ventriee.revealFile(skill.path))} aria-label={`Show ${skill.name} folder`} title={`${skill.source}: show folder`}>
                 <IconExternal />
               </button>
@@ -196,7 +287,7 @@ export function SkillsPanel({ onClose }: { onClose: () => void }) {
             {skills.length ? 'No skills match.' : 'No skills yet. Verified workflows are added automatically after a run, or create one above.'}
           </p>
         ) : null}
-      </div>
+      </div></> : null}
     </Modal>
   )
 }

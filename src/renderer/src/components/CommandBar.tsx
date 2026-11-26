@@ -23,6 +23,9 @@ export function CommandBar() {
   const attach = useAttachments(project?.id)
   const mic = useVoice((text) => { const d = useStore.getState().draft; setDraft(d ? `${d} ${text}` : text) })
   const configured = snapshot.providers.filter((p) => p.available).length
+  const [shortcuts, setShortcuts] = useState<Array<{ id: string; title: string; prompt: string }>>([])
+  // Refetched when settings change, which is what installing or removing a plugin does.
+  useEffect(() => { void window.ventriee.pluginList().then((list) => setShortcuts(list.flatMap((p) => p.commands.map((c) => ({ ...c, id: `${p.id}:${c.id}` }))))).catch(() => {}) }, [snapshot.settings])
 
   useEffect(() => {
     const el = ref.current
@@ -71,6 +74,10 @@ export function CommandBar() {
             {...attach.handlers}
           />
           {attach.button}{mic}
+          {shortcuts.length ? <select className="select" value="" onChange={(e) => { const c = shortcuts.find((x) => x.id === e.target.value); if (c) setDraft(c.prompt) }} aria-label="Plugin shortcuts" title="Prompt shortcuts from your plugins">
+            <option value="" disabled>Shortcuts</option>
+            {shortcuts.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+          </select> : null}
           <select className="select" value={profile} onChange={(e) => setProfile(e.target.value as typeof profile)} aria-label="Run profile" title="Client website: research, stack pick, folders, database, backend, frontend, security, review, QA, ship">
             <option value="">Auto</option>
             <option value="website">Client website</option>

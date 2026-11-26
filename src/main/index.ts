@@ -1,7 +1,7 @@
 import type { StartRunInput } from '../shared/types'
-import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol, Notification } from 'electron'
 import { join, relative, sep } from 'node:path'
-import { existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
 import { StudioAuth } from './auth'
 import { FileService, workspacePath } from './files'
@@ -28,7 +28,7 @@ import { ExtensionService } from './extensions'
 import { TestService, detectRunners } from './testrunner'
 import { listTasks } from './tasks'
 import { HistoryService } from './history'
-import { github } from './github'
+import { github, githubAuth } from './github'
 import { ErrorLog, issueUrl } from './errorlog'
 import { baseCatalog, type Catalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
@@ -44,6 +44,18 @@ import { Updater } from './updater'
 import { spendBlock, startOfToday } from './spend'
 import { attachmentPaths, recentScreenshots, saveAttachment } from './attachments'
 import { transcribe } from './transcribe'
+import { voiceEngine, voiceSpeak, voiceSystemPrompt, voiceTranscribe } from './voice'
+import { inspectMcp } from './mcpInspect'
+import { installServer, searchRegistry } from './mcpRegistry'
+import { PluginService } from './plugins'
+import { RemoteJobs, E2BProvider } from './remote'
+import { fileMatches, runWorkflow, triggerOf } from './workflows'
+import { BrowserAutomation } from './browserAutomation'
+import { exec, execFile } from 'node:child_process'
+import { watch, type FSWatcher } from 'node:fs'
+import { createServer } from 'node:http'
+import { timingSafeEqual } from 'node:crypto'
+import { WEBHOOK_PORT } from '../shared/types'
 import { NotebookService } from './notebook'
 import type { GithubAction, CodeAskInput, CodeChangeInput, CodeCompleteInput, DebugBreakpoint, DebugEvent, DebugStartInput } from '../shared/workspace'
 import type {
@@ -61,10 +73,23 @@ import type {
   ProviderConfig,
   ProviderStatus,
   SessionRecord,
-  SkillRecord
+  SkillRecord,
+  Workflow,
+  RegistryServer,
+  RemoteJobInput
 } from '../shared/types'
 
 const bus = new EventEmitter()
+const voiceRequests = new Map<string, AbortController>()
+/** At most one run per workflow; the controller stops it. */
+const workflowRuns = new Map<string, AbortController>()
+/** Pending approval promises: key is `${runId}:${nodeId}`, value resolves when approved/rejected. */
+const workflowApprovals = new Map<string, (approved: boolean) => void>()
+const browser = new BrowserAutomation(
+  () => join(app.getPath('userData'), 'browser', 'screens'),
+  () => join(app.getPath('downloads'), 'Ventriee browser'),
+  (r) => sendToProject(null, IPC.browserEvent, r)
+)
 /** One entry per open window. The project id lives here, not in global kv. */
 const windows = new Map<number, { win: BrowserWindow; projectId: string | null }>()
 const terminals = new TerminalService()
@@ -92,6 +117,8 @@ let creds: Credentials
 let errors: ErrorLog | null = null
 let memory: MemoryService
 let skills: SkillService
+let plugins: PluginService
+let remote: RemoteJobs
 let preview: PreviewService
 let orchestrator: Orchestrator
 let planning: PlanningService
@@ -378,6 +405,122 @@ function registerIpc() {
   handle(IPC.graphifyStatus, (event, id: string) => graphify.status(projectRoot(event, id)))
   handle(IPC.graphifyBuild, (event, id: string) => graphify.build(projectRoot(event, id)))
   handle(IPC.graphifyQuery, (event, id: string, question: string) => graphify.query(projectRoot(event, id), String(question ?? '')))
+  handle(IPC.clientList, () => store.clients())
+  handle(IPC.clientCreate, (_e, input: { name: string; url: string; niche: string; notes: string }) => { const c = store.createClient(input); debouncedNotify(); return c })
+  handle(IPC.clientUpdate, (_e, id: string, patch: Partial<import('../shared/types').Client>) => { const c = store.updateClient(id, patch); debouncedNotify(); return c })
+  handle(IPC.clientDelete, (_e, id: string) => { store.deleteClient(id); debouncedNotify() })
+  handle(IPC.analyticsOverview, (_e, sinceMs: number) => store.analyticsOverview(sinceMs))
+
+  handle(IPC.voiceAsk, async (event, input: { requestId: string; text: string; history?: Array<{ role: 'user' | 'assistant'; text: string }> }) => {
+    const requestId = String(input.requestId)
+    const text = String(input.text ?? '').trim().slice(0, 4000)
+    if (!text) throw new Error('Nothing was said')
+    const controller = new AbortController()
+    voiceRequests.set(requestId, controller)
+    try {
+      const settings = store.settings()
+      const choice = voiceEngine(settings)
+      const active = store.project(projectOf(event) ?? '') ?? null
+      const system = voiceSystemPrompt({
+        projects: store.projects(),
+        active,
+        running: active ? Boolean(store.runningJob(active.id)) : false,
+        tasks: active ? store.tasks(active.id).slice(-6).map((t) => `- [${t.status}] ${t.title}`) : []
+      })
+      const history = (Array.isArray(input.history) ? input.history.slice(-12) : []).map((m) => `${m.role === 'user' ? 'Owner' : 'Ventriee'}: ${String(m.text).slice(0, 2000)}`)
+      const result = await runEngine({
+        ...choice,
+        system,
+        prompt: [...history, `Owner: ${text}`].join('\n') + '\n\nReply to the Owner as Ventriee.',
+        cwd: active?.path ?? app.getPath('home'),
+        maxTokens: 700,
+        timeoutMs: 90_000,
+        reasoning: 'auto',
+        signal: controller.signal,
+        onChunk: (chunk) => { if (!event.sender.isDestroyed()) event.sender.send(IPC.voiceChunk, { requestId, chunk }) }
+      }, creds)
+      if (controller.signal.aborted) return { reply: '', model: choice.model }
+      if (!result.ok) throw new Error(result.error ?? 'The voice model did not answer')
+      return { reply: result.text, model: choice.model || choice.engine }
+    } finally {
+      voiceRequests.delete(requestId)
+    }
+  })
+  handle(IPC.voiceCancel, (_e, requestId: string) => { voiceRequests.get(String(requestId))?.abort() })
+  handle(IPC.voiceTranscribe, (_e, audio: Uint8Array) => voiceTranscribe(audio, store.settings().voice, creds))
+  handle(IPC.voiceSpeak, (_e, text: string) => voiceSpeak(String(text), store.settings().voice, creds))
+
+  handle(IPC.githubAuth, () => githubAuth())
+  handle(IPC.remoteList, () => remote.list())
+  handle(IPC.remoteTest, (_e, host: string) => remote.test(String(host ?? '')))
+  handle(IPC.remoteStart, (_e, input: RemoteJobInput) => {
+    const e2bKey = store.settings().connectors.e2bKey
+    return remote.start(input, input.provider === 'e2b' && e2bKey ? new E2BProvider(e2bKey) : undefined)
+  })
+  handle(IPC.remoteRefresh, (_e, id: string) => remote.refresh(String(id)))
+  handle(IPC.remoteCancel, (_e, id: string) => remote.cancel(String(id)))
+  handle(IPC.remotePatch, async (_e, id: string) => {
+    const diff = await remote.patch(String(id))
+    const dir = join(app.getPath('userData'), 'remote')
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, `${String(id).replace(/\W/g, '')}.patch`)
+    writeFileSync(file, diff)
+    return file
+  })
+  handle(IPC.remoteCleanup, (_e, id: string) => remote.cleanup(String(id)))
+  handle(IPC.remoteForget, (_e, id: string) => remote.forget(String(id)))
+  handle(IPC.pluginList, () => plugins.list())
+  handle(IPC.pluginPreview, (_e, source: { type: 'folder' | 'git'; value: string }) => {
+    if (!source || (source.type !== 'folder' && source.type !== 'git') || typeof source.value !== 'string') throw new Error('Pick a folder or paste a Git address')
+    return plugins.preview({ type: source.type, value: source.value.trim() })
+  })
+  handle(IPC.pluginInstall, (_e, token: string) => { const info = plugins.install(String(token)); syncWorkflowTriggers(); debouncedNotify(); return info })
+  handle(IPC.pluginDiscard, (_e, token: string) => plugins.discard(String(token)))
+  handle(IPC.pluginRemove, (_e, id: string) => { plugins.remove(String(id)); syncWorkflowTriggers(); debouncedNotify() })
+  handle(IPC.mcpSearch,(_e, query: string, cursor?: string) => searchRegistry(String(query ?? ''), typeof cursor === 'string' ? cursor : ''))
+  handle(IPC.mcpInstall, (_e, server: RegistryServer, option: number, values: Record<string, string>) => {
+    const choice = server?.installs?.[option]
+    if (!choice) throw new Error('Pick how to install this server')
+    const servers = store.settings().mcpServers
+    const added = installServer(server, choice, values && typeof values === 'object' ? values : {}, servers.map((s) => s.name))
+    if (!validMcpServers([added]).length) throw new Error('This server\'s details are not valid')
+    store.saveSettings({ mcpServers: [...servers, added] })
+    debouncedNotify()
+    return added
+  })
+  handle(IPC.mcpInspect, (_e, name: string) => {
+    const server = store.settings().mcpServers.find((s) => s.name === name)
+    if (!server) throw new Error(`No MCP server named ${name}`)
+    return inspectMcp(server)
+  })
+
+  handle(IPC.workflowList, () => store.workflows())
+  handle(IPC.workflowSave, (_e, input: Partial<Workflow> & { name: string }) => {
+    if (!String(input?.name ?? '').trim()) throw new Error('Give the workflow a name')
+    if (input.projectId && !store.project(input.projectId)) throw new Error('Project not found')
+    const saved = store.saveWorkflow({ ...input, name: String(input.name).trim().slice(0, 80) })
+    syncWorkflowTriggers()
+    return saved
+  })
+  handle(IPC.workflowDelete, (_e, id: string) => { workflowRuns.get(id)?.abort(); store.deleteWorkflow(id); syncWorkflowTriggers() })
+  handle(IPC.workflowRun, (_e, id: string) => ({ runId: startWorkflow(id).runId }))
+  handle(IPC.workflowVersions, (_e, id: string) => store.workflowVersions(id))
+  handle(IPC.workflowRestore, (_e, id: string, versionId: string) => {
+    const result = store.restoreWorkflow(id, versionId)
+    if (!result) throw new Error('Version not found')
+    syncWorkflowTriggers()
+    debouncedNotify()
+    return result
+  })
+  handle(IPC.workflowApprove, (_e, runId: string, nodeId: string, approved: boolean) => {
+    const key = `${runId}:${nodeId}`
+    workflowApprovals.get(key)?.(Boolean(approved))
+    workflowApprovals.delete(key)
+  })
+  handle(IPC.browserRun, (_e, script: string) => browser.run(String(script ?? '')))
+  handle(IPC.browserLogs, () => browser.logs())
+  handle(IPC.browserClose, () => browser.close())
+  handle(IPC.workflowStop, (_e, id: string) => { workflowRuns.get(id)?.abort() })
   handle(IPC.termShells, () => shells().map(({ id, label }) => ({ id, label })))
   handle(IPC.termOpen, (event, id: string, cols: number, rows: number, shell?: string) => {
     const sender = event.sender
@@ -557,13 +700,13 @@ function registerIpc() {
     return result
   })
 
-  handle(IPC.createProject, async (event, input: { name: string; path: string; description: string; template?: TemplateId }) => {
+  handle(IPC.createProject, async (event, input: { name: string; path: string; description: string; template?: TemplateId; clientId?: string | null }) => {
     const path = input.path.trim()
     if (!path) throw new Error('A project workspace path is required')
     if (!existsSync(path)) mkdirSync(path, { recursive: true })
     const brief = applyTemplate(path, input.template ?? 'empty')
     const description = [input.description?.trim(), brief].filter(Boolean).join('\n\n')
-    const project = store.createProject({ name: input.name.trim() || 'Untitled project', path, description })
+    const project = store.createProject({ name: input.name.trim() || 'Untitled project', path, description, clientId: input.clientId ?? null })
     store.setActiveProject(project.id)
     // The window that created it switches to it; other windows keep theirs.
     const entry = windows.get(event.sender.id)
@@ -625,6 +768,7 @@ function registerIpc() {
       id: newId('agt'),
       endpoint: input.endpoint || defaultEndpoint(input.engine),
       skills: input.skills ?? [],
+      mcpServers: input.mcpServers ?? [],
       concurrency: 1,
       desk: agents.length,
       enabled: true,
@@ -852,6 +996,26 @@ function registerIpc() {
     debouncedNotify()
     return list
   })
+  handle(IPC.skillRead, (_e, id: string) => {
+    const sk = store.skills().find((s) => s.id === id)
+    if (!sk?.path) throw new Error('Skill not found')
+    const mdPath = join(sk.path, 'SKILL.md')
+    return readFileSync(mdPath, 'utf8')
+  })
+  handle(IPC.skillWrite, (_e, id: string, content: string) => {
+    const sk = store.skills().find((s) => s.id === id)
+    if (!sk?.path) throw new Error('Skill not found')
+    const mdPath = join(sk.path, 'SKILL.md')
+    writeFileSync(mdPath, content, 'utf8')
+    skills.scan()
+    debouncedNotify()
+  })
+  handle(IPC.skillInstallUrl, async (_e, url: string) => {
+    const result = await skills.installFromUrl(String(url))
+    debouncedNotify()
+    return result
+  })
+  handle(IPC.mcpToolCalls, (_e, sessionId: string) => store.mcpToolCalls(sessionId))
 
   handle(IPC.saveSettings, async (_e, patch: Partial<AppSettings>) => {
     if (patch && 'mcpServers' in patch) patch = { ...patch, mcpServers: validMcpServers(patch.mcpServers) }
@@ -1100,6 +1264,164 @@ function isSafePath(target: string) {
   return store.projects().some((p) => isInside(p.path, target))
 }
 
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** Run a saved workflow in the background, streaming node progress to every window. */
+function startWorkflow(id: string, input = '', depth = 0): { runId: string; done: Promise<string | null> } {
+  const wf = store.workflow(id)
+  if (!wf) throw new Error('Workflow not found')
+  if (workflowRuns.has(id)) throw new Error('This workflow is already running')
+  if (depth > 4) throw new Error('Workflows can call each other at most 4 deep')
+  const project = wf.projectId ? store.project(wf.projectId) : null
+  const cwd = project?.path ?? app.getPath('home')
+  const controller = new AbortController()
+  const runId = newId('wfr')
+  workflowRuns.set(id, controller)
+  store.markWorkflowRun(id, Date.now())
+  const settings = store.settings()
+  const done = runWorkflow(wf, {
+    runWorkflow: async (name, childInput) => {
+      const target = store.workflows().find((w) => w.name.toLowerCase() === name.toLowerCase())
+      if (!target) throw new Error(`No workflow named "${name}"`)
+      if (target.id === id) throw new Error('A workflow cannot run itself')
+      const result = await startWorkflow(target.id, childInput, depth + 1).done
+      if (result === null) throw new Error(`Workflow "${target.name}" failed`)
+      return result
+    },
+    browser: async (steps, stepInput) => {
+      const r = await browser.run(steps, stepInput)
+      if (!r.ok) throw new Error(r.error ?? 'The browser steps failed')
+      return r.results.map((x) => x.output).join('\n')
+    },
+    ai: async (prompt, system) => {
+      const r = await runEngine({ engine: settings.plannerEngine, model: settings.plannerModel, endpoint: settings.plannerEndpoint, system: system || 'You are a step in an automated workflow. Answer with the result only.', prompt, cwd, maxTokens: 4000, timeoutMs: 5 * 60_000, signal: controller.signal }, creds)
+      if (!r.ok) throw new Error(r.error ?? 'The model did not answer')
+      return r.text
+    },
+    agent: async (instruction) => {
+      if (!project) throw new Error('Pick a project for this workflow to run the agent team')
+      if (store.runningJob(project.id)) throw new Error(`${project.name} already has a run in progress`)
+      const jobId = await orchestrator.startRun(project.id, instruction)
+      debouncedNotify()
+      while (store.runningJob(project.id)?.id === jobId) {
+        if (controller.signal.aborted) { orchestrator.stopRun(project.id); throw new Error('Stopped') }
+        await wait(3000)
+      }
+      const job = store.jobs(project.id).find((j) => j.id === jobId)
+      if (job?.status === 'failed') throw new Error(job.error ?? 'The agent run failed')
+      return `Agent run ${job?.status ?? 'ended'}: ${instruction}`
+    },
+    shell: (command, input, timeoutMs) => new Promise((resolve, reject) => {
+      const child = exec(command, { cwd, timeout: timeoutMs, windowsHide: true, maxBuffer: 10 * 1024 * 1024, env: { ...process.env, VENTRIEE_INPUT: input } }, (error, stdout, stderr) => {
+        const out = `${stdout}${stderr ? `\n${stderr}` : ''}`.trim()
+        if (error) reject(new Error(out.slice(-1500) || error.message))
+        else resolve(out)
+      })
+      controller.signal.addEventListener('abort', () => child.kill(), { once: true })
+    }),
+    fetch: (url, init) => fetch(url, { ...init, signal: controller.signal }),
+    notify: (title, body) => {
+      if (Notification.isSupported()) new Notification({ title, body }).show()
+      if (project) store.addEvent({ projectId: project.id, agentId: null, taskId: null, type: 'automation', message: `${title}: ${body}` })
+    },
+    approve: (rId, nodeId, title) => new Promise((resolve) => {
+      workflowApprovals.set(`${rId}:${nodeId}`, resolve)
+      if (Notification.isSupported()) new Notification({ title: 'Approval required', body: title }).show()
+      sendToProject(null, IPC.workflowEvent, { workflowId: id, runId: rId, nodeId, status: 'running', output: `Waiting for approval: ${title}`, at: Date.now() })
+    })
+  }, (e) => sendToProject(null, IPC.workflowEvent, e), runId, controller.signal, input)
+    .catch((error) => { sendToProject(null, IPC.workflowEvent, { workflowId: id, runId, nodeId: null, status: 'failed', output: (error as Error).message, at: Date.now() }); return null })
+    .finally(() => { workflowRuns.delete(id); workflowFinishedAt.set(id, Date.now()); debouncedNotify() })
+  return { runId, done }
+}
+
+const WATCH_COOLDOWN_MS = 5000
+const fileWatchers = new Map<string, FSWatcher>()
+const workflowFinishedAt = new Map<string, number>()
+/** Last seen HEAD per project and last seen job per project, so git and run triggers fire on changes only. */
+const gitHeads = new Map<string, string>()
+const lastJobs = new Map<string, string>()
+
+/** Start, or restart, the file watchers for files-triggered workflows. */
+function syncWorkflowTriggers() {
+  for (const w of fileWatchers.values()) w.close()
+  fileWatchers.clear()
+  for (const wf of store.workflows()) {
+    const trigger = triggerOf(wf)
+    const project = wf.projectId ? store.project(wf.projectId) : null
+    if (!wf.enabled || trigger.on !== 'files' || !project) continue
+    let pending = new Set<string>()
+    let timer: NodeJS.Timeout | null = null
+    try {
+      const watcher = watch(project.path, { recursive: true }, (_event, file) => {
+        if (!file || !fileMatches(String(file), trigger.filter)) return
+        // A run's own edits must not start it again.
+        if (workflowRuns.has(wf.id) || Date.now() - (workflowFinishedAt.get(wf.id) ?? 0) < WATCH_COOLDOWN_MS) return
+        pending.add(String(file))
+        if (timer) clearTimeout(timer)
+        timer = setTimeout(() => {
+          const files = [...pending].slice(0, 50).join('\n')
+          pending = new Set()
+          try { startWorkflow(wf.id, `Changed files:\n${files}`) } catch { /* already running */ }
+        }, 3000)
+      })
+      watcher.on('error', () => watcher.close())
+      fileWatchers.set(wf.id, watcher)
+    } catch { /* the folder is gone; the workflow simply does not fire */ }
+  }
+}
+
+/** Webhook triggers: POST http://127.0.0.1:<port>/hooks/<workflow id>/<token>, body becomes the Start input. */
+function startWebhookServer() {
+  const server = createServer((req, res) => {
+    const m = /^\/hooks\/([\w-]+)\/([\w-]+)$/.exec(req.url ?? '')
+    const reply = (code: number, body: object) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)) }
+    if (req.method !== 'POST' || !m || !auth.hasSession()) return reply(404, { error: 'not found' })
+    const wf = store.workflow(m[1])
+    const trigger = wf ? triggerOf(wf) : null
+    const sameToken = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b))
+    if (!wf || !wf.enabled || trigger?.on !== 'webhook' || !trigger.token || !sameToken(trigger.token, m[2])) return reply(404, { error: 'not found' })
+    let body = ''
+    req.setEncoding('utf8')
+    req.on('data', (chunk: string) => { body += chunk; if (body.length > 64 * 1024) req.destroy() })
+    req.on('end', () => {
+      try { reply(202, { runId: startWorkflow(wf.id, body).runId }) } catch (e) { reply(409, { error: (e as Error).message }) }
+    })
+  })
+  server.on('error', (e) => errors?.record('webhooks', `Workflow webhooks unavailable on port ${WEBHOOK_PORT}: ${e.message}`))
+  server.listen(WEBHOOK_PORT, '127.0.0.1')
+}
+
+/** Git-commit and run-finished triggers, checked on the scheduler tick. */
+async function checkEventTriggers() {
+  const flows = store.workflows().filter((w) => w.enabled && w.projectId)
+  const wanted = new Map<string, ReturnType<typeof triggerOf>['on'][]>()
+  for (const wf of flows) wanted.set(wf.projectId!, [...(wanted.get(wf.projectId!) ?? []), triggerOf(wf).on])
+  for (const [projectId, kinds] of wanted) {
+    const project = store.project(projectId)
+    if (!project) continue
+    const fire = (kind: string, input: string) => {
+      for (const wf of flows) if (wf.projectId === projectId && triggerOf(wf).on === kind && !workflowRuns.has(wf.id)) { try { startWorkflow(wf.id, input) } catch { /* reported in its log */ } }
+    }
+    if (kinds.includes('git')) {
+      const head = await new Promise<string>((resolve) => execFile('git', ['log', '-1', '--pretty=%H %s'], { cwd: project.path, windowsHide: true }, (err, out) => resolve(err ? '' : out.trim())))
+      const before = gitHeads.get(projectId)
+      if (head) gitHeads.set(projectId, head)
+      if (head && before !== undefined && before !== head) fire('git', `New commit: ${head}`)
+    }
+    if (kinds.includes('run_done') || kinds.includes('run_failed')) {
+      const job = store.jobs(projectId).at(-1)
+      if (!job || job.status === 'running' || job.status === 'paused') continue
+      const key = `${job.id}:${job.status}`
+      const before = lastJobs.get(projectId)
+      lastJobs.set(projectId, key)
+      if (before === undefined || before === key) continue
+      if (job.status === 'failed') fire('run_failed', `Run failed: ${job.instruction}\n${job.error ?? ''}`)
+      else if (job.status === 'done') fire('run_done', `Run finished: ${job.instruction}`)
+    }
+  }
+}
+
 function startScheduler() {
   if (scheduler) clearInterval(scheduler)
   scheduler = setInterval(() => {
@@ -1134,6 +1456,13 @@ function startScheduler() {
         })
       })
     }
+    for (const wf of store.workflows()) {
+      if (!wf.enabled || wf.scheduleMinutes <= 0 || workflowRuns.has(wf.id)) continue
+      if ((wf.lastRunAt ?? wf.createdAt) + wf.scheduleMinutes * 60_000 > now) continue
+      try { startWorkflow(wf.id) } catch { /* reported through the workflow's own events */ }
+    }
+    void checkEventTriggers().catch(() => {})
+    void remote.refreshRunning().catch(() => {})
     debouncedNotify()
   }, 30_000)
   scheduler.unref?.()
@@ -1146,6 +1475,8 @@ function bootstrapData() {
   creds = new Credentials(store.db)
   memory = new MemoryService(store, userData)
   skills = new SkillService(store, userData)
+  plugins = new PluginService(store, skills, userData, app.getVersion())
+  remote = new RemoteJobs(store.db)
   checkpoints = new CheckpointService(userData)
   preview = new PreviewService(debouncedNotify, (projectId) => store.db.kvGet(`preview:autoapproved:${projectId}`) === '1')
   planning = new PlanningService(
@@ -1179,7 +1510,7 @@ function bootstrapData() {
     models: () => lastModels,
     providerConfigs: () => store.providers(),
     checkpoints,
-    mcpConfig: () => writeMcpConfig(userData, store.settings().mcpServers),
+    mcpConfig: (filter?: string[]) => writeMcpConfig(userData, store.settings().mcpServers, filter),
     previewUrl: (id) => { const p = store.project(id); const s = p ? preview.stateForProject(p) : null; return s?.status === 'ready' || s?.status === 'external' ? s.url : null }
   })
 
@@ -1238,6 +1569,8 @@ app.whenReady().then(async () => {
   updater.start()
   createTray()
   startScheduler()
+  syncWorkflowTriggers()
+  startWebhookServer()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

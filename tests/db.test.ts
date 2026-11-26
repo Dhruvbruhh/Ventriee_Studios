@@ -56,7 +56,7 @@ describe('schema migrations', () => {
     }
     const dir = dirname(file)
     const backups = readdirSync(dir).filter((f) => f.endsWith('.bak')).sort()
-    expect(backups).toEqual([`ventriee.db.v${latest - 3}.bak`, `ventriee.db.v${latest - 2}.bak`, `ventriee.db.v${latest - 1}.bak`])
+    expect(backups).toEqual([`ventriee.db.v${latest - 3}.bak`, `ventriee.db.v${latest - 2}.bak`, `ventriee.db.v${latest - 1}.bak`].sort())
     const copy = new DatabaseSync(join(dir, `ventriee.db.v${latest - 1}.bak`))
     expect(copy.prepare("SELECT value FROM kv WHERE key = 'marker'").get()).toEqual({ value: `before v${latest - 1}` })
     copy.close()

@@ -22,7 +22,22 @@ import type {
   StartRunInput,
   RunSummary,
   UpdateState,
-  Task
+  Task,
+  Client,
+  AnalyticsOverview,
+  McpInspectResult,
+  McpServer,
+  McpToolCall,
+  RegistryServer,
+  PluginInfo,
+  RemoteJob,
+  RemoteJobInput,
+  BrowserLog,
+  BrowserRunResult,
+  BrowserStepResult,
+  Workflow,
+  WorkflowVersion,
+  WorkflowRunEvent
 } from './types'
 import type { Catalog, LspEvent, LspStatus } from './catalog'
 import type { FileEntry, TextFile, GitState, GitAction, LineChange, BlameLine, ProjectTypes, GithubAction, ProjectTask, TestEvent, ExtensionContributions, FileIconTheme, NotebookEvent, ExtensionInfo, ExtensionSearchHit, DebugEvent, DebugBreakpoint, DebugStartInput, DebugVariable, LintMessage, SearchResult, CodeAskInput, CodeAskResult, CodeChangeInput, CodeChangeResult, CodeCompleteInput, EditorConfig } from './workspace'
@@ -108,7 +123,51 @@ export const IPC = {
   testProvider: 'provider:test',
   graphifyStatus: 'graphify:status',
   graphifyBuild: 'graphify:build',
-  graphifyQuery: 'graphify:query'
+  graphifyQuery: 'graphify:query',
+  clientList: 'client:list',
+  clientCreate: 'client:create',
+  clientUpdate: 'client:update',
+  clientDelete: 'client:delete',
+  analyticsOverview: 'analytics:overview',
+  voiceAsk: 'voice:ask',
+  voiceChunk: 'voice:chunk',
+  voiceCancel: 'voice:cancel',
+  voiceTranscribe: 'voice:transcribe',
+  voiceSpeak: 'voice:speak',
+  mcpInspect: 'mcp:inspect',
+  workflowList: 'workflow:list',
+  workflowSave: 'workflow:save',
+  workflowDelete: 'workflow:delete',
+  workflowRun: 'workflow:run',
+  workflowStop: 'workflow:stop',
+  workflowEvent: 'workflow:event',
+  browserRun: 'browser:run',
+  browserLogs: 'browser:logs',
+  browserClose: 'browser:close',
+  browserEvent: 'browser:event',
+  mcpSearch: 'mcp:search',
+  mcpInstall: 'mcp:install',
+  githubAuth: 'github:auth',
+  pluginList: 'plugin:list',
+  pluginPreview: 'plugin:preview',
+  pluginInstall: 'plugin:install',
+  pluginDiscard: 'plugin:discard',
+  pluginRemove: 'plugin:remove',
+  remoteList: 'remote:list',
+  remoteTest: 'remote:test',
+  remoteStart: 'remote:start',
+  remoteRefresh: 'remote:refresh',
+  remoteCancel: 'remote:cancel',
+  remotePatch: 'remote:patch',
+  remoteCleanup: 'remote:cleanup',
+  remoteForget: 'remote:forget',
+  workflowVersions: 'workflow:versions',
+  workflowRestore: 'workflow:restore',
+  workflowApprove: 'workflow:approve',
+  skillRead: 'skill:read',
+  skillWrite: 'skill:write',
+  skillInstallUrl: 'skill:install-url',
+  mcpToolCalls: 'mcp:tool-calls'
 } as const
 
 export interface CredentialInfo {
@@ -218,7 +277,7 @@ export interface VentrieeApi {
   onPatch(cb: (patch: Snapshot) => void): () => void
   onOutput(cb: (payload: { sessionId: string; agentId: string; taskId: string | null; chunk: string }) => void): () => void
   testEngine(engine: EngineKind, model: string, endpoint: string): Promise<{ ok: boolean; detail: string }>
-  createProject(input: { name: string; path: string; description: string; template?: 'empty' | 'static' | 'react-vite' | 'express-api' | 'fastapi' }): Promise<Project>
+  createProject(input: { name: string; path: string; description: string; template?: 'empty' | 'static' | 'react-vite' | 'express-api' | 'fastapi'; clientId?: string | null }): Promise<Project>
   pickFolder(): Promise<string | null>
   selectProject(id: string): Promise<void>
   openProjectWindow(projectId: string): Promise<void>
@@ -310,6 +369,65 @@ export interface VentrieeApi {
   graphifyBuild(projectId: string): Promise<{ ok: boolean; out: string }>
   /** Ask the project's graph a question; returns the scoped subgraph answer. */
   graphifyQuery(projectId: string, question: string): Promise<{ ok: boolean; out: string }>
+  clientList(): Promise<Client[]>
+  clientCreate(input: { name: string; url: string; niche: string; notes: string }): Promise<Client>
+  clientUpdate(id: string, patch: Partial<Client>): Promise<Client>
+  clientDelete(id: string): Promise<void>
+  analyticsOverview(sinceMs: number): Promise<AnalyticsOverview>
+  /** One spoken turn: the reply streams through onVoiceChunk while this resolves with the whole text. */
+  voiceAsk(input: { requestId: string; text: string; history: Array<{ role: 'user' | 'assistant'; text: string }> }): Promise<{ reply: string; model: string }>
+  onVoiceChunk(cb: (payload: { requestId: string; chunk: string }) => void): () => void
+  voiceCancel(requestId: string): Promise<void>
+  /** 16 kHz mono WAV of one turn to text. */
+  voiceTranscribe(audio: Uint8Array): Promise<string>
+  /** One sentence as MP3 from the cloud voice. */
+  voiceSpeak(text: string): Promise<Uint8Array>
+  /** Handshake with a saved MCP server by name and list its tools. */
+  mcpInspect(name: string): Promise<McpInspectResult>
+  workflowList(): Promise<Workflow[]>
+  workflowSave(input: Partial<Workflow> & { name: string }): Promise<Workflow>
+  workflowDelete(id: string): Promise<void>
+  /** Starts a run and returns its id; progress arrives through onWorkflowEvent. */
+  workflowRun(id: string): Promise<{ runId: string }>
+  workflowStop(id: string): Promise<void>
+  onWorkflowEvent(cb: (e: WorkflowRunEvent) => void): () => void
+  /** Run browser steps in the sandboxed automation window; each step also arrives through onBrowserEvent. */
+  browserRun(script: string): Promise<BrowserRunResult>
+  browserLogs(): Promise<{ console: BrowserLog[]; network: BrowserLog[]; url: string }>
+  browserClose(): Promise<void>
+  onBrowserEvent(cb: (r: BrowserStepResult) => void): () => void
+  /** Search the official MCP registry. */
+  mcpSearch(query: string, cursor?: string): Promise<{ servers: RegistryServer[]; nextCursor: string }>
+  /** Add a registry server to the MCP list, switched off until the owner tests and enables it. */
+  mcpInstall(server: RegistryServer, option: number, values: Record<string, string>): Promise<McpServer>
+  /** GitHub CLI status: installed, signed in, account. */
+  githubAuth(): Promise<{ installed: boolean; signedIn: boolean; account: string; detail: string }>
+  pluginList(): Promise<PluginInfo[]>
+  /** Fetch and check a plugin without installing it; install with the returned token. */
+  pluginPreview(source: { type: 'folder' | 'git'; value: string }): Promise<{ token: string; id: string; name: string; version: string; description: string; installed: string | null; permissions: string[]; errors: string[] }>
+  pluginInstall(token: string): Promise<PluginInfo>
+  pluginDiscard(token: string): Promise<void>
+  pluginRemove(id: string): Promise<void>
+  remoteList(): Promise<RemoteJob[]>
+  /** Check the SSH connection and the tools a remote run needs. */
+  remoteTest(host: string): Promise<string>
+  remoteStart(input: RemoteJobInput): Promise<RemoteJob>
+  remoteRefresh(id: string): Promise<RemoteJob>
+  remoteCancel(id: string): Promise<RemoteJob>
+  /** Saves the run's changes as a .patch file and returns its path. */
+  remotePatch(id: string): Promise<string>
+  remoteCleanup(id: string): Promise<RemoteJob>
+  remoteForget(id: string): Promise<void>
+  workflowVersions(id: string): Promise<WorkflowVersion[]>
+  workflowRestore(id: string, versionId: string): Promise<Workflow>
+  workflowApprove(runId: string, nodeId: string, approved: boolean): Promise<void>
+  /** Read the raw SKILL.md content of an installed skill. */
+  skillRead(id: string): Promise<string>
+  /** Write updated SKILL.md content back to disk and re-register the skill. */
+  skillWrite(id: string, content: string): Promise<void>
+  /** Clone a skill from a Git URL, scan it, and install it. */
+  skillInstallUrl(url: string): Promise<SkillImportResult>
+  mcpToolCalls(sessionId: string): Promise<McpToolCall[]>
 }
 
 export type TaskPatch = Partial<Task>

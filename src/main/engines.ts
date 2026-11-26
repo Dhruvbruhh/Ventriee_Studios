@@ -3,7 +3,7 @@ import { extname } from 'node:path'
 import { which } from './exec'
 import { runCli } from './cli'
 import type { Credentials } from './credentials'
-import { ENGINE_LABELS, ENGINE_ENDPOINTS, type EngineKind, type ProviderStatus, type ReasoningEffort } from '../shared/types'
+import { ENGINE_LABELS, ENGINE_ENDPOINTS, type AppSettings, type EngineKind, type ProviderStatus, type ReasoningEffort } from '../shared/types'
 
 export interface EngineRunInput {
   engine: EngineKind
@@ -24,6 +24,17 @@ export interface EngineRunInput {
   mcpConfig?: string
   /** Absolute paths of images the owner attached (screenshots, mockups). */
   images?: string[]
+  /** Extra environment for CLI agents, such as connector keys. */
+  env?: Record<string, string>
+}
+
+/** Connector keys as the variable names their SDKs read; empty ones are left out. */
+export function connectorEnv(c: AppSettings['connectors']): Record<string, string> {
+  const pairs: Array<[string, string]> = [
+    ['RESEND_API_KEY', c.resendKey], ['FIRECRAWL_API_KEY', c.firecrawlKey], ['POSTHOG_API_KEY', c.posthogKey],
+    ['POSTHOG_HOST', c.posthogKey ? c.posthogHost : ''], ['SENTRY_DSN', c.sentryDsn], ['STRIPE_SECRET_KEY', c.stripeKey]
+  ]
+  return Object.fromEntries(pairs.filter(([, v]) => v?.trim()).map(([k, v]) => [k, v.trim()]))
 }
 
 const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }
@@ -288,7 +299,8 @@ export async function runEngine(input: EngineRunInput, creds: Credentials): Prom
       stallMs: input.stallMs ?? Math.max(60_000, Math.round(input.timeoutMs / 4)),
       signal: input.signal,
       onChunk: input.onChunk,
-      input: stdin
+      input: stdin,
+      env: input.env
     })
     let text = result.output
     let inTok = 0

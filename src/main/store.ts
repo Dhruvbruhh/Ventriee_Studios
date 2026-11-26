@@ -21,7 +21,13 @@ import type {
   SessionRecord,
   SkillRecord,
   Snapshot,
-  Task
+  Task,
+  Client,
+  AnalyticsOverview,
+  AnalyticsDayBucket,
+  Workflow,
+  WorkflowVersion,
+  McpToolCall
 } from '../shared/types'
 import type { ProviderStatus } from '../shared/types'
 
@@ -62,7 +68,32 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dailyBudgetUsd: 0,
   projectBudgetUsd: 0,
   completionEndpoint: '',
-  onboardingSeen: false
+  onboardingSeen: false,
+  theme: 'dark',
+  voice: {
+    source: 'cloud',
+    localModel: '',
+    localEndpoint: '',
+    sttEndpoint: '',
+    sttModel: 'whisper-1',
+    tts: 'system',
+    ttsModel: 'gpt-4o-mini-tts',
+    voiceName: '',
+    rate: 1.05,
+    volume: 1,
+    language: 'auto',
+    bargeIn: true,
+    endSilenceMs: 700
+  },
+  connectors: {
+    resendKey: '',
+    posthogKey: '',
+    posthogHost: 'https://app.posthog.com',
+    sentryDsn: '',
+    firecrawlKey: '',
+    stripeKey: '',
+    e2bKey: ''
+  }
 }
 
 export class Store {
@@ -106,7 +137,13 @@ export class Store {
     const raw = this.db.kvGet('settings')
     if (!raw) return { ...DEFAULT_SETTINGS }
     try {
-      return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<AppSettings>) }
+      const saved = JSON.parse(raw) as Partial<AppSettings>
+      return {
+        ...DEFAULT_SETTINGS,
+        ...saved,
+        voice: { ...DEFAULT_SETTINGS.voice, ...saved.voice },
+        connectors: { ...DEFAULT_SETTINGS.connectors, ...saved.connectors }
+      }
     } catch {
       return { ...DEFAULT_SETTINGS }
     }
@@ -129,26 +166,30 @@ export class Store {
 
   // ---------- projects ----------
   projects(): Project[] {
-    return this.db.all<Project>('SELECT * FROM projects ORDER BY updatedAt DESC')
+    return this.db.all<Project & { client_id?: string | null }>('SELECT *, client_id as clientId FROM projects ORDER BY updatedAt DESC')
+      .map((r) => ({ ...r, clientId: r.clientId ?? r.client_id ?? null }))
   }
 
   project(id: string): Project | undefined {
-    return this.db.get<Project>('SELECT * FROM projects WHERE id = ?', id)
+    const r = this.db.get<Project & { client_id?: string | null }>('SELECT *, client_id as clientId FROM projects WHERE id = ?', id)
+    if (!r) return undefined
+    return { ...r, clientId: r.clientId ?? r.client_id ?? null }
   }
 
-  createProject(input: { name: string; path: string; description: string }): Project {
+  createProject(input: { name: string; path: string; description: string; clientId?: string | null }): Project {
     const now = Date.now()
     const project: Project = {
       id: `prj_${randomUUID().slice(0, 8)}`,
       name: input.name,
       path: input.path,
       description: input.description,
+      clientId: input.clientId ?? null,
       createdAt: now,
       updatedAt: now
     }
     this.db.run(
-      'INSERT INTO projects(id,name,path,description,createdAt,updatedAt) VALUES(?,?,?,?,?,?)',
-      project.id, project.name, project.path, project.description, now, now
+      'INSERT INTO projects(id,name,path,description,client_id,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?)',
+      project.id, project.name, project.path, project.description, project.clientId, now, now
     )
     return project
   }
@@ -156,9 +197,10 @@ export class Store {
   updateProject(id: string, patch: Partial<Project>) {
     const cur = this.project(id)
     if (!cur) return
+    const clientId = 'clientId' in patch ? patch.clientId : cur.clientId
     this.db.run(
-      'UPDATE projects SET name=?, path=?, description=?, updatedAt=? WHERE id=?',
-      patch.name ?? cur.name, patch.path ?? cur.path, patch.description ?? cur.description, Date.now(), id
+      'UPDATE projects SET name=?, path=?, description=?, client_id=?, updatedAt=? WHERE id=?',
+      patch.name ?? cur.name, patch.path ?? cur.path, patch.description ?? cur.description, clientId ?? null, Date.now(), id
     )
   }
 
@@ -182,7 +224,8 @@ export class Store {
       budgetUsd: Number(r.budgetUsd ?? 0),
       desk: Number(r.desk ?? 0),
       reasoning: (r.reasoning as Agent['reasoning']) ?? 'auto',
-      skills: safeJson<string[]>(r.skills as string, [])
+      skills: safeJson<string[]>(r.skills as string, []),
+      mcpServers: safeJson<string[]>(r.mcpServers as string, [])
     }))
   }
 
@@ -193,11 +236,11 @@ export class Store {
   insertAgent(a: Agent) {
     this.db.run(
       `INSERT INTO agents(id,projectId,role,name,title,engine,model,endpoint,instructions,autonomy,
-        reasoning,skills,concurrency,budgetUsd,color,desk,enabled,status,currentTaskId,lastError,createdAt)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        reasoning,skills,mcpServers,concurrency,budgetUsd,color,desk,enabled,status,currentTaskId,lastError,createdAt)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       a.id, a.projectId, a.role, a.name, a.title, a.engine, a.model, a.endpoint, a.instructions,
-      a.autonomy, a.reasoning ?? 'auto', JSON.stringify(a.skills ?? []), a.concurrency, a.budgetUsd,
-      a.color, a.desk, bolt(a.enabled), a.status, a.currentTaskId, a.lastError, a.createdAt
+      a.autonomy, a.reasoning ?? 'auto', JSON.stringify(a.skills ?? []), JSON.stringify(a.mcpServers ?? []),
+      a.concurrency, a.budgetUsd, a.color, a.desk, bolt(a.enabled), a.status, a.currentTaskId, a.lastError, a.createdAt
     )
   }
 
@@ -207,11 +250,11 @@ export class Store {
     const n = { ...cur, ...patch }
     this.db.run(
       `UPDATE agents SET role=?,name=?,title=?,engine=?,model=?,endpoint=?,instructions=?,autonomy=?,
-        reasoning=?,skills=?,concurrency=?,budgetUsd=?,color=?,desk=?,enabled=?,status=?,currentTaskId=?,lastError=?
+        reasoning=?,skills=?,mcpServers=?,concurrency=?,budgetUsd=?,color=?,desk=?,enabled=?,status=?,currentTaskId=?,lastError=?
         WHERE id=?`,
       n.role, n.name, n.title, n.engine, n.model, n.endpoint, n.instructions, n.autonomy,
-      n.reasoning ?? 'auto', JSON.stringify(n.skills ?? []), n.concurrency, n.budgetUsd, n.color, n.desk,
-      bolt(n.enabled), n.status, n.currentTaskId, n.lastError, id
+      n.reasoning ?? 'auto', JSON.stringify(n.skills ?? []), JSON.stringify(n.mcpServers ?? []),
+      n.concurrency, n.budgetUsd, n.color, n.desk, bolt(n.enabled), n.status, n.currentTaskId, n.lastError, id
     )
   }
 
@@ -686,6 +729,188 @@ export class Store {
     return next
   }
 
+  // ---------- clients ----------
+  clients(): Client[] {
+    return this.db.all<{ id: string; name: string; url: string; niche: string; status: string; notes: string; project_id: string | null; created_at: number; updated_at: number }>(
+      'SELECT * FROM clients ORDER BY updated_at DESC'
+    ).map((r) => ({
+      id: r.id, name: r.name, url: r.url, niche: r.niche,
+      status: r.status as Client['status'], notes: r.notes,
+      projectId: r.project_id, createdAt: r.created_at, updatedAt: r.updated_at
+    }))
+  }
+
+  createClient(input: { name: string; url: string; niche: string; notes: string }): Client {
+    const id = randomUUID()
+    const now = Date.now()
+    this.db.run(
+      'INSERT INTO clients(id,name,url,niche,status,notes,project_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)',
+      id, input.name, input.url, input.niche, 'prospect', input.notes, null, now, now
+    )
+    return { id, name: input.name, url: input.url, niche: input.niche, status: 'prospect', notes: input.notes, projectId: null, createdAt: now, updatedAt: now }
+  }
+
+  updateClient(id: string, patch: Partial<Client>): Client {
+    const existing = this.clients().find((c) => c.id === id)
+    if (!existing) throw new Error(`Client ${id} not found`)
+    const next = { ...existing, ...patch, updatedAt: Date.now() }
+    this.db.run(
+      'UPDATE clients SET name=?,url=?,niche=?,status=?,notes=?,project_id=?,updated_at=? WHERE id=?',
+      next.name, next.url, next.niche, next.status, next.notes, next.projectId, next.updatedAt, id
+    )
+    return next
+  }
+
+  deleteClient(id: string): void {
+    this.db.run('DELETE FROM clients WHERE id=?', id)
+  }
+
+  // ---------- workflows ----------
+  workflows(): Workflow[] {
+    return this.db.all<{ id: string; project_id: string | null; name: string; graph: string; schedule_minutes: number; enabled: number; last_run_at: number | null; created_at: number; updated_at: number }>(
+      'SELECT * FROM workflows ORDER BY updated_at DESC'
+    ).map((r) => {
+      let graph: Pick<Workflow, 'nodes' | 'edges'> = { nodes: [], edges: [] }
+      try { graph = JSON.parse(r.graph) } catch { /* a damaged graph opens empty */ }
+      return {
+        id: r.id, projectId: r.project_id, name: r.name, nodes: graph.nodes ?? [], edges: graph.edges ?? [],
+        scheduleMinutes: r.schedule_minutes, enabled: unb(r.enabled), lastRunAt: r.last_run_at, createdAt: r.created_at, updatedAt: r.updated_at
+      }
+    })
+  }
+
+  workflow(id: string): Workflow | null {
+    return this.workflows().find((w) => w.id === id) ?? null
+  }
+
+  saveWorkflow(input: Partial<Workflow> & { name: string }): Workflow {
+    const now = Date.now()
+    const existing = input.id ? this.workflow(input.id) : null
+    const next: Workflow = {
+      id: existing?.id ?? newId('wfl'),
+      projectId: null, nodes: [], edges: [], scheduleMinutes: 0, enabled: true, lastRunAt: null, createdAt: now,
+      ...existing,
+      ...input,
+      updatedAt: now
+    }
+    next.scheduleMinutes = Math.max(0, Math.round(next.scheduleMinutes))
+    if (next.scheduleMinutes > 0 && next.scheduleMinutes < 5) next.scheduleMinutes = 5
+    this.db.run(
+      `INSERT INTO workflows(id,project_id,name,graph,schedule_minutes,enabled,last_run_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id, name=excluded.name, graph=excluded.graph, schedule_minutes=excluded.schedule_minutes,
+       enabled=excluded.enabled, last_run_at=excluded.last_run_at, updated_at=excluded.updated_at`,
+      next.id, next.projectId, next.name, JSON.stringify({ nodes: next.nodes, edges: next.edges }), next.scheduleMinutes, bolt(next.enabled), next.lastRunAt, next.createdAt, next.updatedAt
+    )
+    this.addWorkflowVersion(next)
+    return next
+  }
+
+  markWorkflowRun(id: string, at: number) {
+    this.db.run('UPDATE workflows SET last_run_at=? WHERE id=?', at, id)
+  }
+
+  deleteWorkflow(id: string): void {
+    this.db.run('DELETE FROM workflows WHERE id=?', id)
+    this.db.run('DELETE FROM workflow_versions WHERE workflow_id=?', id)
+  }
+
+  // ---------- workflow versions ----------
+  workflowVersions(workflowId: string): WorkflowVersion[] {
+    return this.db.all<{ id: string; workflow_id: string; name: string; graph: string; created_at: number }>(
+      'SELECT * FROM workflow_versions WHERE workflow_id=? ORDER BY created_at DESC LIMIT 50', workflowId
+    ).map((r) => ({ id: r.id, workflowId: r.workflow_id, name: r.name, graph: r.graph, createdAt: r.created_at }))
+  }
+
+  addWorkflowVersion(wf: Workflow) {
+    this.db.run(
+      'INSERT INTO workflow_versions(id,workflow_id,name,graph,created_at) VALUES(?,?,?,?,?)',
+      newId('wfv'), wf.id, wf.name,
+      JSON.stringify({ nodes: wf.nodes, edges: wf.edges }), Date.now()
+    )
+    // Keep last 50 versions per workflow
+    this.db.run(
+      `DELETE FROM workflow_versions WHERE workflow_id=? AND id NOT IN
+       (SELECT id FROM workflow_versions WHERE workflow_id=? ORDER BY created_at DESC LIMIT 50)`,
+      wf.id, wf.id
+    )
+  }
+
+  restoreWorkflow(workflowId: string, versionId: string): Workflow | null {
+    const ver = this.db.get<{ id: string; workflow_id: string; name: string; graph: string; created_at: number }>(
+      'SELECT * FROM workflow_versions WHERE id=? AND workflow_id=?', versionId, workflowId
+    )
+    if (!ver) return null
+    let graph: Pick<Workflow, 'nodes' | 'edges'> = { nodes: [], edges: [] }
+    try { graph = JSON.parse(ver.graph) } catch { /* damaged graph */ }
+    const wf = this.workflow(workflowId)
+    if (!wf) return null
+    return this.saveWorkflow({ ...wf, nodes: graph.nodes ?? [], edges: graph.edges ?? [] })
+  }
+
+  // ---------- MCP tool calls ----------
+  mcpToolCalls(sessionId: string): McpToolCall[] {
+    return this.db.all<{ id: string; session_id: string; tool_name: string; args_summary: string; duration_ms: number | null; created_at: number }>(
+      'SELECT * FROM mcp_tool_calls WHERE session_id=? ORDER BY created_at ASC', sessionId
+    ).map((r) => ({ id: r.id, sessionId: r.session_id, toolName: r.tool_name, argsSummary: r.args_summary, durationMs: r.duration_ms, createdAt: r.created_at }))
+  }
+
+  addMcpToolCall(call: Omit<McpToolCall, 'id' | 'createdAt'>) {
+    this.db.run(
+      'INSERT INTO mcp_tool_calls(id,session_id,tool_name,args_summary,duration_ms,created_at) VALUES(?,?,?,?,?,?)',
+      newId('mtc'), call.sessionId, call.toolName, call.argsSummary, call.durationMs ?? null, Date.now()
+    )
+  }
+
+  // ---------- analytics ----------
+  analyticsOverview(sinceMs: number): AnalyticsOverview {
+    type AggRow = { model: string; sessions: number; inputTokens: number; outputTokens: number; costUsd: number; seconds: number }
+    type ProjRow = { projectId: string; sessions: number; costUsd: number }
+    type DayRow = { day: string; costUsd: number; inputTokens: number; outputTokens: number; sessions: number }
+    type TotRow = { sessions: number; inputTokens: number; outputTokens: number; costUsd: number; done: number; total: number }
+
+    const totals = this.db.get<TotRow>(
+      `SELECT COUNT(*) as sessions, SUM(inputTokens) as inputTokens, SUM(outputTokens) as outputTokens,
+       SUM(costUsd) as costUsd, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done, COUNT(*) as total
+       FROM sessions WHERE startedAt >= ?`, sinceMs
+    ) ?? { sessions: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, done: 0, total: 0 }
+
+    const byModelRaw = this.db.all<AggRow>(
+      `SELECT model as model, COUNT(*) as sessions, SUM(inputTokens) as inputTokens, SUM(outputTokens) as outputTokens,
+       SUM(costUsd) as costUsd, SUM(COALESCE((endedAt - startedAt)/1000, 0)) as seconds
+       FROM sessions WHERE startedAt >= ? GROUP BY model ORDER BY costUsd DESC LIMIT 20`, sinceMs
+    )
+
+    const byProjRaw = this.db.all<ProjRow>(
+      `SELECT projectId, COUNT(*) as sessions, SUM(costUsd) as costUsd FROM sessions WHERE startedAt >= ?
+       GROUP BY projectId ORDER BY costUsd DESC LIMIT 20`, sinceMs
+    )
+
+    const dailyRaw = this.db.all<DayRow>(
+      `SELECT date(startedAt/1000, 'unixepoch') as day, SUM(costUsd) as costUsd,
+       SUM(inputTokens) as inputTokens, SUM(outputTokens) as outputTokens, COUNT(*) as sessions
+       FROM sessions WHERE startedAt >= ? GROUP BY day ORDER BY day ASC`, sinceMs
+    )
+
+    const projects = this.projects()
+    const byProject = byProjRaw.map((r) => ({
+      id: r.projectId,
+      name: projects.find((p) => p.id === r.projectId)?.name ?? r.projectId.slice(0, 8),
+      sessions: r.sessions,
+      costUsd: r.costUsd ?? 0
+    }))
+
+    return {
+      totalCostUsd: totals.costUsd ?? 0,
+      totalSessions: totals.sessions ?? 0,
+      totalInputTokens: totals.inputTokens ?? 0,
+      totalOutputTokens: totals.outputTokens ?? 0,
+      successRate: totals.total > 0 ? (totals.done / totals.total) * 100 : 0,
+      byModel: byModelRaw.map((r) => ({ name: r.model || 'unknown', sessions: r.sessions, inputTokens: r.inputTokens ?? 0, outputTokens: r.outputTokens ?? 0, costUsd: r.costUsd ?? 0, seconds: r.seconds ?? 0 })),
+      byProject,
+      daily: dailyRaw.map((r): AnalyticsDayBucket => ({ date: r.day, costUsd: r.costUsd ?? 0, inputTokens: r.inputTokens ?? 0, outputTokens: r.outputTokens ?? 0, sessions: r.sessions ?? 0 }))
+    }
+  }
+
   snapshot(
     providers: ProviderStatus[],
     preview?: PreviewState,
@@ -735,7 +960,8 @@ export class Store {
       providerConfigs: this.providers(),
       assignments: projectId ? this.assignments(projectId) : [],
       modelPrefs: this.modelPrefs(),
-      models
+      models,
+      clients: this.clients()
     }
   }
 }

@@ -3,9 +3,9 @@ import { guard, useStore } from '../store'
 import {
   IconClose, IconEdit, IconExternal, IconPause, IconPlay, IconSend, IconStop, IconTerminal
 } from '../icons'
-import type { Agent } from '../../../shared/types'
+import type { Agent, McpToolCall } from '../../../shared/types'
 
-type Tab = 'live' | 'task' | 'messages' | 'config'
+type Tab = 'live' | 'task' | 'messages' | 'mcp' | 'config'
 
 /** Screenshots the worker took of the running app while on this task. */
 function Screens({ projectId, since }: { projectId: string; since: number }) {
@@ -21,6 +21,7 @@ export function Inspector({ agentId }: { agentId: string }) {
   const clearOutput = useStore((s) => s.clearOutput)
   const [tab, setTab] = useState<Tab>('live')
   const [instruction, setInstruction] = useState('')
+  const [mcpCalls, setMcpCalls] = useState<McpToolCall[]>([])
   const termRef = useRef<HTMLDivElement>(null)
 
   const agent = snapshot.agents.find((a) => a.id === agentId) ?? null
@@ -40,9 +41,14 @@ export function Inspector({ agentId }: { agentId: string }) {
     if (termRef.current) termRef.current.scrollTop = termRef.current.scrollHeight
   }, [live, tab])
 
+  useEffect(() => { setTab('live') }, [agentId])
+
   useEffect(() => {
-    setTab('live')
-  }, [agentId])
+    if (tab !== 'mcp') return
+    const sid = sessions[0]?.id
+    if (!sid) return
+    void window.ventriee.mcpToolCalls(sid).then(setMcpCalls).catch(() => setMcpCalls([]))
+  }, [tab, sessions])
 
   if (!agent) return null
 
@@ -69,7 +75,7 @@ export function Inspector({ agentId }: { agentId: string }) {
           </button>
         </div>
         <div className="drawer-tabs" role="tablist">
-          {(['live', 'task', 'messages', 'config'] as Tab[]).map((t) => (
+          {(['live', 'task', 'messages', 'mcp', 'config'] as Tab[]).map((t) => (
             <button
               key={t}
               className={`drawer-tab${tab === t ? ' on' : ''}`}
@@ -77,7 +83,7 @@ export function Inspector({ agentId }: { agentId: string }) {
               role="tab"
               aria-selected={tab === t}
             >
-              {t === 'live' ? 'Live' : t === 'task' ? 'Task' : t === 'messages' ? `Mail${messages.length ? ` ${messages.length}` : ''}` : 'Config'}
+              {t === 'live' ? 'Live' : t === 'task' ? 'Task' : t === 'messages' ? `Mail${messages.length ? ` ${messages.length}` : ''}` : t === 'mcp' ? 'MCP' : 'Config'}
             </button>
           ))}
         </div>
@@ -189,6 +195,27 @@ export function Inspector({ agentId }: { agentId: string }) {
           ) : (
             <p className="faint text-sm">No messages exchanged yet.</p>
           )
+        ) : null}
+
+        {tab === 'mcp' ? (
+          <>
+            <div className="section-label">MCP tool calls — {sessions[0] ? `session ${sessions[0].id.slice(-6)}` : 'no session'}</div>
+            {mcpCalls.length ? (
+              <div className="item-list">
+                {mcpCalls.map((c) => (
+                  <div key={c.id} className="item-row">
+                    <div className="item-main">
+                      <div className="item-title"><code>{c.toolName}</code>{c.durationMs !== null ? <span className="item-meta">{c.durationMs} ms</span> : null}</div>
+                      {c.argsSummary ? <p className="item-desc mono">{c.argsSummary.slice(0, 200)}</p> : null}
+                    </div>
+                    <span className="dim text-xs">{new Date(c.createdAt).toLocaleTimeString()}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="faint text-sm">{sessions[0] ? 'No MCP tool calls recorded for this session.' : 'No sessions yet.'}</p>
+            )}
+          </>
         ) : null}
 
         {tab === 'config' ? (

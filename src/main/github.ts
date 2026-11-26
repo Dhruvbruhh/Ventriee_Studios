@@ -18,6 +18,17 @@ export function gh(root: string, args: string[], input?: string): Promise<string
   })
 }
 
+/** Whether gh is installed and signed in to github.com, and as whom. */
+export async function githubAuth(): Promise<{ installed: boolean; signedIn: boolean; account: string; detail: string }> {
+  if (!findExecutable('gh')) return { installed: false, signedIn: false, account: '', detail: 'The GitHub CLI is not installed' }
+  try {
+    const account = (await gh(process.cwd(), ['api', 'user', '--jq', '.login'])).trim()
+    return { installed: true, signedIn: Boolean(account), account, detail: account ? `Signed in as ${account}` : 'Not signed in' }
+  } catch (e) {
+    return { installed: true, signedIn: false, account: '', detail: (e as Error).message }
+  }
+}
+
 const number = (n: unknown) => { const v = Number(n); if (!Number.isInteger(v) || v <= 0) throw new Error('Invalid number'); return String(v) }
 const text = (s: unknown, max = 65_000) => { if (typeof s !== 'string' || !s.trim() || s.length > max) throw new Error(`Write up to ${max.toLocaleString()} characters`); return s }
 
