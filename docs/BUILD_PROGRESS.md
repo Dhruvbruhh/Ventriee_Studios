@@ -16,8 +16,8 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W2 | Project Intelligence Engine v1 — incremental index + retrieval + context compiler (§13) | — | Done (merged) | PR #38 |
 | W3 | Cloud backend + multi-tenant data model — orgs, roles, projects, tasks, devices, audit, RLS (§3B/4/19/20) | — | Done (merged) | PR #39 (migration not applied) |
 | W4 | Web agency dashboard — owner + employee (§5/6) | W3 | Done (integrated on master) | branch `claude/web-agency-dashboard-68675a` merged directly (web/ package; Cloudflare Pages deploy steps in web/README.md) |
-| W5 | Inbound remote control / Jarvis — device registry, heartbeat, command queue (§17) | W3 | In progress | delegated session |
-| W6 | Mobile app — monitoring, approvals, voice (§18) | W3, W5 | In progress | delegated session |
+| W5 | Inbound remote control / Jarvis — device registry, heartbeat, command queue (§17) | W3 | Done (merged) | integrated from branch `claude/jarvis-remote-control-b9a5f3`; migration 0002 not applied |
+| W6 | Mobile app — monitoring, approvals, voice (§18) | W3, W5 | Done (merged) | `mobile/` Expo app integrated from branch `claude/mobile-jarvis-app-769e08`; jest 18 tests green |
 | W7 | Simple mode — chat-first desktop surface (§7) | — | Done (merged) | PR #40 |
 | W8 | Security & RBAC hardening pass (§20) | W3, W4, W5 | In progress | delegated session |
 | W9 | Help Center (§24) | W4 | In progress | delegated session |

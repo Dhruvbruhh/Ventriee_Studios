@@ -11,6 +11,8 @@ export default defineConfig({
       '**/build/**',
       '**/dist-update-test/**',
       '.claude/**',
+      // mobile/ is an Expo app; its __tests__ run under jest, not vitest.
+      'mobile/**',
     ],
   },
 })
