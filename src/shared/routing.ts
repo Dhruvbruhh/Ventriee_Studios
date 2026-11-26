@@ -1,4 +1,4 @@
-import type { CostPreference, Difficulty, ModelOption, ModelProfile } from './types'
+import type { CostPreference, Difficulty, ModelOption, ModelOutcomeStat, ModelProfile } from './types'
 
 /**
  * Deterministic, capability-based model routing. It chooses only from models the
@@ -76,6 +76,26 @@ export interface RouteInput {
   difficulty?: Difficulty | null
   /** Owner overrides for capability profiles, keyed by `${provider}::${model}`. */
   profiles?: Record<string, Partial<ModelProfile>>
+  /** Measured outcomes of finished tasks, per model × role × difficulty. */
+  outcomes?: ModelOutcomeStat[]
+}
+
+/** Below this many finished tasks in a model × role × difficulty bucket, measurements are ignored. */
+export const MIN_OUTCOME_SAMPLES = 5
+/** Most the measured term can move a score; capability fit alone spans ~10 points. */
+const MEASURED_WEIGHT = 10
+
+/**
+ * The measured success term for one model on this task's bucket, or null below the
+ * threshold. The pass rate is shrunk toward 50% by 4 phantom samples (2 pass, 2 fail),
+ * so 5/5 passes gives +2.8, not the full +5, and only many samples approach the cap.
+ */
+export function measuredTerm(model: string, role: string, difficulty: Difficulty | null | undefined, outcomes?: ModelOutcomeStat[]) {
+  const stat = outcomes?.find((o) => o.model === model && o.role === role && o.difficulty === (difficulty ?? 'unrated'))
+  if (!stat) return null
+  if (stat.samples < MIN_OUTCOME_SAMPLES) return { stat, value: 0, used: false }
+  const rate = (stat.passed + 2) / (stat.samples + 4)
+  return { stat, value: (rate - 0.5) * MEASURED_WEIGHT, used: true }
 }
 
 const COST_RANK: Record<ModelProfile['costTier'], number> = { free: 0, low: 1, medium: 2, high: 3 }
@@ -106,18 +126,27 @@ export function routeModels(input: RouteInput): RouteChoice[] {
   const scored = candidates
     .map((option) => ({ option, profile: effectiveProfile(option, input.profiles) }))
     .filter((c) => c.profile.availability !== 'unavailable')
-    .map((c) => ({ ...c, score: scoreModel(c.option, c.profile, input, wantsStrength, wantsSpeed) }))
+    .map((c) => {
+      const measured = measuredTerm(c.option.model, input.role, input.difficulty, input.outcomes)
+      return { ...c, measured, score: scoreModel(c.option, c.profile, input, wantsStrength, wantsSpeed) + (measured?.value ?? 0) }
+    })
     // Deterministic order: score, then model name as a stable tie-break.
     .sort((a, b) => b.score - a.score || a.option.model.localeCompare(b.option.model))
 
   const shape = input.difficulty ? `${input.difficulty}-difficulty task` : wantsStrength ? 'reasoning-heavy' : wantsSpeed ? 'high-volume' : 'balanced'
   const cost = input.costPreference === 'cheap' ? 'cost-first' : input.costPreference === 'quality' ? 'quality-first' : 'balanced cost'
-  return scored.map((c, i) => ({
-    option: c.option,
-    reason: i === 0
-      ? `${shape} role, ${cost}, ${c.option.providerLabel}`
-      : `fallback #${i} (${shape} role, ${cost}, ${c.option.providerLabel})`
-  }))
+  return scored.map((c, i) => {
+    const m = c.measured
+    const measured = !m ? '' : m.used
+      ? `, measured ${m.stat.passed}/${m.stat.samples} passed (${m.value >= 0 ? '+' : ''}${m.value.toFixed(1)})`
+      : `, ${m.stat.samples} measured (<${MIN_OUTCOME_SAMPLES}, ignored)`
+    return {
+      option: c.option,
+      reason: i === 0
+        ? `${shape} role, ${cost}, ${c.option.providerLabel}${measured}`
+        : `fallback #${i} (${shape} role, ${cost}, ${c.option.providerLabel}${measured})`
+    }
+  })
 }
 
 export function routeModel(input: RouteInput): RouteChoice | null {

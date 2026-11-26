@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { guard, useStore } from '../store'
 import { Modal, Switch } from '../shell'
 import { ENGINE_LABELS, type Agent, type AppSettings, type EngineKind, type Difficulty, type ModelProfile } from '../../../shared/types'
-import { effectiveProfile, routeModels } from '../../../shared/routing'
+import { effectiveProfile, MIN_OUTCOME_SAMPLES, routeModels } from '../../../shared/routing'
 import type { RemoteStatus } from '../../../shared/ipc'
 // CLI adapters spawn a process per request; mirrors isCliEngine in main.
 const isCliEngine = (engine: EngineKind) => engine.startsWith('cli-')
@@ -723,6 +723,12 @@ function ModelProfiles() {
   const models = useMemo(() => snapshot.models.filter((m) => m.model.trim()), [snapshot.models])
   const [key, setKey] = useState('')
   const [difficulty, setDifficulty] = useState<Difficulty>('medium')
+  const [role, setRole] = useState('')
+  const roles = useMemo(
+    () => [...new Set([...snapshot.agents.map((a) => a.role), ...snapshot.modelOutcomes.map((o) => o.role)])].filter(Boolean).sort(),
+    [snapshot.agents, snapshot.modelOutcomes]
+  )
+  const measured = snapshot.modelOutcomes.filter((o) => o.role === role && o.difficulty === difficulty)
 
   const selected = models.find((m) => `${m.provider}::${m.model}` === key) ?? models[0]
   const selectedKey = selected ? `${selected.provider}::${selected.model}` : ''
@@ -741,8 +747,8 @@ function ModelProfiles() {
   }
 
   const chain = useMemo(
-    () => routeModels({ role: '', models, costPreference: settings.costPreference, difficulty, profiles: settings.modelProfiles }),
-    [models, settings.costPreference, settings.modelProfiles, difficulty]
+    () => routeModels({ role, models, costPreference: settings.costPreference, difficulty, profiles: settings.modelProfiles, outcomes: snapshot.modelOutcomes }),
+    [models, settings.costPreference, settings.modelProfiles, difficulty, role, snapshot.modelOutcomes]
   )
 
   if (!models.length) return <div className="kv-row-sub">No models discovered yet. Add an engine, then reopen Settings.</div>
@@ -792,8 +798,12 @@ function ModelProfiles() {
       <div className="kv-row space-above">
         <div className="kv-row-main">
           <div className="kv-row-title">Routing decision</div>
-          <div className="kv-row-sub">Order the router would try for a {difficulty}-difficulty task at the current cost preference. The top entry runs; the rest are fallbacks.</div>
+          <div className="kv-row-sub">Order the router would try for a {difficulty}-difficulty {role || 'unassigned'} task at the current cost preference. The top entry runs; the rest are fallbacks. Measured pass rates count once a model has {MIN_OUTCOME_SAMPLES}+ finished tasks for that role and difficulty.</div>
         </div>
+        <select className="select w-sm" value={role} onChange={(e) => setRole(e.target.value)} aria-label="Role">
+          <option value="">No role</option>
+          {roles.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
         <select className="select w-sm" value={difficulty} onChange={(e) => setDifficulty(e.target.value as Difficulty)} aria-label="Difficulty">
           {(['low', 'medium', 'high'] as const).map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
@@ -804,6 +814,19 @@ function ModelProfiles() {
         ))}
         {chain.length === 0 ? <li className="kv-row-sub">Every model is marked unavailable.</li> : null}
       </ol>
+      {measured.length ? (
+        <table className="outcome-table" aria-label="Measured outcomes">
+          <thead><tr><th>Model</th><th>Tasks</th><th>Passed</th><th>Rework</th><th>Failed</th><th>Avg tokens</th><th>Avg time</th></tr></thead>
+          <tbody>
+            {measured.map((o) => (
+              <tr key={o.model} className={o.samples < MIN_OUTCOME_SAMPLES ? 'faint' : undefined}>
+                <td className="mono">{o.model}</td><td>{o.samples}</td><td>{o.passed}</td><td>{o.rework}</td><td>{o.failed}</td>
+                <td>{o.avgTokens.toLocaleString()}</td><td>{(o.avgLatencyMs / 1000).toFixed(1)}s</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : <div className="kv-row-sub">No finished tasks measured for this role and difficulty yet.</div>}
     </div>
   )
 }

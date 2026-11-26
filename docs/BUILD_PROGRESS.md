@@ -25,6 +25,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W11 | Unified resource library + natural-language discovery (§14) | - | Done | registry in `src/shared/resources.ts` + `src/main/resources.ts`; IPC `resources:list`; `ResourcesPanel` rewritten over real sources; `tests/resources.test.ts` (12 tests) |
 | W12 | Security Master tooling (§11) | - | Done | read-only scan in `src/shared/security.ts` + `src/main/securityScan.ts` (secrets, code patterns, .env hygiene, npm audit); IPC `security:scan`; Security panel; scan results injected into the security worker's prompt; `tests/security.test.ts` (12 tests) |
 | W13 | Frontend Master visual QA loop (§10) | - | Done | `src/main/visualQa.ts`: after a frontend worker delivers, the sandboxed browser renders the running preview at desktop + 390px mobile, screenshots both, and collects console errors; failures send the task to rework with the specific problems; the reviewer receives the rendered-check summary; `tests/visualQa.test.ts` (4 tests) |
+| W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | In review (PR open) | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 
 ## Verification baseline (master, after W13)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -95,3 +96,22 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   optional structural `browser`. Known limit: screenshots live in the browser
   screens folder and the run log; the task review stores the summary, not the
   image.
+- 2026-11-26: W18. Memory gains an organization layer: docs under
+  `memory/orgs/<orgId>/` (scope `org`, local to this desktop, never uploaded) are
+  visible only to projects whose new `projects.org_id` names that org. A project
+  takes the org active in the window that created it; the Memory panel can switch
+  the window's org workspace and add the open project to it. Every content change
+  to a memory doc (lessons/progress from finished tasks, owner edits, restores)
+  writes a `memory_versions` row with time, source and task id; a doc that predates
+  history saves its prior state on its first change. The Memory panel shows each
+  doc's history and restores any version (restore is itself a new version).
+  Routing: finished tasks record model × role × difficulty outcomes
+  (`model_outcomes`: passed / rework / failed, tokens, latency) from the worker's
+  last session; hard failures before a fallback escalation count against that
+  model. `routeModels` adds a measured term once a bucket has 5+ samples: the pass
+  rate shrunk toward 50% by 4 phantom samples, ×10, so 5/5 is +2.8 and the cap is
+  ±5 (capability fit alone spans ~10). The route reason states it ("measured 5/5
+  passed (+2.8)" or "3 measured (<5, ignored)"); Settings' routing preview gains a
+  role picker and the measured table. Stats key on the model id, so one model served
+  by two providers shares its record. The migration is appended to `db.ts`: a
+  sibling migration merged first must stay ahead of it.
