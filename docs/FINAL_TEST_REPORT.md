@@ -25,7 +25,7 @@ Mobile went from 18 to 17 tests because its command tests were rewritten for the
 |---|---|---|
 | Desktop packaged boot | `node scripts/smoke.mjs` (real Electron, DevTools) | Sign-in screen renders; 0 console errors/exceptions |
 | Desktop without `.env` | same | Shows "Connect Supabase" guidance, no crash |
-| Live Supabase schema | anonymous REST `GET /rest/v1/<table>` | **All Ventriee tables missing (PGRST205)** — P0 |
+| Live Supabase schema | anonymous REST `GET /rest/v1/<table>` | Before: all tables missing (PGRST205). After migrations: `[]` for projects/tasks/commands/devices (RLS); `commands` defaults confirmed live |
 | Web sign-in | Vite dev + browser, 1280 px and 375 px | Renders, 0 console errors, `?surface=app` works |
 | Model routing + live call | routed real Ollama model list, then `/api/chat` | Unconfigured cloud model excluded; `granite3.2-vision:2b` replied `VENTRIEE-OK` in 8.5 s |
 | Project intelligence | engine on a copy of `src/` (169 files) | First index 315 ms; queries hit `remote.ts`, `auth.ts`, `git.ts`; edit 1 file → resync re-indexed exactly 1 file in 198 ms; compiled context ~6.5k chars, 6 files |

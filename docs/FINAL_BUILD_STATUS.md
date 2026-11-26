@@ -7,7 +7,7 @@ FINAL_TEST_REPORT.md, then continue at the first unchecked item.
 Legend: [x] verified working · [~] implemented, not fully verified · [B] blocked by an
 external requirement · [ ] not done / not implemented
 
-## Release verdict: NOT READY — 1 open P0 (owner action), signed-in flows unverified
+## Release verdict: NOT READY — no open P0; signed-in flows unverified (P1)
 
 ## Builds
 - [x] Desktop: `npm run typecheck`, `npm run build`, packaged smoke boot (no console errors)
@@ -22,12 +22,14 @@ external requirement · [ ] not done / not implemented
 - [x] Mobile jest: 17/17
 
 ## Cloud
-- [B] **P0 — live Supabase has no Ventriee tables.** `projects`, `tasks`, `commands`,
-      `devices`, `profiles`, `task_comments` all return PGRST205. Apply
-      `supabase/migrations/0001…0005` (see RELEASE_CHECKLIST.md). Owner action.
+- [x] Live schema: 0001–0005 were applied by the cloud-sync work (its 0005 is
+      `desktop_sync`); this audit's fix was renumbered `0006_command_defaults` and
+      pushed 2026-11-26 (`supabase db push`, owner-approved). Anonymous REST reads of
+      `projects`/`tasks`/`commands`/`devices` return `[]` (RLS), not PGRST205.
+      Live column defaults confirmed: `requested_by = auth.uid()`, `expires_at = now() + 1 day`.
 - [x] Migrations apply in order on PostgreSQL; cross-org isolation, owner guard,
       append-only audit, remote-command authorization proven (PGlite)
-- [x] Fixed: `commands.requested_by` / `expires_at` had no default → every client enqueue failed (0005)
+- [x] Fixed: `commands.requested_by` / `expires_at` had no default → every client enqueue failed (0006)
 
 ## Remote Jarvis
 - [x] Fixed P0: mobile used command types/status the desktop and RLS reject

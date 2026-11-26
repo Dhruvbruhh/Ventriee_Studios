@@ -15,14 +15,14 @@ test accounts before release.
 | Desktop IDE (Electron) | `src/` | Builds, boots, 435 tests green. Signed-in UI not exercised (no account). |
 | Web dashboard (workspace / dashboard / app subdomains) | `web/` | Builds, sign-in renders on desktop + phone widths. Signed-in pages not exercised. |
 | Mobile Jarvis (Expo) | `mobile/` | Typechecks, 17 tests, bundles for Android. Not run on a device. |
-| Cloud schema | `supabase/migrations/0001–0005` | Correct on PostgreSQL (19 RLS tests) but **not applied to the live project**. |
+| Cloud schema | `supabase/migrations/0001–0006` | Correct on PostgreSQL (19 RLS tests) and applied to the live project. |
 
 ## Defects found and fixed in this audit
 
 | # | Severity | Defect | Fix | Proof |
 |---|---|---|---|---|
 | 1 | P0 | Phone → laptop commands could never run: mobile sent `start_agent_run`/`ask_project_status`, status `pending`, no `requires_confirmation`; desktop accepts only `run.start`/`run.stop`/`project.status`, RLS only `queued`. | Mobile now speaks the desktop allowlist, confirms high-risk commands, and sends `projectId`, `projectName` and `instruction`. Start-run gained an instruction field. | `mobile/__tests__/commands.test.ts` |
-| 2 | P0 | `commands.requested_by` and `expires_at` were NOT NULL with no default, and neither client sent them, so every enqueue (desktop and mobile) failed. | `0005_command_defaults.sql`: defaults `auth.uid()` and +1 day. RLS still rejects a spoofed requester. | `tests/migrations.test.ts` (new case) |
+| 2 | P0 | `commands.requested_by` and `expires_at` were NOT NULL with no default, and neither client sent them, so every enqueue (desktop and mobile) failed. | `0006_command_defaults.sql` (live): defaults `auth.uid()` and +1 day. RLS still rejects a spoofed requester. | `tests/migrations.test.ts` (new case) |
 | 3 | P1 | Desktop ran a remote command on `projects()[0]` when the id did not match (always, since phones send cloud ids). | `resolveRemoteProject`: local id, then unique exact name, otherwise refuse. | `tests/remote.test.ts` |
 | 4 | P1 | Mobile wrote `done`/`approved`/`rejected`; the web board only knows `completed`/`in_review`/…, so tasks done on the phone never completed for the owner. | Mobile uses the board's statuses; approve → `completed`, reject → `in_progress`. | `mobile/__tests__/status.test.ts` |
 | 5 | P1 | (earlier this session, W4) Web build failed typecheck in `api.ts`, which would fail the Cloudflare build. | Cast fixed. | `web` build |
@@ -31,7 +31,7 @@ test accounts before release.
 
 | # | Sev | Issue | Owner action / next step |
 |---|---|---|---|
-| 1 | **P0** | Live Supabase has no Ventriee tables (PGRST205 on every one). | Apply migrations 0001–0005 (RELEASE_CHECKLIST.md step 1). |
+| 1 | ~~P0~~ | ~~Live Supabase had no Ventriee tables.~~ Fixed 2026-11-26: 0001–0006 live. | — |
 | 2 | P1 | No signed-in end-to-end pass of desktop, web or mobile, and no live owner-vs-employee check. | Create two test accounts after #1, then run the manual script in RELEASE_CHECKLIST.md. |
 | 3 | P1 | Push notifications not implemented (no EAS projectId, no push_tokens table, nothing sends). Mobile shows statuses on refresh only. | Accept for v1, or implement push. |
 | 4 | P2 | Local and cloud projects are not linked; remote commands match by name. Duplicate names are refused, not guessed. | Store the cloud project id on local projects. |

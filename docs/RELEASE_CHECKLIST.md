@@ -2,7 +2,7 @@
 
 Do these in order. Steps 1–2 are owner actions this audit could not do for you.
 
-## 1. Apply the cloud schema (P0)
+## 1. Apply the cloud schema (done 2026-11-26)
 
 Back up first: Supabase dashboard → Database → Backups (or `supabase db dump -f backup.sql`).
 
@@ -13,7 +13,7 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-This applies `supabase/migrations/0001` to `0005` in order. Then check that
+This applies `supabase/migrations/0001` to `0006` in order. Then check that
 `<SUPABASE_URL>/rest/v1/projects?select=id&limit=1` with the anon key returns `[]`, not PGRST205.
 
 ## 2. Create two test accounts
@@ -49,7 +49,7 @@ cd web; npm ci; npm run build
 
 - Database: Supabase daily backups (Pro plan) or a scheduled `supabase db dump`. Restore with `psql -f`.
 - Desktop data stays local in the user-data folder (SQLite). Back it up by copying `%APPDATA%/Ventriee Studios`.
-- Migrations are additive. To undo 0005: `alter table public.commands alter column requested_by drop default, alter column expires_at drop default;`
+- Migrations are additive. To undo 0006: `alter table public.commands alter column requested_by drop default, alter column expires_at drop default;`
 
 ## Release gate
 

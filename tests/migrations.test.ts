@@ -93,7 +93,8 @@ describe('cloud migrations', () => {
       '0002_remote_control.sql',
       '0003_web_dashboard.sql',
       '0004_ownership_guard.sql',
-      '0005_command_defaults.sql',
+      '0005_desktop_sync.sql',
+      '0006_command_defaults.sql',
     ])
   })
 

@@ -18,7 +18,7 @@ read-only REST probes that confirmed the schema is missing.
 
 | Sev | Finding | Status |
 |---|---|---|
-| P0 | Live Supabase has no tables, so none of the RLS protections exist in production yet. Nothing can leak (there is nothing there), but nothing works either. | Open: apply migrations |
+| P0 | Live Supabase had no tables, so no RLS protections existed in production. | **Fixed** 2026-11-26: migrations 0001–0006 live; anonymous reads return `[]` |
 | P1 | Remote commands could act on the wrong local project (silent fallback to the first one). | **Fixed**: exact match or refuse |
 | P2 | Device grants are whole-device: a grantee can target any project on that laptop. Grants are off by default and created only by the device owner. | Open, documented |
 | P2 | High-risk remote commands rely on the phone's confirmation dialog (`requires_confirmation`). The laptop does not ask again. The command allowlist has no shell access. | Accepted by design; revisit if more powerful commands are added |
