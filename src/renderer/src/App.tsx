@@ -140,7 +140,7 @@ export function App() {
   const working = snapshot.agents.filter((a) => a.status === 'working').length
   const configured = snapshot.providers.filter((p) => p.available).length
   const sessionNumber = snapshot.conversations.findIndex((c) => c.id === snapshot.conversation?.id) + 1
-  const sessionTitle = snapshot.conversation?.title || (sessionNumber ? `Session ${sessionNumber}` : 'Plan')
+  const sessionTitle = snapshot.conversation?.title || (sessionNumber ? `Session ${sessionNumber}` : 'Chat')
 
   return (
     <div className={`shell${sidebar ? '' : ' no-sidebar'}`}>
@@ -162,24 +162,10 @@ export function App() {
           const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
           event.preventDefault(); buttons[next]?.focus(); buttons[next]?.click()
         }}>
-          <button data-fx="tab" className={`ws-tab${workspace === 'home' ? ' on' : ''}`} role="tab" aria-selected={workspace === 'home'} onClick={() => setWorkspace('home')} title="Project overview">Dashboard</button>
-          <button
-            data-fx="tab" className={`ws-tab${workspace === 'plan' ? ' on' : ''}`}
-            onClick={() => setWorkspace('plan')}
-            role="tab"
-            aria-selected={workspace === 'plan'}
-            title="Talk through the idea, write and approve the prompt"
-          >
-            Plan
-          </button>
+          <button data-fx="tab" className={`ws-tab${workspace === 'plan' ? ' on' : ''}`} role="tab" aria-selected={workspace === 'plan'} onClick={() => setWorkspace('plan')} title="Talk through the idea, write and approve the prompt">Chat</button>
           <button data-fx="tab" className={`ws-tab${workspace === 'code' ? ' on' : ''}`} role="tab" aria-selected={workspace === 'code'} onClick={() => setWorkspace('code')} title="Edit project files and manage Git">Code</button>
-          <button
-            data-fx="tab" className={`ws-tab${workspace === 'office' ? ' on' : ''}`}
-            onClick={() => setWorkspace('office')}
-            role="tab"
-            aria-selected={workspace === 'office'}
-            title="Watch the team work"
-          >
+          <button data-fx="tab" className={`ws-tab${workspace === 'home' ? ' on' : ''}`} role="tab" aria-selected={workspace === 'home'} onClick={() => setWorkspace('home')} title="Project overview">Dashboard</button>
+          <button data-fx="tab" className={`ws-tab${workspace === 'office' ? ' on' : ''}`} role="tab" aria-selected={workspace === 'office'} onClick={() => setWorkspace('office')} title="Watch the team work">
             Office
             {working > 0 ? <span className="ws-live" aria-label={`${working} working`} /> : null}
           </button>

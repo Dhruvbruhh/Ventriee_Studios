@@ -13,9 +13,12 @@ import { emmetCSS, emmetHTML, emmetJSX } from 'emmet-monaco-es'
   if (['typescript', 'javascript'].includes(label)) return new TsWorker()
   return new EditorWorker()
 } }
-monaco.editor.defineTheme('ventriee', { base: 'vs-dark', inherit: true, rules: [], colors: {
-  'editor.background': '#101216', 'editorLineNumber.foreground': '#59616f', 'editorCursor.foreground': '#a78bfa',
-  'editor.selectionBackground': '#4a3c6c80', 'editor.inactiveSelectionBackground': '#34303f', 'editorLineNumber.activeForeground': '#d6c6fb'
+// Colours come from the theme tokens in styles.css (loaded before this lazy chunk).
+const css = getComputedStyle(document.documentElement)
+const token = (name: string) => css.getPropertyValue(name).trim()
+monaco.editor.defineTheme('ventriee', { base: css.colorScheme.includes('light') ? 'vs' : 'vs-dark', inherit: true, rules: [], colors: {
+  'editor.background': token('--bg-deep'), 'editorLineNumber.foreground': token('--faint'), 'editorCursor.foreground': token('--accent'),
+  'editor.selectionBackground': token('--selection'), 'editor.inactiveSelectionBackground': token('--selection'), 'editorLineNumber.activeForeground': token('--text')
 } })
 monaco.editor.setTheme('ventriee')
 // Emmet abbreviations (div.card>p*3) as completions in markup, styles and JSX.
