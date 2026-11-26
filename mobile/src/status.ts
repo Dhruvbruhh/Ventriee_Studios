@@ -17,7 +17,7 @@ export function normalizeStatus(status: string): string {
 }
 
 const PENDING_APPROVAL = new Set([
-  'pending_approval', 'awaiting_approval', 'needs_approval', 'approval_pending', 'review',
+  'in_review', 'pending_approval', 'awaiting_approval', 'needs_approval', 'approval_pending', 'review',
 ])
 
 /** True when a task is waiting on a human approve/reject decision. */
@@ -25,18 +25,22 @@ export function isPendingApproval(status: string): boolean {
   return PENDING_APPROVAL.has(normalizeStatus(status))
 }
 
-/** The status to write when a pending approval is approved or rejected. */
+/** The status to write on approve/reject, in the web board's vocabulary (web/src/lib/tasks.ts):
+ *  approved work is completed; rejected work goes back to in progress for rework. */
 export function approvalDecisionStatus(decision: 'approve' | 'reject'): string {
-  return decision === 'approve' ? 'approved' : 'rejected'
+  return decision === 'approve' ? 'completed' : 'in_progress'
 }
 
+/** Statuses the phone can set by hand; same names as the web board. */
+export const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'in_review', 'completed']
+
 const TASK_TONES: Record<string, Tone> = {
-  todo: 'neutral', backlog: 'neutral',
+  todo: 'neutral', backlog: 'neutral', waiting: 'neutral', cancelled: 'neutral',
   in_progress: 'progress', doing: 'progress', active: 'progress',
   blocked: 'danger', rejected: 'danger', failed: 'danger',
   done: 'success', completed: 'success', approved: 'success',
   pending_approval: 'pending', awaiting_approval: 'pending', needs_approval: 'pending',
-  approval_pending: 'pending', review: 'pending',
+  approval_pending: 'pending', review: 'pending', in_review: 'pending',
 }
 
 /** Display label + color tone for a task/approval status. */

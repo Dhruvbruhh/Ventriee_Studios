@@ -25,8 +25,9 @@ describe('isPendingApproval', () => {
 
 describe('approvalDecisionStatus', () => {
   it('maps a decision to the written status', () => {
-    expect(approvalDecisionStatus('approve')).toBe('approved')
-    expect(approvalDecisionStatus('reject')).toBe('rejected')
+    expect(approvalDecisionStatus('approve')).toBe('completed')
+    expect(approvalDecisionStatus('reject')).toBe('in_progress')
+    expect(isPendingApproval('in_review')).toBe(true)
   })
 })
 
