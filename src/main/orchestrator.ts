@@ -12,6 +12,7 @@ import { runEngine, isCliEngine, modelFor, detectProviders, connectorEnv } from 
 import { deliverFiles } from './deliver'
 import { Mailbox, parseMessageBlocks } from './mailbox'
 import type { CheckpointService } from './checkpoint'
+import type { TaskWorktree, WorktreeService } from './worktrees'
 import { parseVerdict } from './review'
 import { roleByName, MANDATORY_SKILLS, WEBSITE_ROLES, type Phase } from './roles'
 import { scopeToRole, DELIVERABLE_BY_ROLE } from './brief'
@@ -56,6 +57,8 @@ export interface OrchestratorDeps {
   providerConfigs: () => ProviderConfig[]
   /** Pre-run snapshots; optional so tests can run without Git. */
   checkpoints?: CheckpointService
+  /** Per-task Git worktrees for parallel code tasks; optional so tests can run without Git. */
+  worktrees?: WorktreeService
   /** Path of the MCP servers file for Claude Code workers, or '' when none are enabled. */
   mcpConfig?: (filter?: string[]) => string
   /** The project's running preview URL, if any, so browser-capable workers can test it. */
@@ -558,8 +561,15 @@ JSON shape:
     // Sequential runs one task at a time in plan order; the other modes share the session limit.
     const maxSessions = settings.runMode === 'sequential' ? 1 : Math.max(1, settings.maxConcurrentSessions)
     const inflight = new Map<string, Promise<void>>()
-    /** Path claims of the writers currently running. */
-    const claims: Array<{ taskId: string; scope: string[] }> = []
+    /** Path claims of the writers currently running; an isolated writer works in its own worktree. */
+    const claims: Array<{ taskId: string; scope: string[]; isolated: boolean }> = []
+    // Writers in their own worktrees can run at once whatever they touch; without one they share the folder and wait on path claims.
+    let isolate = false
+    if (this.deps.worktrees && settings.isolateCodeTasks && maxSessions > 1) {
+      const why = await this.deps.worktrees.unavailable(project.path).catch((error: Error) => error.message)
+      isolate = !why
+      this.log(project.id, null, null, 'note', why ? `Code tasks share the project folder and run one at a time where they overlap: ${why}` : 'Parallel code tasks each run in their own Git worktree and merge back once they pass')
+    }
     let outcome: 'done' | 'paused' = 'done'
 
     for (;;) {
@@ -590,7 +600,9 @@ JSON shape:
       }
       const active = tasks.filter((t) => ['running', 'review', 'approval'].includes(t.status))
 
-      if (!pending.length && !active.length && inflight.size === 0) break
+      // A rework still in its cooldown is not finished: without this a lone conflict rework ended the run instead of retrying.
+      const cooling = tasks.some((t) => t.status === 'rework' && t.attempts < 3)
+      if (!pending.length && !active.length && !cooling && inflight.size === 0) break
 
       for (const task of pending) {
         if (inflight.size >= maxSessions) break
@@ -631,18 +643,29 @@ JSON shape:
         }
         const scope = scopeFor(agent.role)
         const writes = this.writesCode(agent.role)
-        if (writes && claims.some((c) => pathsOverlap(c.scope, scope))) continue
+        let workspace: TaskWorktree | null = null
+        if (writes && isolate) {
+          try {
+            workspace = await this.deps.worktrees!.create(project.id, project.path, task.id)
+          } catch (error) {
+            isolate = false
+            this.log(project.id, agent.id, task.id, 'error', `Could not create a worktree, so the remaining code tasks run in the project folder: ${(error as Error).message}`)
+          }
+        }
+        // An in-place writer would dirty the folder isolated work merges into, so it waits for those too.
+        if (writes && !workspace && claims.some((c) => c.isolated || pathsOverlap(c.scope, scope))) continue
         // Non-writing roles still read the whole tree; they never block a writer.
-        const claim = writes ? { taskId: task.id, scope } : null
+        const claim = writes ? { taskId: task.id, scope, isolated: Boolean(workspace) } : null
         if (claim) claims.push(claim)
         const depTasks = task.dependsOn.map((d) => this.deps.store.task(d)).filter((t): t is Task => Boolean(t))
         const context = depTasks.map((d) => `- ${d.title}: ${d.output ? d.output.slice(0, 600) : '(delivered)'}`).join('\n')
-        const promise = this.runTask(project, task, agent, context)
+        const promise = this.runTask(project, task, agent, context, workspace)
           .catch((error) => {
             this.deps.store.updateTask(task.id, { status: 'failed', review: (error as Error).message })
             this.log(project.id, agent.id, task.id, 'error', (error as Error).message)
           })
-          .finally(() => {
+          .finally(async () => {
+            if (workspace) await this.releaseWorktree(project, workspace)
             inflight.delete(task.id)
             const index = claims.findIndex((c) => c.taskId === task.id)
             if (index >= 0) claims.splice(index, 1)
@@ -669,8 +692,22 @@ JSON shape:
     return outcome
   }
 
+  /** Relay mail a worker left in its worktree, then delete the worktree (and its branch unless kept). */
+  private async releaseWorktree(project: Project, workspace: TaskWorktree) {
+    try { this.relayMail(project, new Mailbox(workspace.path).collect(), workspace.taskId) } catch { /* mail is best effort */ }
+    try {
+      await this.deps.worktrees!.remove(project.path, workspace)
+      this.log(project.id, null, workspace.taskId, 'note', workspace.keepBranch ? `Removed worktree; the work stays on branch ${workspace.branch}` : `Removed worktree and branch ${workspace.branch}`)
+    } catch (error) {
+      this.log(project.id, null, workspace.taskId, 'error', `Could not remove worktree ${workspace.path}: ${(error as Error).message}`)
+    }
+  }
+
   // ------------------------------------------------------------------ task execution
-  private async runTask(project: Project, task: Task, agent: Agent, dependencyContext: string) {
+  private async runTask(project: Project, task: Task, agent: Agent, dependencyContext: string, workspace: TaskWorktree | null = null) {
+    // Where this task's worker reads and writes: its own worktree, or the project folder.
+    const cwd = workspace?.path ?? project.path
+    if (workspace) this.log(project.id, agent.id, task.id, 'note', `"${task.title}" runs in worktree ${workspace.path} on branch ${workspace.branch}`)
     this.deps.store.updateTask(task.id, {
       status: 'running',
       agentId: agent.id,
@@ -701,7 +738,7 @@ JSON shape:
     // useful before the owner touches its config.
     const wanted = new Set([...MANDATORY_SKILLS, ...(agent.skills.length ? agent.skills : this.template(agent.role)?.skills ?? []), ...(task.skills ?? [])])
     const skills = this.deps.store.skills().filter((s) => s.enabled && wanted.has(s.id))
-    const before = await this.evidenceDigest(project.path)
+    const before = await this.evidenceDigest(cwd)
     const sessionId = newId('ses')
     const controller = new AbortController()
     this.runners.set(agent.id, { controller, sessionId, startedAt: Date.now() })
@@ -731,7 +768,7 @@ JSON shape:
       taskId: task.id,
       engine: run.engine,
       model: run.model,
-      cwd: project.path,
+      cwd,
       reasoning: agent.reasoning ?? 'auto',
       status: 'running',
       exitCode: null,
@@ -751,12 +788,12 @@ JSON shape:
     let securityBlock = ''
     if (agent.role === 'security') {
       try {
-        securityBlock = `## Read-only security scan (already run for you)\n${securityDigest(await scanProject(project.path))}\n\nVerify each finding, fix the real ones, and extend this list with what patterns cannot catch. Do not treat an empty list as proof the project is secure.\n\n`
+        securityBlock = `## Read-only security scan (already run for you)\n${securityDigest(await scanProject(cwd))}\n\nVerify each finding, fix the real ones, and extend this list with what patterns cannot catch. Do not treat an empty list as proof the project is secure.\n\n`
       } catch (error) {
         this.log(project.id, agent.id, task.id, 'error', `Security scan skipped: ${(error as Error).message}`)
       }
     }
-    let prompt = this.taskPrompt(project, task, { ...agent, ...run }, team, contextBlock, dependencyContext, inbox, skills, securityBlock)
+    let prompt = this.taskPrompt({ ...project, path: cwd }, task, { ...agent, ...run }, team, contextBlock, dependencyContext, inbox, skills, securityBlock)
     const url = this.deps.previewUrl?.(project.id)
     if (url && run.engine === 'cli-claude' && this.deps.store.settings().mcpServers.some((m) => m.name === 'playwright' && m.enabled)) {
       prompt += `\n\nThe app is running at ${url}. If you change anything visible, open it with the Playwright browser tools, click through what you changed, and take a screenshot of the result before you finish.`
@@ -778,7 +815,7 @@ JSON shape:
           system: withRules(agent.instructions, project.path),
           prompt: ask,
           images: this.images.get(project.id),
-          cwd: project.path,
+          cwd,
           // Room for a thinking model to plan before it writes, and for a
           // file-heavy deliverable to finish. Probes: 8000 produced nothing on a
           // full brief; 16000 is enough for a light one but a design system still
@@ -902,7 +939,7 @@ JSON shape:
     // Reasoning text is a plan and a truncated reply is half a file: never write either.
     const written =
       result.ok && !result.reasoningOnly && !result.truncated && !isCliEngine(run.engine)
-        ? deliverFiles(project.path, text)
+        ? deliverFiles(cwd, text)
         : []
 
     this.runners.delete(agent.id)
@@ -969,7 +1006,7 @@ JSON shape:
       return
     }
 
-    const after = await this.evidenceDigest(project.path)
+    const after = await this.evidenceDigest(cwd)
     const evidence = this.checkEvidence(task, before, after, text, written)
     const outgoing = parseMessageBlocks(text).map((m) => ({ ...m, from: agent.name }))
     this.relayMail(project, outgoing, task.id)
@@ -1000,7 +1037,7 @@ JSON shape:
 
     if (this.writesCode(agent.role) && !evidence.passed) {
       const how = isCliEngine(run.engine)
-        ? `Produce the actual deliverable in ${project.path}, then report back.`
+        ? `Produce the actual deliverable in ${cwd}, then report back.`
         : 'Reply with the deliverable as === FILE: … === blocks and nothing else outside them.'
       this.deps.store.updateTask(task.id, { status: 'rework', review: `Evidence check failed: ${evidence.summary}` })
       this.deps.store.addMessage({
@@ -1013,6 +1050,20 @@ JSON shape:
         status: 'unread'
       })
       return
+    }
+
+    // Merge before deploy approval, visual QA and review: the preview, the reviewer and the owner all look at the project folder.
+    if (workspace) {
+      const merge = await this.deps.worktrees!.integrate(project.path, workspace, task.title)
+      this.log(project.id, agent.id, task.id, merge.ok ? 'task' : 'error', `Worktree ${workspace.branch}: ${merge.detail}`)
+      if (!merge.ok) {
+        const review = merge.conflicts.length
+          ? `Merge conflict with work already integrated, in ${merge.conflicts.join(', ')}. Nothing was forced; redo the task on top of the latest project.`
+          : `Not merged: ${merge.detail}`
+        this.deps.store.updateTask(task.id, { status: merge.conflicts.length ? 'rework' : 'failed', review })
+        this.deps.store.addMessage({ projectId: project.id, taskId: task.id, sender: 'orchestrator', recipient: merge.conflicts.length ? agent.id : 'owner', type: 'request', content: review, status: 'unread' })
+        return
+      }
     }
 
     const approval = task.phase === 'deploy' && this.deps.store.settings().requireDeployApproval
