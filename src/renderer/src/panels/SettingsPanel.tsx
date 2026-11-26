@@ -940,6 +940,13 @@ function RunPolicy() {
       </div>
       <div className="kv-row">
         <div className="kv-row-main">
+          <div className="kv-row-title">Isolate parallel code tasks</div>
+          <div className="kv-row-sub">In a Git project with no uncommitted changes, each code task works in its own worktree and is merged back when it passes. Conflicts go back for rework.</div>
+        </div>
+        <Switch on={settings.isolateCodeTasks} onClick={() => void update({ isolateCodeTasks: !settings.isolateCodeTasks })} label="Isolate code tasks" />
+      </div>
+      <div className="kv-row">
+        <div className="kv-row-main">
           <div className="kv-row-title">Fallback planner</div>
           <div className="kv-row-sub">Use the deterministic planner when no model is reachable, instead of stalling.</div>
         </div>

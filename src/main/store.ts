@@ -43,6 +43,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxConcurrentSessions: 4,
   sessionTimeoutMinutes: 30,
   autoExtractLessons: true,
+  isolateCodeTasks: true,
   requireDeployApproval: true,
   reducedMotion: true,
   plannerFallback: true,

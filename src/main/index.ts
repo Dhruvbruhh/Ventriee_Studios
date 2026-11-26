@@ -40,6 +40,7 @@ import { projectTypes } from './typeindex'
 import { eslintFile, prettierFormat } from './projecttools'
 import { editorConfigFor } from './editorconfig'
 import { CheckpointService } from './checkpoint'
+import { WorktreeService } from './worktrees'
 import { summarizeRuns } from './runs'
 import { validMcpServers, writeMcpConfig } from './mcp'
 import { GraphifyService } from './graphify'
@@ -1616,6 +1617,7 @@ function bootstrapData() {
   memory.bootstrap(activeProject ?? null)
   if (activeProject) preview.rescan(activeProject)
 
+  const worktrees = new WorktreeService(userData)
   orchestrator = new Orchestrator({
     store,
     memory,
@@ -1626,6 +1628,7 @@ function bootstrapData() {
     models: () => lastModels,
     providerConfigs: () => store.providers(),
     checkpoints,
+    worktrees,
     mcpConfig: (filter?: string[]) => writeMcpConfig(userData, store.settings().mcpServers, filter),
     previewUrl: (id) => { const p = store.project(id); const s = p ? preview.stateForProject(p) : null; return s?.status === 'ready' || s?.status === 'external' ? s.url : null },
     browser
@@ -1651,6 +1654,10 @@ function bootstrapData() {
     for (const job of store.jobs(project.id)) {
       if (job.status === 'running') store.updateJob(job.id, { status: 'failed', error: 'Interrupted by app restart' })
     }
+    // Task worktrees left by a crash or quit; unmerged task branches are kept for the owner.
+    void worktrees.recover(project.id, project.path).then((kept) => {
+      if (kept.length) store.addMessage({ projectId: project.id, taskId: null, sender: 'orchestrator', recipient: 'owner', type: 'note', content: `Unmerged task branches from an earlier run were kept: ${kept.join(', ')}. Merge or delete them in Source Control.`, status: 'unread' })
+    }, () => undefined)
   }
 }
 

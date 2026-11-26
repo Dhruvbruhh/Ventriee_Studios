@@ -596,6 +596,8 @@ export interface AppSettings {
   maxConcurrentSessions: number
   sessionTimeoutMinutes: number
   autoExtractLessons: boolean
+  /** Run each parallel code task in its own Git worktree and merge it back when it passes. */
+  isolateCodeTasks: boolean
   requireDeployApproval: boolean
   reducedMotion: boolean
   plannerFallback: boolean
