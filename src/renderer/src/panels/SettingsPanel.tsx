@@ -945,6 +945,13 @@ function RunPolicy() {
         </div>
         <Switch on={settings.plannerFallback} onClick={() => void update({ plannerFallback: !settings.plannerFallback })} label="Fallback planner" />
       </div>
+      <div className="kv-row">
+        <div className="kv-row-main">
+          <div className="kv-row-title">Ask clarifying questions</div>
+          <div className="kv-row-sub">Before planning, the orchestrator asks up to five questions when a brief leaves out something that would change the result.</div>
+        </div>
+        <Switch on={settings.clarifyBrief} onClick={() => void update({ clarifyBrief: !settings.clarifyBrief })} label="Clarifying questions" />
+      </div>
     </div>
   )
 }

@@ -44,6 +44,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   requireDeployApproval: true,
   reducedMotion: true,
   plannerFallback: true,
+  clarifyBrief: true,
   routingMode: 'automatic',
   costPreference: 'balanced',
   modelProfiles: {},

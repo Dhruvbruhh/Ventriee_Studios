@@ -18,6 +18,7 @@ import { MemoryService } from './memory'
 import { SkillService } from './skills'
 import { PreviewService } from './preview'
 import { Orchestrator } from './orchestrator'
+import { foldClarifications } from './clarify'
 import { PlanningService } from './planning'
 import { isInside } from './paths'
 import { detectProviders, testEngine, defaultEndpoint, runEngine } from './engines'
@@ -891,11 +892,15 @@ function registerIpc() {
   handle(IPC.transcribe, (_e, audio: Uint8Array) => transcribe(audio, creds))
   handle(IPC.screenshots, (event, id: string) => recentScreenshots(projectRoot(event, id)))
   handle(IPC.attachmentSave, (event, id: string, name: string, data: Uint8Array) => saveAttachment(projectRoot(event, id), name, data))
+  handle(IPC.clarifyBrief, async (_e, input: { projectId: string; brief: string }) => {
+    await refreshProviders()
+    return orchestrator.clarify(input.projectId, input.brief)
+  })
   handle(IPC.startRun, async (_e, input: StartRunInput) => {
     await refreshProviders()
     const project = store.project(input.projectId)
     if (project) preview.rescan(project)
-    const jobId = await orchestrator.startRun(input.projectId, input.instruction, project ? attachmentPaths(project.path, input.attachments) : [], input.profile)
+    const jobId = await orchestrator.startRun(input.projectId, foldClarifications(input.instruction, input.clarifications), project ? attachmentPaths(project.path, input.attachments) : [], input.profile)
     debouncedNotify()
     return { jobId }
   })

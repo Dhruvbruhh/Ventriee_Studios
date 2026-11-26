@@ -145,6 +145,7 @@ const api: VentrieeApi = {
   deleteAgent: (id) => ipcRenderer.invoke(IPC.deleteAgent, id),
   duplicateAgent: (id) => ipcRenderer.invoke(IPC.duplicateAgent, id),
   startRun: (input) => ipcRenderer.invoke(IPC.startRun, input),
+  clarifyBrief: (input) => ipcRenderer.invoke(IPC.clarifyBrief, input),
   stopRun: (projectId) => ipcRenderer.invoke(IPC.stopRun, projectId),
   approveTask: (taskId) => ipcRenderer.invoke(IPC.approveTask, taskId),
   rejectTask: (taskId, reason) => ipcRenderer.invoke(IPC.rejectTask, taskId, reason),

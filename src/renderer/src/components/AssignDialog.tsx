@@ -4,7 +4,8 @@ import { Modal } from '../shell'
 import { guard, useStore } from '../store'
 import { ModelPicker, resolveModel, type ResolvedModel } from './ModelPicker'
 import { AddProviderDialog } from './AddProviderDialog'
-import type { Assignment, PromptDoc } from '../../../shared/types'
+import { useClarify } from './Clarify'
+import type { Assignment, Clarification, PromptDoc } from '../../../shared/types'
 
 export function AssignDialog({
   prompt,
@@ -44,8 +45,15 @@ export function AssignDialog({
     })
   }
 
-  const go = async () => {
-    if (!project || (mode === 'manual' && !selected.length)) return
+  const clarify = useClarify(project?.id)
+  const go = () => {
+    if (!project || (mode === 'manual' && !selected.length) || clarify.checking) return
+    if (mode === 'orchestrator') void clarify.ask(prompt.body, assign)
+    else void assign([])
+  }
+
+  const assign = async (clarifications: Clarification[]) => {
+    if (!project) return
     setBusy(true)
     const result = await guard(() =>
       window.ventriee.assignPrompt({
@@ -58,7 +66,8 @@ export function AssignDialog({
             ? { agentId, model: pick.model, providerId: pick.providerId, engine: pick.engine, endpoint: pick.endpoint }
             : { agentId }
         }),
-        note: note.trim() || undefined
+        note: note.trim() || undefined,
+        clarifications
       })
     )
     setBusy(false)
@@ -74,12 +83,13 @@ export function AssignDialog({
         actions={
           <>
             <button className="btn" onClick={onClose}>Cancel</button>
-            <button className="btn primary" onClick={go} disabled={busy || (mode === 'manual' && !selected.length)}>
-              {busy ? 'Starting…' : mode === 'manual' ? `Assign in order (${selected.length})` : selected.length ? `Assign to ${selected.length} worker${selected.length === 1 ? '' : 's'}` : 'Let the orchestrator build the team'}
+            <button className="btn primary" onClick={go} disabled={busy || clarify.checking || clarify.pending || (mode === 'manual' && !selected.length)}>
+              {busy ? 'Starting…' : clarify.checking ? 'Checking the brief…' : mode === 'manual' ? `Assign in order (${selected.length})` : selected.length ? `Assign to ${selected.length} worker${selected.length === 1 ? '' : 's'}` : 'Let the orchestrator build the team'}
             </button>
           </>
         }
       >
+        {clarify.panel}
         <div className="assign-modes" role="radiogroup" aria-label="Assignment mode">
           <button
             className={`assign-mode${mode === 'orchestrator' ? ' on' : ''}`}
