@@ -40,7 +40,8 @@ describe('status meta tones', () => {
   })
   it('gives commands the right tone and label', () => {
     expect(commandStatusMeta('running')).toEqual({ label: 'Running', tone: 'progress' })
-    expect(commandStatusMeta('error').tone).toBe('danger')
+    expect(commandStatusMeta('failed').tone).toBe('danger')
+    expect(commandStatusMeta('queued').tone).toBe('pending')
   })
 })
 

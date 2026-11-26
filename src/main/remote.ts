@@ -460,3 +460,23 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : { value }
 }
 function message(e: unknown): string { return e instanceof Error ? e.message : String(e) }
+
+/**
+ * Which local project a remote command targets. Phones send the cloud project's id and
+ * name; local projects have their own ids, so match id first, then a unique exact name.
+ * Never guesses: an ambiguous or unknown target throws instead of acting on the wrong project.
+ * shortcut: name matching until local projects store their cloud project id.
+ */
+export function resolveRemoteProject<P extends { id: string; name: string }>(payload: Record<string, unknown>, projects: P[]): P {
+  const id = payload.projectId
+  const byId = typeof id === 'string' ? projects.find((p) => p.id === id) : undefined
+  if (byId) return byId
+  const name = typeof payload.projectName === 'string' ? payload.projectName.trim().toLowerCase() : ''
+  if (name) {
+    const named = projects.filter((p) => p.name.trim().toLowerCase() === name)
+    if (named.length === 1) return named[0]
+    if (named.length > 1) throw new Error(`more than one project on this device is named "${payload.projectName}"`)
+  }
+  if (id === undefined && !name && projects.length === 1) return projects[0]
+  throw new Error('no such project on this device')
+}

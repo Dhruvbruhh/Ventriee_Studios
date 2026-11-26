@@ -12,20 +12,8 @@ export interface Project { id: string; org_id: string | null; owner_id: string; 
 export interface Task { id: string; project_id: string; title: string; status: string; created_by: string; created_at: string }
 export interface Device { id: string; user_id: string; org_id: string | null; name: string; platform: string; last_seen_at: string; created_at: string }
 
-// ---------------------------------------------------------------------------
-// Remote-control command queue (workstream W5).
-//
-// TODO(W5): confirm the final column names against W5's
-// supabase/migrations/0002_remote_control.sql before this ships. This app codes
-// against the contract described in the ecosystem audit §17: a `commands` table
-// the mobile app inserts into (status 'pending') and the desktop drains, executes,
-// and writes back `status` + `result`. The fields assumed below are:
-//   id, device_id, org_id, type, payload (jsonb), status, result (jsonb|null),
-//   error (text|null), created_at, updated_at.
-// If W5 named any of these differently (e.g. `command`/`kind` for `type`,
-// `output` for `result`), update COMMAND_TABLE_COLUMNS in commands.ts and this type.
-// ---------------------------------------------------------------------------
-export type CommandStatus = 'pending' | 'running' | 'done' | 'error'
+// Remote-control command queue: see supabase/migrations/0002_remote_control.sql.
+export type CommandStatus = 'queued' | 'claimed' | 'running' | 'done' | 'failed' | 'expired'
 
 export interface Command {
   id: string
@@ -34,8 +22,10 @@ export interface Command {
   type: string
   payload: Record<string, unknown>
   status: CommandStatus
+  requires_confirmation: boolean
   result: Record<string, unknown> | null
   error: string | null
   created_at: string
-  updated_at: string
+  finished_at: string | null
+  expires_at: string
 }

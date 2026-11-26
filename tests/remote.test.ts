@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { describe, expect, it, vi } from 'vitest'
-import { RemoteJobs, ownsAttachedDevice, parsePoll, runScript, startScript, validateRemote, type RemoteProvider } from '../src/main/remote'
+import { RemoteJobs, ownsAttachedDevice, parsePoll, resolveRemoteProject, runScript, startScript, validateRemote, type RemoteProvider } from '../src/main/remote'
 import type { RemoteJob, RemoteJobInput } from '../src/shared/types'
 
 const INPUT: RemoteJobInput = {
@@ -269,5 +269,21 @@ describe('RemoteControl', () => {
 describe('defaultExpiry', () => {
   it('is 24h out from the given instant', () => {
     expect(defaultExpiry(T0)).toBe(new Date(T0 + 86_400_000).toISOString())
+  })
+})
+
+describe('resolveRemoteProject', () => {
+  const projects = [{ id: 'l1', name: 'Site' }, { id: 'l2', name: 'App' }]
+  it('matches the local id, then a unique name from the phone', () => {
+    expect(resolveRemoteProject({ projectId: 'l2' }, projects).id).toBe('l2')
+    expect(resolveRemoteProject({ projectId: 'cloud-9', projectName: ' site ' }, projects).id).toBe('l1')
+  })
+  it('never falls back to some other project', () => {
+    expect(() => resolveRemoteProject({ projectId: 'cloud-9' }, projects)).toThrow(/no such project/)
+    expect(() => resolveRemoteProject({}, projects)).toThrow(/no such project/)
+    expect(() => resolveRemoteProject({ projectName: 'Site' }, [...projects, { id: 'l3', name: 'site' }])).toThrow(/more than one/)
+  })
+  it('uses the only project when none is named', () => {
+    expect(resolveRemoteProject({}, [projects[0]]).id).toBe('l1')
   })
 })

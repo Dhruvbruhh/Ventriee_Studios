@@ -93,6 +93,7 @@ describe('cloud migrations', () => {
       '0002_remote_control.sql',
       '0003_web_dashboard.sql',
       '0004_ownership_guard.sql',
+      '0005_command_defaults.sql',
     ])
   })
 
@@ -196,6 +197,15 @@ describe('cloud migrations', () => {
     await as(U1, claim, [commandId])
     const claimed = await seed(`select status from public.commands where id = $1`, [commandId])
     expect(claimed.rows).toEqual([{ status: 'claimed' }])
+  })
+
+  it('fills requested_by and expires_at for a client insert, and still blocks spoofing', async () => {
+    // Shape the desktop and mobile clients actually send: no requester, no expiry.
+    const res = await as(U2, `insert into public.commands (device_id, type, payload, requires_confirmation)
+                              values ($1, 'run.start', '{"projectId":"p"}', true) returning requested_by, expires_at > now() as live`, [deviceId])
+    expect(res.rows).toEqual([{ requested_by: U2, live: true }])
+    await expect(as(U2, `insert into public.commands (device_id, type, requested_by) values ($1, 'run.start', $2)`, [deviceId, U1]))
+      .rejects.toThrow(/row-level security/)
   })
 
   it('cannot enqueue a command for a device in another org scope', async () => {

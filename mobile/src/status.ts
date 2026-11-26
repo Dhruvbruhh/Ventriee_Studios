@@ -46,7 +46,7 @@ export function taskStatusMeta(status: string): StatusMeta {
 }
 
 const COMMAND_TONES: Record<string, Tone> = {
-  pending: 'pending', running: 'progress', done: 'success', error: 'danger',
+  queued: 'pending', claimed: 'progress', running: 'progress', done: 'success', failed: 'danger', expired: 'neutral',
 }
 
 /** Display label + color tone for a remote-command status. */
