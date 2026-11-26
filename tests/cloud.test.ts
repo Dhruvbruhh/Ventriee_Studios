@@ -60,6 +60,8 @@ class FakeCloudClient implements CloudClient {
   async createProject() { throw new Error('nyi') }
   async listTasks() { return [] }
   async createTask() { throw new Error('nyi') }
+  async updateProject() { return null }
+  async updateTask() { return null }
   async assignTask() { throw new Error('nyi') }
   async registerDevice() { throw new Error('nyi') }
   async listDevices() { return [] }

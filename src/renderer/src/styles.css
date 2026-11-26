@@ -314,6 +314,7 @@
     animation: pulse-dot 1.6s ease-in-out infinite;
   }
   .health-dot.warn { background: var(--warn); box-shadow: 0 0 7px rgb(242 165 95 / 0.5); }
+  .health-dot.bad { background: var(--err); }
   .health-label { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 
   .icon-btn {

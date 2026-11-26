@@ -2,7 +2,7 @@
 // auth token, mirroring auth.ts's raw-fetch style so no SDK is added. RLS on the
 // server is the authority on access; this layer only shapes requests.
 import type {
-  AuditEntry, CloudClient, CloudProject, CloudTask, CommandStatus, Device, DeviceGrant,
+  AuditEntry, CloudClient, CloudProject, CloudTask, CloudTaskPatch, CommandStatus, Device, DeviceGrant,
   Membership, Organization, RemoteCommand, TaskAssignment
 } from './types'
 
@@ -59,8 +59,15 @@ export class SupabaseCloudClient implements CloudClient {
   }
 
   listTasks(projectId: string) { return this.rest<CloudTask[]>(`tasks?select=*&project_id=eq.${enc(projectId)}&order=created_at.asc`) }
-  createTask(input: { projectId: string; title: string; status?: string }) {
-    return this.insert<CloudTask>('tasks', { project_id: input.projectId, title: input.title, ...(input.status ? { status: input.status } : {}) })
+  createTask(input: { projectId: string; title: string } & CloudTaskPatch) {
+    const { projectId, ...columns } = input // undefined fields drop out of the JSON body
+    return this.insert<CloudTask>('tasks', { project_id: projectId, ...columns })
+  }
+  async updateProject(projectId: string, patch: { name?: string; status?: string }, expectedUpdatedAt?: string | null) {
+    return this.one<CloudProject>(await this.rest<CloudProject[]>(`projects?id=eq.${enc(projectId)}${cas(expectedUpdatedAt)}`, { method: 'PATCH', body: patch, prefer: 'return=representation' }), null)
+  }
+  async updateTask(taskId: string, patch: CloudTaskPatch, expectedUpdatedAt?: string | null) {
+    return this.one<CloudTask>(await this.rest<CloudTask[]>(`tasks?id=eq.${enc(taskId)}${cas(expectedUpdatedAt)}`, { method: 'PATCH', body: patch, prefer: 'return=representation' }), null)
   }
   assignTask(taskId: string, userId: string) { return this.insert<TaskAssignment>('task_assignments', { task_id: taskId, user_id: userId }) }
 
@@ -131,6 +138,9 @@ export class SupabaseCloudClient implements CloudClient {
     return this.rest<AuditEntry[]>(`audit_log?select=*${filter}&order=created_at.desc&limit=${Math.min(Math.max(opts?.limit ?? 100, 1), 1000)}`)
   }
 }
+
+/** Optimistic-concurrency filter: only match the row if nobody changed it since we last saw it. */
+function cas(expectedUpdatedAt?: string | null): string { return expectedUpdatedAt ? `&updated_at=eq.${enc(expectedUpdatedAt)}` : '' }
 
 /** Percent-encode a value used in a PostgREST filter so ids can't inject operators. */
 function enc(value: string): string { return encodeURIComponent(value) }

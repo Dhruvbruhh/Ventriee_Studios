@@ -93,6 +93,7 @@ describe('cloud migrations', () => {
       '0002_remote_control.sql',
       '0003_web_dashboard.sql',
       '0004_ownership_guard.sql',
+      '0005_desktop_sync.sql',
     ])
   })
 
@@ -102,6 +103,24 @@ describe('cloud migrations', () => {
     )
     expect(res.rows.length).toBe(12)
     for (const r of res.rows) expect(r.rowsecurity, r.tablename).toBe(true)
+  })
+
+  it('bumps updated_at on task writes so the desktop can detect conflicts', async () => {
+    const before = await seed(`select updated_at from public.tasks where id = $1`, [u1Task])
+    const stamp = (before.rows[0] as { updated_at: string }).updated_at
+    await as(U1, `update public.tasks set run_status = 'running', run_model = 'm' where id = $1`, [u1Task])
+    // A compare-and-set against the old stamp now matches nothing.
+    const stale = await as(U1, `update public.tasks set title = 'x' where id = $1 and updated_at = $2 returning id`, [u1Task, stamp])
+    expect(stale.rows).toEqual([])
+    const row = await seed(`select title, run_status from public.tasks where id = $1`, [u1Task])
+    expect(row.rows).toEqual([{ title: 'Build hero', run_status: 'running' }])
+  })
+
+  it('lets the assigned employee update their task, but not an outsider', async () => {
+    await as(U2, `update public.tasks set status = 'in_progress' where id = $1`, [u1Task])
+    await as(OUTSIDER, `update public.tasks set status = 'cancelled' where id = $1`, [u1Task])
+    const row = await seed(`select status from public.tasks where id = $1`, [u1Task])
+    expect(row.rows).toEqual([{ status: 'in_progress' }])
   })
 
   it('makes the org creator the owner member', async () => {
