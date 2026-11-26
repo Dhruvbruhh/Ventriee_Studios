@@ -132,7 +132,7 @@ export const IPC = {
   voiceAsk: 'voice:ask',
   voiceChunk: 'voice:chunk',
   voiceCancel: 'voice:cancel',
-  voiceTranscribe: 'voice:transcribe',
+  voiceTranscribe: 'voice:transcribe-local',
   voiceSpeak: 'voice:speak',
   mcpInspect: 'mcp:inspect',
   workflowList: 'workflow:list',

@@ -364,7 +364,6 @@ function createWindow(projectId?: string) {
 }
 
 function registerIpc() {
-  console.log('[boot] ipc enter')
   const files = new FileService()
   const graphify = new GraphifyService()
   const git = new GitService()
@@ -1606,14 +1605,11 @@ function bootstrapData() {
 }
 
 app.whenReady().then(async () => {
-  console.log('[boot] whenReady')
   // Ties the window to the installed shortcut so the taskbar shows our icon, not Electron's.
   if (process.platform === 'win32') app.setAppUserModelId('com.ventriee.studios')
   if (!(isDev && process.env.ELECTRON_RENDERER_URL)) registerRendererProtocol(join(__dirname, '../renderer'), supabaseUrl)
-  console.log('[boot] protocol')
   try {
     bootstrapData()
-    console.log('[boot] bootstrap ok')
   } catch (error) {
     // Opening the data failed (newer data, or a migration that could not finish): say so and stop before anything writes.
     const dataDir = app.getPath('userData')
@@ -1621,26 +1617,20 @@ app.whenReady().then(async () => {
     app.quit()
     return
   }
-  console.log('[boot] pre-errorlog')
   errors = new ErrorLog(join(app.getPath('userData'), 'errors.log'), () => store.settings().errorReports, () => creds.secretValues().filter((v): v is string => Boolean(v)))
-  console.log('[boot] errorlog ok')
   // Observe only: these listeners record, they do not change how errors are handled.
   process.on('uncaughtExceptionMonitor', (error) => errors?.record('main', error.message, error.stack))
   process.on('unhandledRejection', (reason) => errors?.record('main-promise', reason instanceof Error ? reason.message : String(reason), reason instanceof Error ? reason.stack : ''))
   app.on('render-process-gone', (_e, _contents, details) => errors?.record('renderer-gone', `${details.reason} (exit ${details.exitCode})`))
   app.on('child-process-gone', (_e, details) => errors?.record('process-gone', `${details.type} ${details.reason} (exit ${details.exitCode})`))
-  console.log('[boot] pre-ipc')
   registerIpc()
-  console.log('[boot] ipc registered')
   bus.on('output', (payload: { sessionId: string; agentId: string; taskId: string | null; chunk: string }) => {
     // Only windows showing that project need the chunk.
     const agent = store.agents().find((a) => a.id === payload.agentId)
     sendToProject(agent?.projectId ?? null, IPC.output, payload)
   })
   await refreshProviders()
-  console.log('[boot] providers ok')
   createWindow()
-  console.log('[boot] window created')
   // Discover models in the background: without this the picker stayed empty until a manual Rescan.
   void refreshModels(store.activeProjectId()).catch((error: Error) => errors?.record('models', error.message, error.stack))
   updater.start()
