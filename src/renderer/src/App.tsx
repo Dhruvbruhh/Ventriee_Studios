@@ -24,6 +24,7 @@ import { WorkflowsPanel } from './panels/WorkflowsPanel'
 import { BrowserPanel } from './panels/BrowserPanel'
 import { RemotePanel } from './panels/RemotePanel'
 import { MarketplacePanel } from './panels/MarketplacePanel'
+import { HelpPanel } from './panels/HelpPanel'
 import { VoiceAssistant } from './components/VoiceAssistant'
 import { IconSidebar, IconSpark } from './icons'
 import { Sidebar } from './components/Sidebar'
@@ -227,6 +228,7 @@ export function App() {
       {panel === 'browser' ? <BrowserPanel onClose={() => setPanel('none')} /> : null}
       {panel === 'remote' ? <RemotePanel onClose={() => setPanel('none')} /> : null}
       {panel === 'marketplace' ? <MarketplacePanel onClose={() => setPanel('none')} /> : null}
+      {panel === 'help' ? <HelpPanel onClose={() => setPanel('none')} /> : null}
       <VoiceAssistant />
       {!project && snapshot.projects.length > 0 ? (
         <Modal title="No active project" onClose={() => setPanel('none')} narrow>
