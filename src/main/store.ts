@@ -1027,6 +1027,14 @@ export class Store {
        GROUP BY projectId ORDER BY costUsd DESC LIMIT 20`, sinceMs
     )
 
+    type AgentRow = { name: string; sessions: number; costUsd: number; seconds: number }
+    const byAgentRaw = this.db.all<AgentRow>(
+      `SELECT COALESCE(a.name, 'unknown') as name, COUNT(*) as sessions, SUM(s.costUsd) as costUsd,
+        SUM(COALESCE((s.endedAt - s.startedAt)/1000, 0)) as seconds
+       FROM sessions s LEFT JOIN agents a ON a.id = s.agentId WHERE s.startedAt >= ?
+       GROUP BY s.agentId ORDER BY costUsd DESC LIMIT 20`, sinceMs
+    )
+
     const dailyRaw = this.db.all<DayRow>(
       `SELECT date(startedAt/1000, 'unixepoch') as day, SUM(costUsd) as costUsd,
        SUM(inputTokens) as inputTokens, SUM(outputTokens) as outputTokens, COUNT(*) as sessions
@@ -1048,6 +1056,7 @@ export class Store {
       totalOutputTokens: totals.outputTokens ?? 0,
       successRate: totals.total > 0 ? (totals.done / totals.total) * 100 : 0,
       byModel: byModelRaw.map((r) => ({ name: r.model || 'unknown', sessions: r.sessions, inputTokens: r.inputTokens ?? 0, outputTokens: r.outputTokens ?? 0, costUsd: r.costUsd ?? 0, seconds: r.seconds ?? 0 })),
+      byAgent: byAgentRaw.map((r) => ({ name: r.name, sessions: r.sessions, costUsd: r.costUsd ?? 0, seconds: r.seconds ?? 0 })),
       byProject,
       daily: dailyRaw.map((r): AnalyticsDayBucket => ({ date: r.day, costUsd: r.costUsd ?? 0, inputTokens: r.inputTokens ?? 0, outputTokens: r.outputTokens ?? 0, sessions: r.sessions ?? 0 }))
     }

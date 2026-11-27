@@ -114,6 +114,18 @@ export function AnalyticsPanel({ onClose }: { onClose: () => void }) {
               { key: 'inputTokens', label: 'Tokens in', fmt: (v) => fmt(v as number) },
               { key: 'outputTokens', label: 'Tokens out', fmt: (v) => fmt(v as number) },
               { key: 'costUsd', label: 'Cost', fmt: (v) => money(v as number) },
+              { key: 'seconds', label: 'Time', fmt: (v) => fmt(v as number) + 's' },
+            ]}
+          />
+
+          <TableSection
+            title="By worker"
+            rows={data.byAgent}
+            cols={[
+              { key: 'name', label: 'Worker' },
+              { key: 'sessions', label: 'Sessions', fmt: (v) => fmt(v as number) },
+              { key: 'costUsd', label: 'Cost', fmt: (v) => money(v as number) },
+              { key: 'seconds', label: 'Time', fmt: (v) => fmt(v as number) + 's' },
             ]}
           />
 

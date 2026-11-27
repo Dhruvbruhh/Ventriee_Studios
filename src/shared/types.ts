@@ -267,6 +267,7 @@ export interface AnalyticsOverview {
   totalOutputTokens: number
   successRate: number
   byModel: UsageRow[]
+  byAgent: Array<{ name: string; sessions: number; costUsd: number; seconds: number }>
   byProject: Array<{ id: string; name: string; sessions: number; costUsd: number }>
   daily: AnalyticsDayBucket[]
 }
