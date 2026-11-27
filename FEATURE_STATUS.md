@@ -77,7 +77,7 @@ Last updated: 2026-11-26
 | Office floor visualization | ✅ | PixiJS OfficeFloor |
 | Agent inspector | ✅ | Inspector.tsx |
 | Multi-agent orchestration | ✅ | orchestrator.ts pipeline |
-| Human approval gate | 🟡 | requireDeployApproval setting |
+| Human approval gate | ✅ | Deploy-phase tasks pause in `approval` status; approve/reject from Inspector, Rail or SimpleMode (reason optional on reject); stale Inspector taps are a no-op |
 | Checkpoint / undo | ✅ | checkpoints service |
 | Agent cancellation | ✅ | stop IPC |
 
