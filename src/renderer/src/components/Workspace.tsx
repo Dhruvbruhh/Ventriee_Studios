@@ -142,7 +142,7 @@ export function Workspace() {
         <div className="session-tabs">
           {linkedClient ? <span className="client-badge"><span className="client-badge-dot" />Client: {linkedClient.name}{linkedClient.niche ? ` · ${linkedClient.niche}` : ''}</span> : null}
           {snapshot.conversations.length > 1 ? <span className="session-hint">Type @Session 2 to bring another session into this one</span> : null}
-          <button className="session-export" onClick={() => void guard(() => window.ventriee.chatExport(project.id), 'Transcript exported')} title="Save this session as a Markdown transcript">
+          <button className="session-export" onClick={() => void guard(async () => { const p = await window.ventriee.chatExport(project.id); if (p) useStore.getState().notify('Transcript exported') })} title="Save this session as a Markdown transcript">
             Export transcript
           </button>
         </div>

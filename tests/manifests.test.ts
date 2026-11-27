@@ -39,8 +39,11 @@ describe('workflow manifests', () => {
       version: 1,
       workflows: [{ name: 'Gate', nodes: [node('t1'), node('c1', 'condition'), node('a1', 'shell')], edges: [{ from: 't1', to: 'c1' }, { from: 'c1', to: 'a1', branch: 'true' }, { from: 'c1', to: 'a1', branch: 'false', case: 'err' }], scheduleMinutes: 999999 }]
     })
-    expect(parsed[0].edges[1]).toEqual({ id: 'c1-a1', from: 'c1', to: 'a1', branch: 'true' })
+    expect(parsed[0].edges[1]).toEqual({ id: 'c1-a1-true', from: 'c1', to: 'a1', branch: 'true' })
     expect(parsed[0].edges[2].case).toBe('err')
+    // The two c1->a1 branches must not share an edge id.
+    expect(parsed[0].edges[2].id).not.toBe(parsed[0].edges[1].id)
+    expect(new Set(parsed[0].edges.map((e) => e.id)).size).toBe(parsed[0].edges.length)
     expect(parsed[0].scheduleMinutes).toBeLessThanOrEqual(60 * 24 * 30)
   })
 })

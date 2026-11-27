@@ -194,7 +194,15 @@ export class BrowserAutomation {
         if (s.target === 'close') {
           if (this.tabs.length < 2) throw new Error('The last tab cannot be closed')
           const n = this.active + 1
-          this.activeWin()?.close() // the 'closed' handler re-points the active tab
+          // Splice synchronously: the next step must never land on a closing
+          // window that still passes isDestroyed() during teardown.
+          const win = this.activeWin()
+          const i = this.tabs.indexOf(win!)
+          this.tabs.splice(i, 1)
+          this.active = Math.min(i, this.tabs.length - 1)
+          const survivor = this.activeWin()
+          if (survivor && !survivor.isVisible()) survivor.show()
+          win?.destroy() // the 'closed' handler finds no tab entry, so it is a no-op
           return { output: `Closed tab ${n}` }
         }
         const n = Number(s.target)

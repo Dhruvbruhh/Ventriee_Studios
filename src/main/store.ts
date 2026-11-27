@@ -844,7 +844,8 @@ export class Store {
   /** One session's messages for export, oldest first. */
   exportConversation(projectId: string, conversationId?: string): { title: string; messages: ChatMessage[] } {
     const all = this.conversations(projectId)
-    const convo = conversationId ? all.find((c) => c.id === conversationId) : this.conversation(projectId)
+    // No create-on-demand here: exporting a fresh project must not leave a stray empty session.
+    const convo = conversationId ? all.find((c) => c.id === conversationId) : all.at(-1)
     if (!convo) throw new Error('Session not found in this project')
     const n = all.findIndex((c) => c.id === convo.id) + 1
     return { title: convo.title || `Session ${n}`, messages: this.chatMessages(projectId, 400, convo.id) }

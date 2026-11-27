@@ -1,4 +1,4 @@
-import { ENGINE_LABELS, type EngineKind, type WorkflowEdge, type WorkflowNode, type WorkflowNodeKind } from './types'
+import { ENGINE_LABELS, KEYED_API_ENGINES, type EngineKind, type WorkflowEdge, type WorkflowNode, type WorkflowNodeKind } from './types'
 
 /**
  * §26: workflows and model providers are data too, so they move as manifests like
@@ -72,21 +72,26 @@ export function parseWorkflowManifest(raw: unknown): WorkflowManifestEntry[] {
     noExtra(entry, ['name', 'nodes', 'edges', 'scheduleMinutes'], 'Workflow')
     const name = text(entry.name, 'Workflow name', 80, true)
     if (!Array.isArray(entry.nodes)) fail(`Workflow "${name}": nodes must be a list`)
-    const nodes = (entry.nodes as unknown[]).slice(0, 200).map(checkNode)
+    if ((entry.nodes as unknown[]).length > 200) fail(`Workflow "${name}" exceeds 200 steps`)
+    const nodes = (entry.nodes as unknown[]).map(checkNode)
     const ids = new Set(nodes.map((n) => n.id))
     if (ids.size !== nodes.length) fail(`Workflow "${name}" has duplicate step ids`)
     if (!nodes.some((n) => n.kind === 'trigger')) fail(`Workflow "${name}" needs a trigger step`)
     if (!Array.isArray(entry.edges)) fail(`Workflow "${name}": edges must be a list`)
-    const edges = (entry.edges as unknown[]).slice(0, 400).map((e) => {
+    if ((entry.edges as unknown[]).length > 400) fail(`Workflow "${name}" exceeds 400 connections`)
+    let edgeSeq = 0
+    const edges = (entry.edges as unknown[]).map((e) => {
       if (!e || typeof e !== 'object' || Array.isArray(e)) fail(`Workflow "${name}": an edge must be an object`)
       const er = e as Record<string, unknown>
       noExtra(er, EDGE_KEYS, 'Edge')
       const from = text(er.from, 'Edge from', 60, true)
-      const to = text(er.to, 'Edge to', 60, true)
-      if (!ids.has(from) || !ids.has(to)) fail(`Workflow "${name}" has an edge between unknown steps`)
-      const edge: WorkflowEdge = { id: text(er.id, 'Edge id', 60) || `${from}-${to}`, from, to }
+      const edgeTo = text(er.to, 'Edge to', 60, true)
+      if (!ids.has(from) || !ids.has(edgeTo)) fail(`Workflow "${name}" has an edge between unknown steps`)
+      const edge: WorkflowEdge = { id: '', from, to: edgeTo }
       if (er.branch === 'true' || er.branch === 'false') edge.branch = er.branch
       if (er.case !== undefined) edge.case = text(er.case, 'Edge case', 120)
+      // Two branches between the same pair (true/false) must not share an id.
+      edge.id = text(er.id, 'Edge id', 60) || `${from}-${edgeTo}-${edge.branch ?? edge.case ?? edgeSeq++}`
       return edge
     })
     const schedule = entry.scheduleMinutes === undefined ? 0 : Number(entry.scheduleMinutes)
@@ -125,6 +130,9 @@ export function parseProviderManifest(raw: unknown): ProviderManifestEntry[] {
     if (kind !== 'openai' && kind !== 'anthropic' && kind !== 'gemini') fail(`Provider "${label}": kind must be openai, anthropic or gemini`)
     const engine = text(pr.engine, 'Engine', 40, true)
     if (!(engine in ENGINE_LABELS)) fail(`Provider "${label}": unknown engine "${engine}"`)
+    // Custom providers are hosted endpoints only; CLI engines have no key and
+    // local engines already exist on this machine (api-custom brings its own URL).
+    if (engine !== 'api-custom' && !KEYED_API_ENGINES.includes(engine as EngineKind)) fail(`Provider "${label}": engine "${engine}" cannot back a custom hosted provider`)
     const baseUrl = text(pr.baseUrl, 'Base URL', 300)
     if (baseUrl && !/^https?:\/\//.test(baseUrl)) fail(`Provider "${label}": the base URL must be an http(s) address`)
     if (!Array.isArray(pr.models)) fail(`Provider "${label}": models must be a list`)
