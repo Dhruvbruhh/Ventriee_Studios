@@ -215,6 +215,10 @@ const MIGRATIONS: string[] = [
   CREATE TABLE IF NOT EXISTS chat_templates (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, content TEXT NOT NULL, createdAt INTEGER
   );
+  `,
+  // Per-project environment variables for new terminal sessions.
+  `
+  ALTER TABLE projects ADD COLUMN envVars TEXT NOT NULL DEFAULT '{}';
   `
 ]
 

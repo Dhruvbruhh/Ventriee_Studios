@@ -197,6 +197,7 @@ export class Store {
       description: input.description,
       clientId: input.clientId ?? null,
       orgId: input.orgId ?? null,
+      envVars: {},
       createdAt: now,
       updatedAt: now
     }
@@ -213,9 +214,10 @@ export class Store {
     if (!cur) return
     const clientId = 'clientId' in patch ? patch.clientId : cur.clientId
     const orgId = 'orgId' in patch ? patch.orgId : cur.orgId
+    const envVars = 'envVars' in patch ? validEnvVars(patch.envVars) : cur.envVars ?? {}
     this.db.run(
-      'UPDATE projects SET name=?, path=?, description=?, client_id=?, org_id=?, updatedAt=? WHERE id=?',
-      patch.name ?? cur.name, patch.path ?? cur.path, patch.description ?? cur.description, clientId ?? null, orgId ?? null, Date.now(), id
+      'UPDATE projects SET name=?, path=?, description=?, client_id=?, org_id=?, envVars=?, updatedAt=? WHERE id=?',
+      patch.name ?? cur.name, patch.path ?? cur.path, patch.description ?? cur.description, clientId ?? null, orgId ?? null, JSON.stringify(envVars), Date.now(), id
     )
     this.onChange?.('project', id)
   }
@@ -1175,10 +1177,20 @@ function safeJson<T>(raw: string, fallback: T): T {
   }
 }
 
-type ProjectRow = Omit<Project, 'clientId' | 'orgId'> & { client_id?: string | null; org_id?: string | null }
+type ProjectRow = Omit<Project, 'clientId' | 'orgId'> & { client_id?: string | null; org_id?: string | null; envVars?: string }
 
-function mapProject({ client_id, org_id, ...rest }: ProjectRow): Project {
-  return { ...rest, clientId: client_id ?? null, orgId: org_id ?? null }
+function mapProject({ client_id, org_id, envVars, ...rest }: ProjectRow): Project {
+  return { ...rest, clientId: client_id ?? null, orgId: org_id ?? null, envVars: safeJson<Record<string, string>>(envVars as string, {}) }
+}
+
+/** Terminal env vars: sane names, bounded size. Values are kept as typed. */
+function validEnvVars(vars: unknown): Record<string, string> {
+  if (!vars || typeof vars !== 'object' || Array.isArray(vars)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(vars as Record<string, unknown>).slice(0, 50)) {
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(k) && typeof v === 'string' && v.length <= 4000) out[k] = v
+  }
+  return out
 }
 
 function mapMemory(r: Record<string, unknown>): MemoryDoc {
