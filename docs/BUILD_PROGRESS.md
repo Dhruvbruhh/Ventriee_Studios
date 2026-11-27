@@ -402,3 +402,19 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   double-fire triggers; remote project resolution filters cloud_sync links by
   the signed-in user; W30 drag handles align with the 220px narrow-layout
   sidebar and `.shell` is a positioning context.
+- 2026-11-27: Review fixes continued (bf5698d, bca00c4). W35: ollamaShow now
+  calls the native `/api/show` root instead of the `/v1` compat layer (the old
+  URL 404ed and every model silently fell back to name guesses; regression
+  test pins the URL). W38 web: a recovery link now lands on a set-new-password
+  screen (ResetPassword.tsx, PASSWORD_RECOVERY event) instead of silently
+  signing the user in with the old password still valid. W26: manifest edge
+  ids append the branch/case so two edges between the same pair cannot collide
+  (deleting one branch no longer deletes both), oversized node/edge lists are
+  rejected instead of silently truncated, and provider manifests accept only
+  hosted engines (api-custom plus KEYED_API_ENGINES). W29: tab close splices
+  the tab out synchronously and destroys the window, so the next step cannot
+  hit a dying window. W27: canceling the export dialog no longer toasts
+  success, and exporting a fresh project no longer leaves a stray empty
+  session. W36: the CloudClient interface gained the projectId field the
+  implementation already had. Gates after all fixes: both tsc clean, vitest
+  526 passed/1 skipped, desktop + web builds green, web tests 2 passed.
