@@ -34,6 +34,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W20 | URL research gate + pre-run cost estimate (§8) | - | Done | `src/main/urlResearch.ts` (brief URLs fetched before planning, context block in the planner prompt, never blocks); `src/main/costEstimate.ts` (estimate from recorded per-role session costs, unknown roles named not priced); Settings toggle "Research reference URLs"; `tests/urlResearch.test.ts` (7), `tests/costEstimate.test.ts` (3) |
 | W21 | Usage dashboard: per-worker breakdown (§22) | - | Done | `analyticsOverview` gains `byAgent` (sessions, cost, time per worker, deleted workers shown as unknown); Analytics panel adds a "By worker" table and the per-model time column; `tests/analytics-agents.test.ts` (2) |
 | W22 | Workspace switching in the desktop topbar (§4) | W14, W18 | Done | The switch itself existed (IPC `cloudWorkspace` → `auth.setWorkspace` → `cloudSync.setSession`), but was only reachable in the Memory panel. New topbar `OrgPicker` (hidden when signed out or org-less): Personal or any org of the account, drives cloud-sync target and which org new projects join; `src/renderer/src/components/OrgPicker.tsx` |
+| W26 | Workflow + provider manifests: export/import (§26) | - | Done | `src/shared/manifests.ts` (workflow + provider manifest validation, mirroring the agent manifest rules; provider manifests never carry keys); IPC `workflow:export/import`, `provider:export/import`; handlers in `src/main/index.ts` (2 MB cap, imports arrive switched off / keyless); Export + Import buttons in the Workflows panel and Settings › Engines; `tests/manifests.test.ts` (10 tests) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -218,3 +219,17 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W26. Workflow and provider manifests (§26). `src/shared/manifests.ts`
+  validates both formats with the same strictness as the agent manifest: exact
+  field sets, size caps (100 workflows / 50 providers per file, 200 nodes, 400
+  edges), node kinds limited to the 14 real workflow steps, edge endpoints must
+  reference known node ids, schedule minutes clamped to 0-43200. Provider
+  manifests never carry keys: the parser refuses `apiKey`/`key` with a message
+  telling the owner to enter the key in Settings after import. IPC adds
+  `workflow:export/import` and `provider:export/import`; main handlers mirror the
+  agent ones (2 MB file cap, JSON parse errors surfaced) and imports arrive
+  switched off (workflows) or keyless (providers). The Workflows panel gets
+  Export / Import buttons next to the template picker; Settings › Engines gets
+  Export providers / Import providers. Known limits: workflow imports always
+  arrive disabled and lose their project link (manifests carry no project ids);
+  exported providers keep their model list but never their key.

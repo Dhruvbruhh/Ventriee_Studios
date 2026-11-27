@@ -56,6 +56,7 @@ import { installServer, searchRegistry } from './mcpRegistry'
 import { PluginService } from './plugins'
 import { listResources } from './resources'
 import { parseManifest, toManifest } from '../shared/agents'
+import { parseProviderManifest, parseWorkflowManifest, providersToManifest, workflowsToManifest } from '../shared/manifests'
 import { scanProject } from './securityScan'
 import { RemoteJobs, E2BProvider } from './remote'
 import { fileMatches, runWorkflow, triggerOf } from './workflows'
@@ -561,6 +562,52 @@ function registerIpc() {
     store.importAgents(parsed)
     debouncedNotify()
     return { added: parsed.templates.map((t) => t.role), missing: parsed.missing }
+  })
+  handle(IPC.workflowExport, async (event) => {
+    const manifest = workflowsToManifest(store.workflows().map((w) => ({ name: w.name, nodes: w.nodes, edges: w.edges, scheduleMinutes: w.scheduleMinutes })))
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showSaveDialog(parent ?? undefined!, { defaultPath: 'workflows.manifest.json', filters: [{ name: 'Workflow manifest', extensions: ['json'] }] })
+    if (result.canceled || !result.filePath) return null
+    writeFileSync(result.filePath, JSON.stringify(manifest, null, 2))
+    return result.filePath
+  })
+  handle(IPC.workflowImport, async (event) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showOpenDialog(parent ?? undefined!, { properties: ['openFile'], filters: [{ name: 'Workflow manifest', extensions: ['json'] }] })
+    const file = result.canceled ? null : result.filePaths[0]
+    if (!file) return null
+    if (statSync(file).size > 2_000_000) throw new Error('That file is too large to be a workflow manifest')
+    let raw: unknown
+    try { raw = JSON.parse(readFileSync(file, 'utf8')) } catch { throw new Error('That file is not valid JSON') }
+    const parsed = parseWorkflowManifest(raw)
+    for (const wf of parsed) store.saveWorkflow({ ...wf, enabled: false })
+    debouncedNotify()
+    return { added: parsed.map((w) => w.name) }
+  })
+  handle(IPC.providerExport, async (event) => {
+    const manifest = providersToManifest(store.providers().map((p) => ({ label: p.label, kind: p.kind, engine: p.engine, baseUrl: p.baseUrl, models: p.models })))
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showSaveDialog(parent ?? undefined!, { defaultPath: 'providers.manifest.json', filters: [{ name: 'Provider manifest', extensions: ['json'] }] })
+    if (result.canceled || !result.filePath) return null
+    writeFileSync(result.filePath, JSON.stringify(manifest, null, 2))
+    return result.filePath
+  })
+  handle(IPC.providerImport, async (event) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showOpenDialog(parent ?? undefined!, { properties: ['openFile'], filters: [{ name: 'Provider manifest', extensions: ['json'] }] })
+    const file = result.canceled ? null : result.filePaths[0]
+    if (!file) return null
+    if (statSync(file).size > 2_000_000) throw new Error('That file is too large to be a provider manifest')
+    let raw: unknown
+    try { raw = JSON.parse(readFileSync(file, 'utf8')) } catch { throw new Error('That file is not valid JSON') }
+    const parsed = parseProviderManifest(raw)
+    for (const entry of parsed) {
+      store.addProvider({ id: newId('prv'), label: entry.label, kind: entry.kind, engine: entry.engine, baseUrl: entry.baseUrl || defaultEndpoint(entry.engine), models: entry.models, createdAt: Date.now() })
+    }
+    await refreshProviders()
+    await refreshModels(store.activeProjectId())
+    debouncedNotify()
+    return { added: parsed.map((p) => p.label) }
   })
   handle(IPC.securityScan, async (_e, projectId: string) => {
     const project = store.project(String(projectId))

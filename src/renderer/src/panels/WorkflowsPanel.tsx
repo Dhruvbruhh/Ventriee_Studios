@@ -105,6 +105,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
 }
 
 export function WorkflowsPanel({ onClose }: { onClose: () => void }) {
+  const notify = useStore((s) => s.notify)
   const projects = useStore((s) => s.snapshot?.projects ?? [])
   const activeProjectId = useStore((s) => s.snapshot?.activeProjectId ?? null)
   const [list, setList] = useState<Workflow[]>([])
@@ -162,6 +163,15 @@ export function WorkflowsPanel({ onClose }: { onClose: () => void }) {
     if (!t) return
     const wf = await guard(() => window.ventriee.workflowSave(fromTemplate(t, activeProjectId)), `Added "${t.name}"`)
     if (wf) { setRun(null); setSelected(null); await load(wf.id) }
+  }
+  const exportAll = async () => {
+    const path = await guard(() => window.ventriee.workflowExport())
+    if (path) notify(`Saved ${path}`)
+  }
+  const importFile = async () => {
+    const r = await guard(() => window.ventriee.workflowImport())
+    if (r) notify(`Imported ${r.added.length} workflow${r.added.length === 1 ? '' : 's'}, switched off until you enable them`)
+    await load()
   }
   const save = async () => {
     if (!draft) return null
@@ -280,6 +290,10 @@ export function WorkflowsPanel({ onClose }: { onClose: () => void }) {
             <option value="" disabled>From a template…</option>
             {TEMPLATES.map((t, i) => <option key={t.name} value={i}>{t.name}</option>)}
           </select>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn" onClick={() => void exportAll()}>Export</button>
+            <button className="btn" onClick={() => void importFile()}>Import…</button>
+          </div>
           <nav className="wf-list" aria-label="Workflows">
             {list.map((w) => <button key={w.id} className={w.id === draft?.id ? 'on' : ''} onClick={() => void choose(w)}>{w.name}{w.scheduleMinutes ? ' ⏱' : ''}</button>)}
           </nav>
