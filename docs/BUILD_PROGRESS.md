@@ -31,6 +31,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
+| W28 | xAI (Grok) + Groq providers (FEATURE_STATUS Phase 2) | - | Done | `api-xai` + `api-groq` registered in `ENGINE_ENDPOINTS`/`ENGINE_LABELS` with env keys `XAI_API_KEY`/`GROQ_API_KEY`; both stream through the existing OpenAI-compatible adapter; `tests/routing.test.ts` asserts registration |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -202,3 +203,11 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W28. xAI (Grok) and Groq are registered hosted providers:
+  `api-xai` (https://api.x.ai/v1) and `api-groq` (https://api.groq.com/openai/v1)
+  in `ENGINE_ENDPOINTS`, labelled in `ENGINE_LABELS`, with `XAI_API_KEY` /
+  `GROQ_API_KEY` as credential env fallbacks. Both speak the OpenAI chat
+  protocol, so they stream through the existing OpenAI-compatible adapter with
+  no new code; they appear in Settings > Engines, model discovery, routing and
+  the pickers automatically. Known limit: live calls were not run (needs real
+  API keys); the adapter path is identical to DeepSeek/Mistral, which do run.

@@ -36,7 +36,7 @@ Last updated: 2026-11-26
 | Ollama (local) | ✅ | api-ollama + cli-ollama |
 | LM Studio | ✅ | compatible endpoint |
 | Custom OpenAI endpoints | ✅ | api-custom + cli-custom |
-| xAI / Groq | 🟡 | Needs adapter registration |
+| xAI / Groq | ✅ | api-xai + api-groq adapters (OpenAI-compatible, keyed; XAI_API_KEY / GROQ_API_KEY) |
 | Add / edit / remove providers | ✅ | SettingsPanel → Engines |
 | Model discovery | ✅ | Models fetched per provider |
 | Secure credential storage | ✅ | integrationCredentials.ts AES-256-GCM |
