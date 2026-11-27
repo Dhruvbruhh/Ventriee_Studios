@@ -89,7 +89,7 @@ Last updated: 2026-11-26
 | Enable / disable servers | ✅ | enabled flag on McpServer |
 | Test connection | ✅ | Settings → MCP tools → Test: stdio and streamable-HTTP handshakes (`mcpInspect.ts`); SSE servers can be used but not tested |
 | Browse tools, resources, prompts | ✅ | Listed (all pages) under each server after Test |
-| Environment variables / auth headers | ✅ | Per server `env` and `headers`, written into the worker MCP config |
+| Environment variables / auth headers | ✅ | Per server `env` and `headers`, written into the worker MCP config. Stored encrypted at rest with `safeStorage` (`mcpSecrets.ts`), plaintext values migrated on startup; visible warning when the OS keychain is unavailable |
 | Remote (HTTP / SSE) servers | ✅ | `url` + `transport` on McpServer |
 | MCP Marketplace | ✅ | Sidebar → Marketplace: search the official registry (registry.modelcontextprotocol.io), featured searches, versions, publisher namespace, install npm / PyPI (uvx) / Docker / remote; installs pinned and switched off |
 | Per-agent server access | ✅ | `mcpServers[]` on agent; `writeMcpConfig` filters to that list; picker in Settings → Workers |

@@ -1,5 +1,5 @@
 import type { StartRunInput } from '../shared/types'
-import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol, Notification, safeStorage } from 'electron'
 import { join, relative, sep } from 'node:path'
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
@@ -45,6 +45,7 @@ import { CheckpointService } from './checkpoint'
 import { WorktreeService } from './worktrees'
 import { summarizeRuns } from './runs'
 import { validMcpServers, writeMcpConfig } from './mcp'
+import { joinMcpServers, SafeStorageSecrets, splitMcpServers, migrateMcpSecrets } from './mcpSecrets'
 import { normaliseAccent } from '../shared/accent'
 import { GraphifyService } from './graphify'
 import { applyTemplate, type TemplateId } from './templates'
@@ -127,6 +128,9 @@ let quitting = false
 let store: Store
 let cloudSync: CloudSync
 let creds: Credentials
+let mcpSecrets: SafeStorageSecrets
+/** True when MCP env/headers stay in plain text because safeStorage is unavailable. */
+let mcpPlaintextFallback = false
 let errors: ErrorLog | null = null
 let memory: MemoryService
 let skills: SkillService
@@ -221,7 +225,9 @@ function projectOf(event: Electron.IpcMainInvokeEvent): string | null {
 function snapshotFor(projectId: string | null) {
   const project = projectId ? store.project(projectId) : null
   const previewState = preview.get(project?.id ?? null, project?.path)
-  return store.snapshot(lastProviders, previewState, lastModels, project?.id ?? null)
+  const snap = store.snapshot(lastProviders, previewState, lastModels, project?.id ?? null)
+  snap.mcpPlaintext = mcpPlaintextFallback
+  return snap
 }
 
 function sendSnapshot() {
@@ -632,12 +638,14 @@ function registerIpc() {
     const servers = store.settings().mcpServers
     const added = installServer(server, choice, values && typeof values === 'object' ? values : {}, servers.map((s) => s.name))
     if (!validMcpServers([added]).length) throw new Error('This server\'s details are not valid')
-    store.saveSettings({ mcpServers: [...servers, added] })
+    const { public: pub, secrets } = splitMcpServers([added])
+    store.saveSettings({ mcpServers: [...servers, pub[0]] })
+    if (pub[0]) mcpSecrets.set({ ...mcpSecrets.get(), ...secrets })
     debouncedNotify()
     return added
   })
   handle(IPC.mcpInspect, (_e, name: string) => {
-    const server = store.settings().mcpServers.find((s) => s.name === name)
+    const server = joinMcpServers(store.settings().mcpServers, mcpSecrets.get()).find((s) => s.name === name)
     if (!server) throw new Error(`No MCP server named ${name}`)
     return inspectMcp(server)
   })
@@ -1229,7 +1237,14 @@ function registerIpc() {
   handle(IPC.mcpToolCalls, (_e, sessionId: string) => store.mcpToolCalls(sessionId))
 
   handle(IPC.saveSettings, async (_e, patch: Partial<AppSettings>) => {
-    if (patch && 'mcpServers' in patch) patch = { ...patch, mcpServers: validMcpServers(patch.mcpServers) }
+    if (patch && 'mcpServers' in patch) {
+      // env/header values are peeled off into the encrypted store; the settings
+      // blob keeps only the non-secret shape.
+      const { public: pub, secrets } = splitMcpServers(validMcpServers(patch.mcpServers))
+      const kept = mcpSecrets.get()
+      mcpSecrets.set({ ...kept, ...secrets })
+      patch = { ...patch, mcpServers: pub }
+    }
     if (patch && 'accent' in patch) patch = { ...patch, accent: normaliseAccent(patch.accent) }
     for (const key of ['dailyBudgetUsd', 'projectBudgetUsd'] as const) if (patch && key in patch) patch = { ...patch, [key]: Math.min(100_000, Math.max(0, Number(patch[key]) || 0)) }
     const before = store.settings().companyPack
@@ -1742,6 +1757,15 @@ function bootstrapData() {
   mkdirSync(userData, { recursive: true })
   store = new Store(join(userData, 'ventriee.db'))
   creds = new Credentials(store.db)
+  mcpSecrets = new SafeStorageSecrets(store.db)
+  // One-time move of plaintext MCP env/header values into encrypted storage.
+  // With no OS keychain the values stay plaintext (previous behaviour) and the
+  // settings UI says so.
+  try {
+    mcpPlaintextFallback = migrateMcpSecrets(store.settings().mcpServers, mcpSecrets) === 0
+      && store.settings().mcpServers.some((s) => s.env || s.headers)
+      && !safeStorage.isEncryptionAvailable()
+  } catch { mcpPlaintextFallback = !safeStorage.isEncryptionAvailable() }
   // Desktop -> cloud mirror; store writes only queue work, so nothing waits on the network.
   cloudSync = new CloudSync(store, cloud, { secrets: () => creds.secretValues().filter((v): v is string => Boolean(v)), onStatus: debouncedNotify })
   store.onChange = (kind, id) => { try { cloudSync.markDirty(kind, id) } catch (e) { errors?.record('cloud-sync', e instanceof Error ? e.message : String(e)) } }
@@ -1780,7 +1804,7 @@ function bootstrapData() {
     providerConfigs: () => store.providers(),
     checkpoints,
     worktrees,
-    mcpConfig: (filter?: string[]) => writeMcpConfig(userData, store.settings().mcpServers, filter),
+    mcpConfig: (filter?: string[]) => writeMcpConfig(userData, joinMcpServers(store.settings().mcpServers, mcpSecrets.get()), filter),
     previewUrl: (id) => { const p = store.project(id); const s = p ? preview.stateForProject(p) : null; return s?.status === 'ready' || s?.status === 'external' ? s.url : null },
     browser
   })
