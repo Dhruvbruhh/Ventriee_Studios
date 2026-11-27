@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ResizeHandle, sizeVar, useDragSize } from '../components/Resize'
 import { IconChevron, IconClose, IconEdit, IconTrash } from '../icons'
 import { monaco, languageFor, editorLanguages } from './monaco'
 import { SourceControl } from './SourceControl'
@@ -115,6 +116,8 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const [versions, setVersions] = useState<Array<{ id: string; time: number; size: number }>>([])
   const tests = useTests(project.id)
   const [panel, setPanel] = useState<'terminal' | 'problems' | 'debug' | 'run' | null>(null)
+  const [sideW, sideDown, sideDragging, sideNudge, sideReset] = useDragSize('.code-workspace > .code-sidebar', 'code-sidebar', 'x', 180, 520)
+  const [panelH, panelDown, panelDragging, panelNudge, panelReset] = useDragSize('.code-workspace .code-panel', 'code-panel', 'y', 120, 600)
   /** A command shown running in the Run panel (installs, tasks, tests); a new key starts a fresh shell. */
   const [run, setRun] = useState<{ label: string; command: string; key: number } | null>(null)
   /** A Jupyter notebook opens in the notebook view instead of as JSON. */
@@ -858,7 +861,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
   const shownCommands = commands.filter((c) => !c.disabled && c.label.toLowerCase().includes(command.trim().toLowerCase()))
   const runCommand = (c: Command) => { setPalette(false); c.run() }
   const grouped = found ? [...found.hits.reduce((map, hit) => map.set(hit.path, [...(map.get(hit.path) ?? []), hit]), new Map<string, SearchResult['hits']>())] : []
-  return <div className={`code-workspace${preview || ask ? ' with-preview' : ''}`} style={{ display: visible ? undefined : 'none' }}>
+  return <div className={`code-workspace${preview || ask ? ' with-preview' : ''}`} style={{ display: visible ? undefined : 'none', ...sizeVar('--code-side-w', sideW), ...sizeVar('--code-panel-h', panelH) }}>
     <aside className="code-sidebar"><div className="code-sidebar-tabs"><button className={sidebar === 'files' ? 'on' : ''} onClick={() => setSidebar('files')}>Explorer</button><button className={sidebar === 'search' ? 'on' : ''} onClick={() => setSidebar('search')}>Search</button><button className={sidebar === 'git' ? 'on' : ''} onClick={() => setSidebar('git')} aria-label="Source Control" title="Source Control">Git</button><button className={sidebar === 'graph' ? 'on' : ''} onClick={() => setSidebar('graph')} aria-label="Knowledge graph" title="Knowledge graph (graphify)">Graph</button><button className={sidebar === 'agents' ? 'on' : ''} onClick={() => setSidebar('agents')} aria-label="Agent changes" title="Files changed by agent tasks">Agents</button><button className={sidebar === 'outline' ? 'on' : ''} onClick={() => setSidebar('outline')} aria-label="Outline" title="Symbols in this file">Outline</button><button className={sidebar === 'history' ? 'on' : ''} onClick={() => setSidebar('history')} aria-label="Local history" title="Saved versions of this file">History</button><button className={sidebar === 'github' ? 'on' : ''} onClick={() => setSidebar('github')} aria-label="GitHub" title="Pull requests and issues">GitHub</button><button className={sidebar === 'tests' ? 'on' : ''} onClick={() => setSidebar('tests')} aria-label="Tests" title="Run and see tests">Tests</button><button className={sidebar === 'extensions' ? 'on' : ''} onClick={() => setSidebar('extensions')} aria-label="Extensions" title="Extensions from Open VSX">Ext</button></div>
       {sidebar === 'files' ? <><div className="code-section-head"><strong title={project.path}>{project.name}</strong><button className="btn tiny" onClick={() => setRevision((v) => v + 1)}>Refresh</button></div>
         <div className="code-file-actions"><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('file') }}>New file</button><button className="btn tiny" onClick={() => { setNewPath(''); setCreate('folder') }}>New folder</button><button className="btn tiny" onClick={() => setQuick(true)}>Find file</button></div>
@@ -885,6 +888,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         : sidebar === 'graph' ? <GraphPanel projectId={project.id} />
         : <SourceControl projectId={project.id} refreshKey={revision} onDiff={(path, staged) => void openDiff(path, staged)} onOpen={(path) => void open(path)} />}
     </aside>
+    <ResizeHandle axis="x" label="Resize the file sidebar" size={sideW} dragging={sideDragging} onPointerDown={sideDown} onNudge={sideNudge} onReset={sideReset} />
     <section className={`code-main${panel ? ' with-panel' : ''}`} aria-label="Code editor">
       <div className="code-tabs" role="tablist" aria-label="Open files">{[...tabs.current].map(([path, value]) => <div className={`code-tab${path === active && !diff ? ' on' : ''}`} key={path}>
         <button role="tab" aria-selected={path === active && !diff} title={path} onClick={() => activate(path)} draggable onDragStart={(e) => { e.dataTransfer.setData(TAB_DRAG, path); e.dataTransfer.effectAllowed = 'move'; document.body.classList.add('dragging-tab') }} onDragEnd={() => document.body.classList.remove('dragging-tab')}>{iconFor(icons, path.split('/').at(-1)!, false) ? <img className="file-icon" src={iconFor(icons, path.split('/').at(-1)!, false)} alt="" /> : null}{path.split('/').at(-1)}{value.saved !== value.model.getValue() ? <span aria-label="Unsaved"> ●</span> : null}</button><button className="tab-close" onClick={() => close(path)} aria-label={`Close ${path}`}><IconClose width={12} height={12} aria-hidden /></button></div>)}</div>
@@ -907,6 +911,7 @@ export default function CodeWorkspace({ project, visible, onNavigate }: { projec
         {diff ? <DiffView diff={diff} /> : !active ? <div className="code-welcome"><span className="code-welcome-symbol">{'{ }'}</span><h2>Your code, in one place</h2><p>Open a file in Explorer or press Ctrl+P.</p><p>Ctrl+S to save · Ctrl+F to find · Ctrl+H to replace</p><p>UTF-8 text files up to 2 MB. Language runtimes are installed separately.</p></div> : null}
         {loading ? <div className="editor-loading" role="status">Opening file…</div> : null}</div>
       {panel || run ? <section className="code-panel" aria-label="Panel" style={{ display: panel ? undefined : 'none' }}>
+        {panel ? <ResizeHandle axis="y" label="Resize the bottom panel" size={panelH} dragging={panelDragging} onPointerDown={panelDown} onNudge={panelNudge} onReset={panelReset} /> : null}
         <div className="code-panel-tabs" role="tablist"><button role="tab" aria-selected={panel === 'terminal'} className={panel === 'terminal' ? 'on' : ''} onClick={() => setPanel('terminal')}>Terminal</button>
           <button role="tab" aria-selected={panel === 'problems'} className={panel === 'problems' ? 'on' : ''} onClick={() => setPanel('problems')}>Problems <span className="badge">{problems.length}</span></button>
           <button role="tab" aria-selected={panel === 'debug'} className={panel === 'debug' ? 'on' : ''} onClick={() => setPanel('debug')}>Debug{debugLive ? <span className="badge">{debug.status}</span> : null}</button>

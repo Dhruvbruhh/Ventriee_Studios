@@ -38,6 +38,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W26 | Workflow + provider manifests: export/import (§26) | - | Done | `src/shared/manifests.ts` (workflow + provider manifest validation, mirroring the agent manifest rules; provider manifests never carry keys); IPC `workflow:export/import`, `provider:export/import`; handlers in `src/main/index.ts` (2 MB cap, imports arrive switched off / keyless); Export + Import buttons in the Workflows panel and Settings › Engines; `tests/manifests.test.ts` (10 tests) |
 | W28 | xAI (Grok) + Groq providers (FEATURE_STATUS Phase 2) | - | Done | `api-xai` + `api-groq` registered in `ENGINE_ENDPOINTS`/`ENGINE_LABELS` with env keys `XAI_API_KEY`/`GROQ_API_KEY`; both stream through the existing OpenAI-compatible adapter; `tests/routing.test.ts` asserts registration |
 | W29 | Browser tabs (FEATURE_STATUS Phase 10) | - | Done | `browserAutomation.ts`: one sandboxed window per tab in the same session, only the active one visible; `tab new`/`tab <n>`/`tab close` steps in `browserSteps.ts` (1-12); new-tab links open a background tab without stealing focus; `tests/browser-steps.test.ts` (tab parsing) |
+| W30 | Resizable panels: app sidebar, code sidebar, bottom panel (FEATURE_STATUS Phase 1) | - | Done | new `src/renderer/src/components/Resize.tsx`: `useDragSize` (pointer drag + arrow-key nudge + double-click reset, persisted in localStorage, min/max clamped), `ResizeHandle` (role=separator, aria-labelled), `sizeVar`; handles wired in `App.tsx` shell and `CodeWorkspace.tsx` (code sidebar x, bottom panel y with dynamic ceiling); sizes applied as CSS custom properties overriding the grid defaults (unlayered rules at the end of `styles.css`); `tests/resize.test.ts` (3 tests) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -268,3 +269,19 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   live watch window shows one tab at a time (switch with `tab <n>`); tab state
   is per run, not persisted between runs; only the parsing is covered by tests
   (driving real windows needs the app running).
+- 2026-11-27: W30. The three main panels are drag-resizable: the app sidebar
+  (200 to 480 px), the code workspace sidebar (180 to 520 px) and the editor's
+  bottom panel (120 px up to the window minus 180 px, so it can never swallow
+  the editor). Drag the edge, or focus it and use the arrow keys; double-click
+  resets to the CSS default. New `src/renderer/src/components/Resize.tsx`
+  exposes `useDragSize` (pointer drag with body-wide capture, keyboard nudges
+  in 24 px steps, persisted per panel in localStorage under `ventriee.resize.*`
+  and re-clamped to the current bounds on load) and `ResizeHandle`, a
+  role=separator element labelled for screen readers. Sizes flow into the
+  existing grids as CSS custom properties (`--shell-side-w`, `--code-side-w`,
+  `--code-panel-h`), so every layout variant (three-column preview, narrow
+  window, no-sidebar shell) keeps working with its old fallback when a panel
+  was never resized. Handles are hidden when their panel is hidden (no-sidebar
+  shell, closed bottom panel). `tests/resize.test.ts` (3 tests) covers the
+  clamp, the CSS-variable helper and the handle markup; both tsconfigs and the
+  full vitest run are green.
