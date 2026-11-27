@@ -31,6 +31,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
+| W33 | Main window `sandbox: true` (FINAL_AUDIT #9, P3) | - | Done | the preload only uses `contextBridge` + `ipcRenderer` (everything else is type-only imports), so it qualifies for the Chromium sandbox; electron-vite now emits the preload as CommonJS (`out/preload/index.cjs`, required for sandboxed preloads since the ESM loader is unavailable there) and the main window runs with `sandbox: true` while keeping `contextIsolation: true` and `nodeIntegration: false`; the automation browser window was already sandboxed with no preload; verified with a full `npm run build` and the whole vitest run |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -202,3 +203,16 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W33. The main window now runs inside the Chromium sandbox
+  (`sandbox: true`), closing the last open item from the security review. The
+  gate was the preload: sandboxed renderers cannot use the ESM loader, so a
+  preload must be CommonJS. Our preload only ever touched `contextBridge` and
+  `ipcRenderer` (its other imports are TypeScript types, erased at build time),
+  so the electron-vite preload build was switched to emit `index.cjs`, and the
+  window's `webPreferences` point at the new file. `contextIsolation` stays on
+  and `nodeIntegration` stays off, so the narrow `window.ventriee` bridge is
+  unchanged for the renderer. The automation browser window was already
+  sandboxed with no preload. Checked with a full `npm run build` (the CJS
+  preload lands in `out/preload/`) and both tsconfigs plus the whole vitest run
+  are green; the only risk left is a packaged-installer smoke test, which needs
+  a Windows signing environment and is listed in the wrap-up.
