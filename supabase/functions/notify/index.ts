@@ -1,7 +1,8 @@
 // W44: send an Expo push notification to a user's registered devices.
 // Runs as a Supabase Edge Function with the service-role key (bypasses RLS to
-// read push_tokens). The caller must be authenticated; a service job (e.g. a
-// pg_cron/trigger or the desktop) may also call it with the service key.
+// read push_tokens). SERVICE KEY ONLY: the caller must present the service
+// key — there is deliberately no user-JWT path, because any account holder
+// could otherwise push arbitrary content to any other user's devices.
 //
 // Deploy (owner, one-time): see docs/cloud-setup.md → "Deploy the Edge Functions".
 // Request:  POST { userId, title, body, data? }
@@ -15,7 +16,6 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 Deno.serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL')!
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const cors = {
     'Access-Control-Allow-Origin': '*',
@@ -36,14 +36,11 @@ Deno.serve(async (req) => {
     }
     if (!title || !text) return new Response(JSON.stringify({ error: 'title and body are required' }), { status: 400, headers: cors })
 
-    // Callers must be signed in (the service key path skips this by never
-    // sending a user JWT — it authenticates by possessing the service key via
-    // the Authorization-less internal call; verify a user token when present).
+    // Service key only. A user-JWT path would let any account holder push
+    // arbitrary content to any other user's devices, so it is not offered.
     const auth = req.headers.get('Authorization') ?? ''
-    if (auth && auth !== `Bearer ${serviceKey}`) {
-      const caller = createClient(url, anonKey, { global: { headers: { Authorization: auth } } })
-      const { data: { user } } = await caller.auth.getUser()
-      if (!user) return new Response(JSON.stringify({ error: 'Not signed in' }), { status: 401, headers: cors })
+    if (auth !== `Bearer ${serviceKey}`) {
+      return new Response(JSON.stringify({ error: 'Service key required' }), { status: 401, headers: cors })
     }
 
     const admin = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } })

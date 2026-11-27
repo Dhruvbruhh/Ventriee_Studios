@@ -167,7 +167,8 @@ export function Inspector({ agentId }: { agentId: string }) {
                 {['failed', 'rework', 'blocked'].includes(task.status) ? (
                   <button
                     className="btn tiny ml-auto"
-                    onClick={() => void guard(() => window.ventriee.retryTask(task.id), 'Task queued for retry')}                  >
+                    onClick={() => void guard(() => window.ventriee.retryTask(task.id), 'Task queued for retry')}
+                  >
                     Retry
                   </button>
                 ) : null}

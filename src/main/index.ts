@@ -639,8 +639,10 @@ function registerIpc() {
     const added = installServer(server, choice, values && typeof values === 'object' ? values : {}, servers.map((s) => s.name))
     if (!validMcpServers([added]).length) throw new Error('This server\'s details are not valid')
     const { public: pub, secrets } = splitMcpServers([added])
-    store.saveSettings({ mcpServers: [...servers, pub[0]] })
+    // Seal first: if the keychain is unavailable this throws before the server
+    // is persisted, so the secret values are never silently lost.
     if (pub[0]) mcpSecrets.set({ ...mcpSecrets.get(), ...secrets })
+    store.saveSettings({ mcpServers: [...servers, pub[0]] })
     debouncedNotify()
     return added
   })
@@ -878,9 +880,9 @@ function registerIpc() {
   handle(IPC.snapshot, async (event) => {
     await refreshProviders()
     const win = BrowserWindow.fromWebContents(event.sender)
-    const projectId = win ? windowProject(win) : store.activeProjectId()
-    const project = projectId ? store.project(projectId) : null
-    return store.snapshot(lastProviders, preview.get(project?.id ?? null, project?.path), lastModels, project?.id ?? null)
+    // snapshotFor (not store.snapshot) so the mcpPlaintext flag is set on the
+    // initial full snapshot too, not only on later patch events.
+    return snapshotFor(win ? windowProject(win) : store.activeProjectId())
   })
 
   handle(IPC.testEngine, async (_e, engine: EngineKind, model: string, endpoint: string) => {
@@ -1243,7 +1245,10 @@ function registerIpc() {
       // blob keeps only the non-secret shape.
       const { public: pub, secrets } = splitMcpServers(validMcpServers(patch.mcpServers))
       const kept = mcpSecrets.get()
-      mcpSecrets.set({ ...kept, ...secrets })
+      const merged = { ...kept, ...secrets }
+      // Prune sealed entries whose server no longer exists in the settings blob.
+      const names = new Set(pub.map((s) => s.name))
+      mcpSecrets.set(Object.fromEntries(Object.entries(merged).filter(([n]) => names.has(n))))
       patch = { ...patch, mcpServers: pub }
     }
     if (patch && 'accent' in patch) patch = { ...patch, accent: normaliseAccent(patch.accent) }
@@ -1763,16 +1768,31 @@ function bootstrapData() {
   // With no OS keychain the values stay plaintext (previous behaviour) and the
   // settings UI says so.
   try {
-    mcpPlaintextFallback = migrateMcpSecrets(store.settings().mcpServers, mcpSecrets) === 0
-      && store.settings().mcpServers.some((s) => s.env || s.headers)
+    const before = store.settings().mcpServers
+    const moved = migrateMcpSecrets(before, mcpSecrets)
+    mcpPlaintextFallback = moved === 0
+      && before.some((s) => s.env || s.headers)
       && !safeStorage.isEncryptionAvailable()
+    // The migration sealed copies of the env/header values; scrub the
+    // plaintext originals out of the settings blob too, or they would sit
+    // unencrypted until the next manual save.
+    if (moved > 0) store.saveSettings({ mcpServers: splitMcpServers(before).public })
   } catch { mcpPlaintextFallback = !safeStorage.isEncryptionAvailable() }
   // Desktop -> cloud mirror; store writes only queue work, so nothing waits on the network.
   cloudSync = new CloudSync(store, cloud, { secrets: () => creds.secretValues().filter((v): v is string => Boolean(v)), onStatus: debouncedNotify })
   store.onChange = (kind, id) => { try { cloudSync.markDirty(kind, id) } catch (e) { errors?.record('cloud-sync', e instanceof Error ? e.message : String(e)) } }
   memory = new MemoryService(store, userData)
   skills = new SkillService(store, userData)
-  plugins = new PluginService(store, skills, userData, app.getVersion())
+  plugins = new PluginService(store, skills, userData, app.getVersion(), {
+    // Plugin-supplied MCP env/header values get the same encrypted-at-rest
+    // treatment as owner-typed ones; envOf reads them back for updates.
+    seal: (servers) => {
+      const { public: pub, secrets } = splitMcpServers(servers)
+      mcpSecrets.set({ ...mcpSecrets.get(), ...secrets })
+      return pub
+    },
+    envOf: (name) => mcpSecrets.get()[name]?.env
+  })
   remoteJobs = new RemoteJobs(store.db)
   checkpoints = new CheckpointService(userData)
   preview = new PreviewService(debouncedNotify, (projectId) => store.db.kvGet(`preview:autoapproved:${projectId}`) === '1')

@@ -30,7 +30,7 @@ function PushRegistration() {
         if (reason) console.log('Push registration skipped:', reason)
         return
       }
-      const platform = ReactNative.Platform.OS as 'ios' | 'android'
+      const platform = ReactNative.Platform.OS as 'ios' | 'android' | 'web'
       try { await registerPushToken(userId, token, platform) } catch (e) { console.log('Push registration failed:', e) }
     })()
   }, [userId])

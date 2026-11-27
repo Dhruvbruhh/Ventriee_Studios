@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
     const orgId = typeof body?.orgId === 'string' ? body.orgId : ''
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : ''
     const role = typeof body?.role === 'string' ? body.role : 'employee'
-    if (!/^[0-9a-f-]{36}$/i.test(orgId)) return new Response(JSON.stringify({ error: 'A valid organization is required' }), { status: 400, headers: cors })
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)) return new Response(JSON.stringify({ error: 'A valid organization is required' }), { status: 400, headers: cors })
     if (!EMAIL_RE.test(email)) return new Response(JSON.stringify({ error: 'A valid email is required' }), { status: 400, headers: cors })
     if (!ASSIGNABLE.has(role)) return new Response(JSON.stringify({ error: 'Role must be admin, project_manager or employee' }), { status: 400, headers: cors })
 
@@ -53,7 +53,8 @@ Deno.serve(async (req) => {
 
     // Find the user, or create them with an invite email. inviteUserByEmail
     // sends the mail and creates the account; 422 means the address already
-    // exists, so look the account up instead.
+    // exists, so look the account up instead (paged: the default page can
+    // hide the user).
     let userId: string | null = null
     let invited = false
     const invitedRes = await admin.auth.inviteUserByEmail(email)
@@ -61,15 +62,19 @@ Deno.serve(async (req) => {
       userId = invitedRes.data.user.id
       invited = true
     } else {
-      const existing = await admin.auth.admin.listUsers()
-      userId = existing.data.users.find((u) => (u.email ?? '').toLowerCase() === email)?.id ?? null
+      for (let page = 1; userId === null && page <= 20; page++) {
+        const { data } = await admin.auth.admin.listUsers({ page, perPage: 500 })
+        userId = data.users.find((u) => (u.email ?? '').toLowerCase() === email)?.id ?? null
+        if (data.users.length < 500) break
+      }
       if (!userId) {
         const msg = invitedRes.error?.message ?? 'Could not invite that email'
         return new Response(JSON.stringify({ error: msg }), { status: 400, headers: cors })
       }
     }
 
-    // The membership row: skip silently when this person is already a member.
+    // The membership row: skip silently when this person is already a member
+    // (their existing role is kept, not overwritten).
     const { error: memberErr } = await admin.from('memberships')
       .upsert({ org_id: orgId, user_id: userId, role }, { onConflict: 'org_id,user_id', ignoreDuplicates: true })
     if (memberErr) return new Response(JSON.stringify({ error: memberErr.message }), { status: 400, headers: cors })

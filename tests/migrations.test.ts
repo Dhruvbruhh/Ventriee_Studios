@@ -303,10 +303,12 @@ describe('cloud migrations', () => {
     expect(seen.rows).toEqual([])                                  // ...U1 sees nothing of U2's
     const mine = await as(U2, `select token, platform from public.push_tokens where user_id = $1`, [U2])
     expect(mine.rows).toEqual([{ token: 'ExponentPushToken[abc123]', platform: 'android' }])
-    // No update policy: the update matches no rows and changes nothing (replace-only).
+    // Owner-scoped update policy: the owner can refresh their own row (needed
+    // for re-registration upserts), but another user's update matches nothing.
     await as(U2, `update public.push_tokens set platform = 'ios' where id = $1`, [tokenId])
     const after = await as(U2, `select platform from public.push_tokens where id = $1`, [tokenId])
-    expect(after.rows).toEqual([{ platform: 'android' }])
+    expect(after.rows).toEqual([{ platform: 'ios' }])
+    await as(U2, `update public.push_tokens set platform = 'android' where id = $1`, [tokenId])
     await as(U2, `delete from public.push_tokens where id = $1`, [tokenId]) // owner can remove their own
     const gone = await as(U2, `select id from public.push_tokens where id = $1`, [tokenId])
     expect(gone.rows).toEqual([])

@@ -93,7 +93,7 @@ function InviteMemberModal({ orgId, orgName, onClose, onInvited }: { orgId: stri
       footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={busy || !email.trim()} onClick={() => void submit()}>{busy ? 'Sending…' : 'Send invite'}</Button></>}>
       {error && <div className="form-error">{error}</div>}
       <p className="muted" style={{ marginTop: 0 }}>
-        They get an email with a link to set up their account and join {orgName}. Existing members are added with the chosen role instead.
+        They get an email with a link to set up their account and join {orgName}. If someone is already a member, their current role is kept.
       </p>
       <Field label="Email"><input type="email" value={email} autoFocus onChange={(e) => setEmail(e.target.value)} placeholder="name@studio.com" /></Field>
       <Field label="Role"><select value={role} onChange={(e) => setRole(e.target.value as MembershipRole)}>{ASSIGNABLE_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></Field>
