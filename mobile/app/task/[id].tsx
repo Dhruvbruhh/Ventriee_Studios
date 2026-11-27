@@ -4,11 +4,10 @@ import { Stack, useLocalSearchParams } from 'expo-router'
 import { Button, Card, StateView, StatusChip, SectionTitle } from '@/components/ui'
 import { useQuery } from '@/useQuery'
 import { getTask, updateTaskStatus } from '@/cloud'
-import { approvalDecisionStatus, isPendingApproval } from '@/status'
+import { approvalDecisionStatus, isPendingApproval, TASK_STATUSES } from '@/status'
 import { colors, space } from '@/theme'
 import type { Task } from '@/types'
 
-const NEXT_STATUSES = ['todo', 'in_progress', 'blocked', 'done']
 
 export default function TaskDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -69,7 +68,7 @@ export default function TaskDetail() {
 
         <View style={styles.section}>
           <SectionTitle>Set status</SectionTitle>
-          {NEXT_STATUSES.filter((s) => s !== task.status).map((s) => (
+          {TASK_STATUSES.filter((s) => s !== task.status).map((s) => (
             <View key={s} style={{ marginBottom: space.sm }}>
               <Button title={labelFor(s)} variant="ghost" onPress={() => apply(s, s)} loading={busy === s} />
             </View>

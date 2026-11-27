@@ -30,10 +30,11 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W15 | Isolated Git worktrees for parallel code tasks (§9/§16) | - | Done | `src/main/worktrees.ts`: in a clean Git project with parallel runs on, each code task runs in its own worktree (branch `ventriee/task-<id>`, under the app data dir); after its evidence check it is committed and merged `--no-ff` one at a time; a conflict is aborted and the task goes to rework with the files listed; a dirty project is never merged into (branch kept). Falls back to in-place serialized work for non-git, uncommitted or setting-off projects. Boot recovery removes orphans and keeps unmerged branches. Setting "Isolate parallel code tasks". `tests/worktrees.test.ts` (5), `tests/orchestrator-worktrees.test.ts` (3) |
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
+| W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
 
-## Verification baseline (master, after W13)
+## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
-- vitest: 431 passed, 1 skipped (86 files), including 18 executable migration/RLS tests, 12 resource-library tests, 12 security-scanner tests and 4 visual-QA tests
+- vitest: 485 passed, 1 skipped (92 files), including 18 executable migration/RLS tests, 12 resource-library tests, 12 security-scanner tests and 4 visual-QA tests
 - desktop build: `npm run build` green
 - web build: `cd web && npm run build` green
 - mobile: `npm ci && npm run typecheck && npm test` green (18 jest tests)
@@ -190,3 +191,14 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   subquery. Known limits: deleting a desktop project does not delete its cloud
   copy; there is no "take cloud version" (only keep desktop); a project already
   linked stays in the workspace it was first pushed to.
+- 2026-11-27: W19. Reconciled FEATURE_STATUS with the code: "Fallback models"
+  and "Intelligent model routing" were stale (W1 shipped capability profiles and
+  a fallback chain that escalates a failed task); both are now ✅. The other
+  🟡/❌ entries were checked and still hold. Added message edit / regenerate to
+  the planning chat: `chatSend` takes an optional `replaceFrom` owner-message id,
+  and `Store.rewindChat` deletes that message and every later turn in the same
+  session (refused while a reply is streaming, or for a message outside the
+  active session). Edit loads the text into the composer with a Cancel banner;
+  Regenerate resends the last owner turn. Known limits: old turns are discarded,
+  not branched; images attached to the original message are not resent. The UI
+  was typechecked and built but not clicked through (needs a signed-in session).

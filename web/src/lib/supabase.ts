@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 // safe in the browser: RLS, not this key, decides what each signed-in user sees.
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
-  ?? import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined
+  || import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined
 
 /** True when the app is configured; the UI shows a setup message otherwise. */
 export const isConfigured = Boolean(url && key)

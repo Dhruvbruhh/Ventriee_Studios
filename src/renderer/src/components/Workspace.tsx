@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { guard, useStore } from '../store'
-import { IconCheck, IconCopy, IconRefresh, IconSend, IconSpark } from '../icons'
+import { IconCheck, IconCopy, IconEdit, IconRefresh, IconSend, IconSpark } from '../icons'
 import { ModelPicker, resolveModel, type ResolvedModel } from './ModelPicker'
 import { AddProviderDialog } from './AddProviderDialog'
 import { AssignDialog, RecentAssignments } from './AssignDialog'
@@ -24,6 +24,8 @@ export function Workspace() {
   const [sending, setSending] = useState(false)
   const [creating, setCreating] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Owner message being edited: sending replaces it and every turn after it.
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const latest = prompts.length ? prompts[prompts.length - 1] : null
   const active = prompts.find((p) => p.id === selectedId) ?? latest
@@ -61,7 +63,7 @@ export function Workspace() {
     )
   }
 
-  const send = async (text: string, images: string[] = []) => {
+  const send = async (text: string, images: string[] = [], replaceFrom = editingId ?? undefined) => {
     if (!project || !text.trim() || sending) return
     setSending(true)
     const result = await guard(() =>
@@ -71,12 +73,29 @@ export function Workspace() {
         images,
         engine: planner.engine,
         model: planner.model,
-        endpoint: planner.endpoint
+        endpoint: planner.endpoint,
+        replaceFrom
       })
     )
     setSending(false)
-    if (result) useStore.getState().setChatDraft('')
+    if (result && replaceFrom === (editingId ?? undefined)) {
+      useStore.getState().setChatDraft('')
+      setEditingId(null)
+    }
   }
+
+  const startEdit = (m: ChatMessage) => {
+    setEditingId(m.id)
+    useStore.getState().setChatDraft(m.content)
+    document.getElementById('owner-input')?.focus()
+  }
+  const cancelEdit = () => {
+    setEditingId(null)
+    useStore.getState().setChatDraft('')
+  }
+  // Regenerate resends the owner turn before the last reply, replacing that reply.
+  const lastOwner = [...chat].reverse().find((m) => m.role === 'owner')
+  const regenerate = () => { if (lastOwner) void send(lastOwner.content, [], lastOwner.id) }
 
   const createPrompt = async () => {
     if (!project || creating) return
@@ -124,8 +143,10 @@ export function Workspace() {
           {linkedClient ? <span className="client-badge"><span className="client-badge-dot" />Client: {linkedClient.name}{linkedClient.niche ? ` · ${linkedClient.niche}` : ''}</span> : null}
           {snapshot.conversations.length > 1 ? <span className="session-hint">Type @Session 2 to bring another session into this one</span> : null}
         </div>
-        <ChatThread chat={chat} stream={chatStream} />
+        <ChatThread chat={chat} stream={chatStream} busy={sending} editingId={editingId} onEdit={startEdit} onRegenerate={regenerate} />
         <ChatComposer
+          editing={Boolean(editingId)}
+          onCancelEdit={cancelEdit}
           sending={sending}
           send={send}
           planner={planner}
@@ -199,7 +220,14 @@ function StageStrip({ stage, onGoOffice, onGoReview }: { stage: Stage; onGoOffic
   )
 }
 
-function ChatThread({ chat, stream }: { chat: ChatMessage[]; stream: Record<string, string> }) {
+function ChatThread({ chat, stream, busy, editingId, onEdit, onRegenerate }: {
+  chat: ChatMessage[]
+  stream: Record<string, string>
+  busy: boolean
+  editingId: string | null
+  onEdit: (m: ChatMessage) => void
+  onRegenerate: () => void
+}) {
   const end = useRef<HTMLDivElement>(null)
   const last = chat[chat.length - 1]
   const live = last ? stream[last.id] ?? '' : ''
@@ -227,12 +255,19 @@ function ChatThread({ chat, stream }: { chat: ChatMessage[]; stream: Record<stri
       <div className="chat-thread">
         {chat.map((m) => {
           const text = m.status === 'streaming' ? stream[m.id] ?? '' : m.content
+          const idle = !busy && !chat.some((c) => c.status === 'streaming')
           return (
-            <article key={m.id} className={`msg ${m.role}`}>
+            <article key={m.id} className={`msg ${m.role}${m.id === editingId ? ' editing' : ''}`}>
               <div className="msg-head">
                 <span className="msg-who">{m.role === 'owner' ? 'You' : 'Ada'}</span>
                 {m.role === 'assistant' && m.model ? <span className="msg-model">{m.model}</span> : null}
                 <span className="msg-time">{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                {idle && m.role === 'owner' ? (
+                  <button className="icon-btn" onClick={() => onEdit(m)} title="Edit this message; the replies after it are replaced" aria-label="Edit message"><IconEdit width={12} height={12} /></button>
+                ) : null}
+                {idle && m.role === 'assistant' && m === last ? (
+                  <button className="icon-btn" onClick={onRegenerate} title="Ask again for a new reply" aria-label="Regenerate reply"><IconRefresh width={12} height={12} /></button>
+                ) : null}
               </div>
               {text ? (
                 <div className="msg-body"><RichText text={text} /></div>
@@ -252,6 +287,8 @@ function ChatThread({ chat, stream }: { chat: ChatMessage[]; stream: Record<stri
 }
 
 function ChatComposer({
+  editing,
+  onCancelEdit,
   sending,
   send,
   planner,
@@ -261,6 +298,8 @@ function ChatComposer({
   creating,
   createPrompt
 }: {
+  editing: boolean
+  onCancelEdit: () => void
   sending: boolean
   send: (text: string, images?: string[]) => void
   planner: ResolvedModel
@@ -286,6 +325,12 @@ function ChatComposer({
 
   return (
     <div className="chat-composer">
+      {editing ? (
+        <div className="chat-editing">
+          <span>Editing a message. Sending replaces it and every reply after it.</span>
+          <button className="btn ghost" onClick={onCancelEdit}>Cancel</button>
+        </div>
+      ) : null}
       <div className="chat-box">
         <textarea
           id="owner-input"
@@ -318,7 +363,7 @@ function ChatComposer({
               <IconSpark width={12} height={12} /> {creating ? 'Writing…' : 'Create prompt'}
             </button>
             <button className="btn primary" data-fx="send" onClick={submit} disabled={!draft.trim() || sending}>
-              <IconSend width={12} height={12} /> {sending ? 'Thinking…' : 'Send'}
+              <IconSend width={12} height={12} /> {sending ? 'Thinking…' : editing ? 'Resend' : 'Send'}
             </button>
           </div>
         </div>

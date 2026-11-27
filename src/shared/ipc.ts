@@ -372,7 +372,8 @@ export interface VentrieeApi {
   openPath(path: string): Promise<void>
   openExternal(url: string): Promise<void>
   revealFile(path: string): Promise<void>
-  chatSend(input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string; images?: string[] }): Promise<ChatMessage>
+  /** `replaceFrom`: an owner message id; it and everything after it are replaced (edit / regenerate). */
+  chatSend(input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string; images?: string[]; replaceFrom?: string }): Promise<ChatMessage>
   chatSessionNew(projectId: string): Promise<void>
   chatSessionSelect(projectId: string, conversationId: string): Promise<void>
   onChatChunk(cb: (payload: { projectId: string; messageId: string; chunk: string }) => void): () => void
