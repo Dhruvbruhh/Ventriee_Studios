@@ -97,6 +97,7 @@ describe('cloud migrations', () => {
       '0006_command_defaults.sql',
       '0007_actor_defaults.sql',
       '0007_per_project_grants.sql',
+      '0008_push_tokens.sql',
     ])
   })
 
@@ -104,7 +105,7 @@ describe('cloud migrations', () => {
     const res = await db.query<{ tablename: string; rowsecurity: boolean }>(
       `select tablename, rowsecurity from pg_tables where schemaname = 'public' order by tablename`
     )
-    expect(res.rows.length).toBe(12)
+    expect(res.rows.length).toBe(13)
     for (const r of res.rows) expect(r.rowsecurity, r.tablename).toBe(true)
   })
 
@@ -289,5 +290,25 @@ describe('cloud migrations', () => {
     const audit = await as(U2, `insert into public.audit_log (action) values ('sync.test') returning actor_id`)
     expect(audit.rows).toEqual([{ actor_id: U2 }])
     await expect(as(U2, `insert into public.projects (name, owner_id) values ('Forged', $1)`, [U1])).rejects.toThrow(/row-level security/)
+  })
+
+  it('keeps push tokens private to their owner', async () => {
+    // Register a token as U2, then check every direction of the wall.
+    const reg = await as(U2, `insert into public.push_tokens (user_id, token, platform) values ($1, 'ExponentPushToken[abc123]', 'android') returning id`, [U2])
+    const tokenId = (reg.rows[0] as { id: string }).id
+    await expect(as(U2, `insert into public.push_tokens (user_id, token, platform) values ($1, 'ExponentPushToken[forged]', 'ios')`, [U1]))
+      .rejects.toThrow(/row-level security/)                       // cannot register for someone else
+    await as(U1, `select count(*) from public.push_tokens`)        // no error, but...
+    const seen = await as(U1, `select id from public.push_tokens where id = $1`, [tokenId])
+    expect(seen.rows).toEqual([])                                  // ...U1 sees nothing of U2's
+    const mine = await as(U2, `select token, platform from public.push_tokens where user_id = $1`, [U2])
+    expect(mine.rows).toEqual([{ token: 'ExponentPushToken[abc123]', platform: 'android' }])
+    // No update policy: the update matches no rows and changes nothing (replace-only).
+    await as(U2, `update public.push_tokens set platform = 'ios' where id = $1`, [tokenId])
+    const after = await as(U2, `select platform from public.push_tokens where id = $1`, [tokenId])
+    expect(after.rows).toEqual([{ platform: 'android' }])
+    await as(U2, `delete from public.push_tokens where id = $1`, [tokenId]) // owner can remove their own
+    const gone = await as(U2, `select id from public.push_tokens where id = $1`, [tokenId])
+    expect(gone.rows).toEqual([])
   })
 })
