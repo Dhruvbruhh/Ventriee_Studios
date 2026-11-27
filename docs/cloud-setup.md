@@ -102,6 +102,37 @@ join public.memberships m on m.org_id = o.id and m.user_id = auth.uid();
 -- expect one row: My Agency | owner
 ```
 
+## Deploy the Edge Functions (owner, one-time)
+
+Edge Functions run with the service-role key inside Supabase; the browser never
+sees that key. The web app calls them with the signed-in user's own token, and
+each function re-checks the caller's role server-side.
+
+### invite-member
+
+Sends an email invitation and adds the person to an org. Only an owner or admin
+of that org may call it (verified from the caller's JWT, not the request body).
+
+```bash
+supabase functions deploy invite-member
+```
+
+No extra secrets are needed: `SUPABASE_URL`, `SUPABASE_ANON_KEY` and
+`SUPABASE_SERVICE_ROLE_KEY` are injected into every deployed function.
+
+Test it (replace the URL, key and values):
+
+```bash
+curl -X POST "https://your-project.supabase.co/functions/v1/invite-member" \
+  -H "Authorization: Bearer <a signed-in owner's access token>" \
+  -H "Content-Type: application/json" \
+  -d '{"orgId": "<org uuid>", "email": "newperson@studio.com", "role": "employee"}'
+# expect {"ok":true,"invited":true,"userId":"..."}
+```
+
+The Team page's "Invite member" button calls this automatically once deployed;
+before deployment it surfaces the function's 404 as an error message.
+
 ## Notes
 
 - **No destructive migrations here.** This migration only creates objects; it does

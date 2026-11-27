@@ -224,6 +224,7 @@ Last updated: 2026-11-26
 | Frontend visual QA loop | ✅ | `src/main/visualQa.ts`: after a frontend worker delivers, the sandboxed browser renders the preview at desktop + mobile widths, screenshots both, and checks console errors and empty pages; failures rework the task with specific findings; reviewer receives the rendered-check summary; `tests/visualQa.test.ts` |
 | Connectors (Resend/PostHog/Sentry etc.) | ✅ | SettingsPanel → Connectors; passed to CLI agent workers as env vars (`connectorEnv`) |
 | Client badge in Plan view | ✅ | Workspace.tsx |
+| Team invite by email | ✅ | Team page "Invite member" → invite-member Edge Function (owner/admin verified server-side; account created with an invite email or existing account joined); deploy steps in docs/cloud-setup.md |
 
 ## Voice assistant ("Ventriee")
 | Feature | Status | Notes |
