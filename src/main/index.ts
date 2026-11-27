@@ -192,8 +192,12 @@ async function syncRemoteDevice(session: { userId: string; activeOrgId: string |
 }
 /** Resolve the target project for a remote command; throws rather than guess. */
 function remoteProject(cmd: { payload: Record<string, unknown> }): Project {
-  // cloud sync links each local project to its cloud row; phones address that cloud id
-  const links = store.db.all<{ localId: string; cloudId: string }>(`SELECT localId, cloudId FROM cloud_sync WHERE kind = 'project' AND cloudId IS NOT NULL`)
+  // cloud sync links each local project to its cloud row; phones address that cloud id.
+  // Filter to the signed-in user's links so rows from a previously signed-in account
+  // can never resolve (same rule as cloud/sync.ts).
+  const links = remoteUserId
+    ? store.db.all<{ localId: string; cloudId: string }>(`SELECT localId, cloudId FROM cloud_sync WHERE kind = 'project' AND cloudId IS NOT NULL AND userId = ?`, [remoteUserId])
+    : []
   const linkOf = new Map(links.map((l) => [l.localId, l.cloudId]))
   return resolveRemoteProject(cmd.payload, store.projects().map((p) => ({ ...p, cloudId: linkOf.get(p.id) ?? null })))
 }
@@ -1576,6 +1580,8 @@ const gitHeads = new Map<string, string>()
 const lastJobs = new Map<string, string>()
 /** Last seen GitHub PR / CI signatures per project, so GitHub triggers fire on changes only. */
 const lastGithub = new Map<string, string>()
+/** A hung gh call (60 s timeout) must not let ticks overlap and double-fire triggers. */
+let checkEventTriggersRunning = false
 
 /** Start, or restart, the file watchers for files-triggered workflows. */
 function syncWorkflowTriggers() {
@@ -1629,6 +1635,9 @@ function startWebhookServer() {
 
 /** Git-commit and run-finished triggers, checked on the scheduler tick. */
 async function checkEventTriggers() {
+  if (checkEventTriggersRunning) return
+  checkEventTriggersRunning = true
+  try {
   const flows = store.workflows().filter((w) => w.enabled && w.projectId)
   const wanted = new Map<string, ReturnType<typeof triggerOf>['on'][]>()
   for (const wf of flows) wanted.set(wf.projectId!, [...(wanted.get(wf.projectId!) ?? []), triggerOf(wf).on])
@@ -1670,6 +1679,7 @@ async function checkEventTriggers() {
       }
     }
   }
+  } finally { checkEventTriggersRunning = false }
 }
 
 function startScheduler() {

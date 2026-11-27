@@ -2323,12 +2323,15 @@ body {
 
 /* W30: drag-resizable panels. Unlayered so these beat the @layer component defaults. */
 .shell:not(.no-sidebar) { grid-template-columns: var(--shell-side-w, 256px) minmax(0, 1fr); }
+.shell { position: relative; }
 .code-workspace { grid-template-columns: var(--code-side-w, 260px) minmax(0, 1fr); }
 .code-workspace.with-preview { grid-template-columns: var(--code-side-w, 260px) minmax(320px, 1fr) minmax(280px, 340px); }
 @media (max-width: 1180px) {
   .shell:not(.no-sidebar) { grid-template-columns: var(--shell-side-w, 220px) minmax(0, 1fr); }
   .code-workspace { grid-template-columns: var(--code-side-w, 220px) minmax(0, 1fr); }
   .code-workspace.with-preview { grid-template-columns: var(--code-side-w, 220px) minmax(0, 1fr) 280px; }
+  .shell > .drag-x { left: calc(var(--shell-side-w, 220px) - 3px); }
+  .code-workspace > .drag-x { left: calc(var(--code-side-w, 220px) - 3px); }
 }
 .code-main.with-panel { grid-template-rows: 36px 34px minmax(0, 1fr) var(--code-panel-h, minmax(160px, 34%)) 27px; }
 .drag-handle { position: absolute; z-index: 30; touch-action: none; background: transparent; }

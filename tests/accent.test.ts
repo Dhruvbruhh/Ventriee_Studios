@@ -12,6 +12,8 @@ describe('accent helpers', () => {
     expect(normaliseAccent('orange')).toBe('')
     expect(normaliseAccent('f07a35')).toBe('')
     expect(normaliseAccent('#ff')).toBe('')
+    expect(normaliseAccent('#12345')).toBe('')
+    expect(normaliseAccent('#1234567')).toBe('')
     expect(normaliseAccent('<script>#f07a35</script>')).toBe('')
     expect(normaliseAccent(undefined)).toBe('')
   })
