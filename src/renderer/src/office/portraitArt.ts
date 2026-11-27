@@ -134,6 +134,71 @@ function drawAnimeMouth(buf: Buf, mouth: Mouth): void {
   set(buf, 8, 14, lip); set(buf, 9, 14, lip);
 }
 
+// ─── moods ───────────────────────────────────────────────────────────────────
+/** The eight expressions each character has, as in an anime expression sheet. */
+export const MOODS = ['smile', 'angry', 'cry', 'blush', 'surprised', 'laugh', 'tired', 'wink'] as const;
+export type Mood = (typeof MOODS)[number];
+
+const LASH: RGB = [46, 34, 52];
+/** A closed, happy eye: an upturned arc (^). */
+function closedEye(buf: Buf, x0: number): void {
+  set(buf, x0 - 1, 10, LASH); set(buf, x0, 9, LASH); set(buf, x0 + 1, 9, LASH); set(buf, x0 + 2, 10, LASH);
+}
+
+/** Repaint the eyes and mouth for a mood, over the character's own anime face. */
+function drawMood(buf: Buf, skin: string, iris: RGB, mood: Mood): void {
+  const s = SKIN[skin];
+  const clearEye = (x0: number) => { for (let x = x0 - 1; x <= x0 + 2; x++) for (let y = 8; y <= 11; y++) set(buf, x, y, s.base); };
+  const clearMouth = () => { for (let x = 6; x <= 11; x++) for (let y = 13; y <= 15; y++) set(buf, x, y, s.base); };
+  const lip: RGB = [196, 92, 104], inner: RGB = [150, 52, 70], tongue: RGB = [240, 130, 140];
+  const tear: RGB = [150, 210, 255], cheek: RGB = [240, 130, 150];
+  const [, base] = shades(iris, 1.35, 0.6);
+  switch (mood) {
+    case 'smile':
+      clearMouth(); set(buf, 7, 13, lip); set(buf, 8, 14, lip); set(buf, 9, 14, lip); set(buf, 10, 13, lip);
+      return;
+    case 'angry':
+      // brows pulled down toward the nose, a pout, and an anger mark
+      for (const x0 of [5, 10]) { set(buf, x0, 8, s.base); set(buf, x0 + 1, 8, s.base); }
+      set(buf, 5, 7, LASH); set(buf, 6, 8, LASH); set(buf, 7, 8, LASH); set(buf, 12, 7, LASH); set(buf, 11, 8, LASH); set(buf, 10, 8, LASH);
+      clearMouth(); set(buf, 8, 14, lip); set(buf, 9, 14, lip); set(buf, 7, 15, lip); set(buf, 10, 15, lip);
+      for (const [x, y] of [[14, 3], [16, 3], [15, 4], [14, 5], [16, 5]] as const) set(buf, x, y, [230, 60, 70]);
+      return;
+    case 'cry':
+      for (const x of [5, 6, 10, 11]) set(buf, x, 9, tear);
+      for (const [x, y] of [[5, 12], [5, 13], [5, 14], [12, 12], [12, 13], [12, 14]] as const) set(buf, x, y, tear);
+      clearMouth(); set(buf, 7, 15, lip); set(buf, 8, 14, lip); set(buf, 9, 14, lip); set(buf, 10, 15, lip);
+      return;
+    case 'blush':
+      for (const x of [4, 5, 6, 11, 12, 13]) set(buf, x, 12, cheek, 220);
+      for (const x of [5, 12]) set(buf, x, 11, cheek, 150);
+      clearMouth(); set(buf, 8, 14, lip); set(buf, 9, 14, lip);
+      return;
+    case 'surprised':
+      // white-ringed eyes with small irises, and an "o" mouth
+      for (const x0 of [5, 10]) { clearEye(x0); set(buf, x0 - 1, 8, LASH); set(buf, x0, 8, LASH); set(buf, x0 + 1, 8, LASH); set(buf, x0 + 2, 8, LASH);
+        for (const y of [9, 10, 11]) { set(buf, x0, y, [255, 255, 255]); set(buf, x0 + 1, y, [255, 255, 255]); }
+        set(buf, x0, 10, base); set(buf, x0 + 1, 10, base); }
+      clearMouth(); for (const [x, y] of [[8, 13], [9, 13], [8, 14], [9, 14]] as const) set(buf, x, y, inner);
+      return;
+    case 'laugh':
+      clearEye(5); clearEye(10); closedEye(buf, 5); closedEye(buf, 10);
+      clearMouth(); for (const x of [7, 8, 9, 10]) set(buf, x, 13, inner); set(buf, 8, 14, tongue); set(buf, 9, 14, tongue);
+      for (const x of [4, 13]) set(buf, x, 12, cheek, 200);
+      return;
+    case 'tired':
+      // heavy lids: the lash line drops a row and the glint goes
+      for (const x0 of [5, 10]) { clearEye(x0); for (let x = x0 - 1; x <= x0 + 2; x++) set(buf, x, 9, LASH); set(buf, x0, 10, base); set(buf, x0 + 1, 10, base); }
+      clearMouth(); set(buf, 8, 14, lip); set(buf, 9, 14, lip); set(buf, 10, 14, lip);
+      set(buf, 14, 7, tear); set(buf, 14, 8, tear);
+      return;
+    case 'wink':
+      clearEye(10); closedEye(buf, 10);
+      clearMouth(); set(buf, 7, 13, lip); set(buf, 8, 14, lip); set(buf, 9, 14, lip); set(buf, 10, 13, lip);
+      return;
+  }
+}
+
 /** A bow on top of the head. */
 function drawRibbon(buf: Buf, c: RGB): void {
   const [hi, base, sh] = shades(c);
@@ -360,6 +425,17 @@ function drawFacial(buf: Buf, kind: Facial, color: RGB): void {
 // Clear prescription glasses (NOT sunglasses): a thin rim that frames each eye
 // without covering it. The lens interior keeps the eye/skin already drawn, plus
 // a small white glint so the lens reads as transparent glass.
+/** Round frames sized for the tall anime eyes: rims beside and under each eye, a bridge and a glint. */
+function drawAnimeGlasses(buf: Buf): void {
+  const frame: RGB = [60, 54, 62], glint: RGB = [236, 240, 246];
+  for (const [l, r] of [[4, 7], [9, 12]] as const) {
+    for (let y = 9; y <= 11; y++) { set(buf, l, y, frame); set(buf, r, y, frame); }
+    for (let x = l; x <= r; x++) set(buf, x, 12, frame);
+    set(buf, r - 1, 9, glint);
+  }
+  set(buf, 8, 9, frame); set(buf, 3, 9, frame); set(buf, 13, 9, frame);
+}
+
 function drawGlasses(buf: Buf): void {
   const frame: RGB = [60, 54, 62];
   const glint: RGB = [236, 240, 246];
@@ -622,7 +698,7 @@ const RECIPES: Record<OfficeCharacterName, Recipe> = {
 };
 
 /** The face/hair group (head → face → facial hair → hair → glasses), no clothing. */
-function drawHeadGroup(buf: Buf, r: Recipe): void {
+function drawHeadGroup(buf: Buf, r: Recipe, mood?: Mood): void {
   const skinBase = SKIN[r.skin].base;
   drawHead(buf, r.skin);
   if (r.heavy) drawHeavyFace(buf, r.skin);
@@ -630,7 +706,9 @@ function drawHeadGroup(buf: Buf, r: Recipe): void {
   if (r.eyes) { drawAnimeEyes(buf, r.skin, r.eyes); drawAnimeMouth(buf, r.mouth ?? 'neutral'); }
   if (r.facial) drawFacial(buf, r.facial, r.hairc);
   HAIR_FNS[r.hair](buf, r.hairc, skinBase, r.hairargs ?? {});
-  if (r.glasses) drawGlasses(buf);
+  // after the hair, so brows and marks sit on top of the bangs; before glasses, which sit on the face
+  if (mood && r.eyes) drawMood(buf, r.skin, r.eyes, mood);
+  if (r.glasses) { if (r.eyes) drawAnimeGlasses(buf); else drawGlasses(buf); }
   if (r.ribbon) drawRibbon(buf, r.ribbon);
   if (r.ahoge) drawAhoge(buf, r.hairc);
 }
@@ -641,59 +719,61 @@ function defaultPants(r: Recipe): RGB {
 }
 
 /** Portrait bust: shoulders-height clothing + front head group. */
-function compose(r: Recipe): Buf {
+function compose(r: Recipe, mood?: Mood): Buf {
   CUR_W = PORTRAIT_W; CUR_H = PORTRAIT_H;
   const buf = new Uint8ClampedArray(PORTRAIT_W * PORTRAIT_H * 4);
   drawClothing(buf, r.cloth, r.c1, r.c2, r.tie, r.skin, r.heavy ?? false);
   collarNeck(buf, r.skin);
-  drawHeadGroup(buf, r);
+  drawHeadGroup(buf, r, mood);
   outlinePass(buf);
   return buf;
 }
 
 /** Full-body 18×32 scene sprite. `back=false` reuses the portrait's exact face. */
-function composeScene(r: Recipe, phase: number, back: boolean): Buf {
+function composeScene(r: Recipe, phase: number, back: boolean, mood?: Mood): Buf {
   CUR_W = SCENE_W; CUR_H = SCENE_H;
   const buf = new Uint8ClampedArray(SCENE_W * SCENE_H * 4);
   drawSceneBody(buf, r, phase, back);
   if (back) drawHeadBack(buf, r);
-  else drawHeadGroup(buf, r);
+  else drawHeadGroup(buf, r, mood);
   outlinePass(buf);
   return buf;
 }
 
 // ─── public render ───────────────────────────────────────────────────────────
-const bufCache = new Map<OfficeCharacterName, Buf>();
-const sceneCache = new Map<OfficeCharacterName, SceneFrames>();
+const bufCache = new Map<string, Buf>();
+const sceneCache = new Map<string, SceneFrames>();
 
-function getBuf(name: OfficeCharacterName): Buf {
-  let buf = bufCache.get(name);
+function getBuf(name: OfficeCharacterName, mood?: Mood): Buf {
+  const key = `${name}:${mood ?? ''}`;
+  let buf = bufCache.get(key);
   if (!buf) {
-    buf = compose(RECIPES[name] ?? RECIPES.sakura);
-    bufCache.set(name, buf);
+    buf = compose(RECIPES[name] ?? RECIPES.sakura, mood);
+    bufCache.set(key, buf);
   }
   return buf;
 }
 
 export interface SceneFrames { front: Buf[]; back: Buf[]; }
 
-/** Walk-phase frames (stand, step-L, step-R) for the in-scene sprite, front + back. */
-export function sceneFrameBufs(name: OfficeCharacterName): SceneFrames {
-  let frames = sceneCache.get(name);
+/** Walk-phase frames (stand, step-L, step-R) for the in-scene sprite, front + back; `mood` changes the face. */
+export function sceneFrameBufs(name: OfficeCharacterName, mood?: Mood): SceneFrames {
+  const key = `${name}:${mood ?? ''}`;
+  let frames = sceneCache.get(key);
   if (!frames) {
     const r = RECIPES[name] ?? RECIPES.sakura;
     frames = {
-      front: [composeScene(r, 0, false), composeScene(r, 1, false), composeScene(r, 2, false)],
+      front: [composeScene(r, 0, false, mood), composeScene(r, 1, false, mood), composeScene(r, 2, false, mood)],
       back: [composeScene(r, 0, true), composeScene(r, 1, true), composeScene(r, 2, true)],
     };
-    sceneCache.set(name, frames);
+    sceneCache.set(key, frames);
   }
   return frames;
 }
 
 /** Paint a character's procedural portrait onto `ctx`, nearest-neighbor at `scale`. */
-export function paintPortrait(ctx: CanvasRenderingContext2D, name: OfficeCharacterName, scale = 2): void {
-  const buf = getBuf(name);
+export function paintPortrait(ctx: CanvasRenderingContext2D, name: OfficeCharacterName, scale = 2, mood?: Mood): void {
+  const buf = getBuf(name, mood);
   // Stage at 1× on an offscreen canvas, then blit scaled with smoothing off.
   const stage = document.createElement('canvas');
   stage.width = PORTRAIT_W; stage.height = PORTRAIT_H;

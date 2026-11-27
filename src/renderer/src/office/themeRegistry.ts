@@ -5,6 +5,7 @@
 
 import type { Texture } from 'pixi.js'
 import { colors } from './tokens'
+import type { Mood } from './portraitArt'
 import { CAST_BY_NAME, getCastFrames, DEFAULT_CHARACTER, type CastMember, type OfficeCharacterName } from './cast'
 
 import { animeTilesetUrls } from './animeTiles'
@@ -43,7 +44,7 @@ export interface PaletteConfig {
 
 export interface ThemeCast {
   byName: Record<string, CastMember>
-  getFrames: (name: string) => Texture[][]
+  getFrames: (name: string, mood?: Mood) => Texture[][]
   defaultCharacter: string
 }
 
@@ -155,7 +156,7 @@ export const OFFICE_THEME: ThemeConfig = {
   ],
   cast: {
     byName: CAST_BY_NAME as Record<string, CastMember>,
-    getFrames: (name: string) => getCastFrames(name as OfficeCharacterName),
+    getFrames: (name: string, mood?: Mood) => getCastFrames(name as OfficeCharacterName, mood),
     defaultCharacter: DEFAULT_CHARACTER
   }
 }

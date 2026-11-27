@@ -1,5 +1,5 @@
 import { Texture } from 'pixi.js'
-import { paintPortrait, sceneFrameBufs, SCENE_W, SCENE_H } from './portraitArt'
+import { paintPortrait, sceneFrameBufs, SCENE_W, SCENE_H, type Mood } from './portraitArt'
 
 // The office cast: original anime-style characters, each drawn from a procedural
 // recipe (see portraitArt.ts), so no sprite sheets and no external art licences
@@ -64,7 +64,7 @@ export function characterForRole(role: string): OfficeCharacterName {
   return ROLE_CHARACTER[role] ?? DEFAULT_CHARACTER
 }
 
-const frameCache = new Map<OfficeCharacterName, Texture[][]>()
+const frameCache = new Map<string, Texture[][]>()
 
 function bufToTexture(buf: Uint8ClampedArray): Texture {
   const canvas = document.createElement('canvas')
@@ -80,17 +80,18 @@ function bufToTexture(buf: Uint8ClampedArray): Texture {
 }
 
 /** Frame grid CharacterSprite expects: 3 rows (down, up, right) × 7 frames. */
-export function getCastFrames(name: OfficeCharacterName): Texture[][] {
-  const cached = frameCache.get(name)
+export function getCastFrames(name: OfficeCharacterName, mood?: Mood): Texture[][] {
+  const key = `${name}:${mood ?? ''}`
+  const cached = frameCache.get(key)
   if (cached) return cached
-  const { front, back } = sceneFrameBufs(name)
+  const { front, back } = sceneFrameBufs(name, mood)
   const toRow = (bufs: Uint8ClampedArray[]): Texture[] => {
     const [stand, stepL, stepR] = bufs.map(bufToTexture)
     return [stand, stepL, stepR, stand, stand, stand, stand]
   }
   const frontRow = toRow(front)
   const frames: Texture[][] = [frontRow, toRow(back), frontRow]
-  frameCache.set(name, frames)
+  frameCache.set(key, frames)
   return frames
 }
 

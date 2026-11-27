@@ -100,6 +100,15 @@ export class CharacterSprite {
     this.sprite.play();
   }
 
+  /** Swap in another set of frames (the same character with a different face) without restarting the walk. */
+  setFrames(frames: Texture[][]): void {
+    if (frames === this.frames) return;
+    this.frames = frames;
+    const at = this.sprite.currentFrame;
+    this.sprite.textures = this.getFrames(this.currentDirection, this.currentAnim);
+    this.sprite.gotoAndPlay(Math.min(at, this.sprite.textures.length - 1));
+  }
+
   setPosition(x: number, y: number): void {
     this.container.x = x;
     this.container.y = y;
