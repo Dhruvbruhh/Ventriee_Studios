@@ -313,6 +313,9 @@ export interface Conversation {
   projectId: string
   /** Empty shows as "Session N" by creation order. */
   title: string
+  /** Set when this session was branched from a message in another session. */
+  branchedFrom?: string
+  branchedFromMessageId?: string
   createdAt: number
   updatedAt: number
 }
@@ -793,7 +796,7 @@ export interface Snapshot {
   /** Planning state for the active project. */
   conversation: Conversation | null
   conversations: Conversation[]
-  sessionIndex: Array<{ id: string; projectId: string; title: string }>
+  sessionIndex: Array<{ id: string; projectId: string; title: string; branchedFrom?: string }>
   chat: ChatMessage[]
   chatTemplates: ChatTemplate[]
   prompts: PromptDoc[]

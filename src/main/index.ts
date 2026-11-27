@@ -1314,6 +1314,12 @@ function registerIpc() {
     store.setActiveConversation(projectId, conversationId)
     debouncedNotify()
   })
+  handle(IPC.chatBranch, (_e, projectId: string, messageId: string) => {
+    if (!store.project(projectId)) throw new Error('Project not found')
+    const branched = store.branchConversation(projectId, messageId)
+    debouncedNotify()
+    return branched
+  })
   handle(IPC.chatTemplateSave, (_e, input: { id?: string; name: string; content: string }) => {
     const saved = store.saveChatTemplate(input)
     debouncedNotify()

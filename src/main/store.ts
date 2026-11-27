@@ -727,6 +727,34 @@ export class Store {
     this.db.kvSet(`activeConversation:${projectId}`, id)
   }
 
+  /**
+   * Branch from a message: a new session holding the turns up to (and including)
+   * that message; the original session keeps everything and stays active.
+   */
+  branchConversation(projectId: string, messageId: string): Conversation {
+    const msg = this.db.get<ChatMessage>('SELECT * FROM chat_messages WHERE id = ? AND projectId = ?', messageId, projectId)
+    if (!msg) throw new Error('Message not found in this project')
+    const now = Date.now()
+    const row: Conversation = {
+      id: newId('cnv'), projectId, title: '', createdAt: now, updatedAt: now,
+      branchedFrom: msg.conversationId, branchedFromMessageId: messageId
+    }
+    this.db.run(
+      'INSERT INTO conversations(id,projectId,title,branchedFrom,branchedFromMessageId,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?)',
+      row.id, row.projectId, row.title, row.branchedFrom, row.branchedFromMessageId, row.createdAt, row.updatedAt
+    )
+    for (const m of this.db.all<ChatMessage>(
+      'SELECT * FROM chat_messages WHERE conversationId = ? AND createdAt <= ? ORDER BY createdAt ASC',
+      msg.conversationId, msg.createdAt
+    )) {
+      this.db.run(
+        'INSERT INTO chat_messages(id,projectId,conversationId,role,content,model,status,createdAt) VALUES(?,?,?,?,?,?,?,?)',
+        newId('cht'), m.projectId, row.id, m.role, m.content, m.model, m.status, m.createdAt
+      )
+    }
+    return row
+  }
+
   touchConversation(id: string) {
     this.db.run('UPDATE conversations SET updatedAt = ? WHERE id = ?', Date.now(), id)
   }
@@ -1154,7 +1182,7 @@ export class Store {
       conversation: projectId ? this.conversation(projectId) : null,
       conversations: projectId ? this.conversations(projectId) : [],
       // Every project's sessions, for the sidebar; titles only, no messages.
-      sessionIndex: this.db.all<{ id: string; projectId: string; title: string }>('SELECT id, projectId, title FROM conversations ORDER BY createdAt ASC, rowid ASC'),
+      sessionIndex: this.db.all<{ id: string; projectId: string; title: string; branchedFrom?: string }>('SELECT id, projectId, title, branchedFrom FROM conversations ORDER BY createdAt ASC, rowid ASC'),
       chat: projectId ? this.chatMessages(projectId) : [],
       chatTemplates: this.chatTemplates(),
       prompts: projectId ? this.prompts(projectId) : [],

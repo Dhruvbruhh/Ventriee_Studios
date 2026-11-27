@@ -62,7 +62,7 @@ Last updated: 2026-11-26
 | Reusable templates | ✅ | Templates picker in the chat composer: save the current draft as a named snippet, insert it in any project, delete it (`chat_templates` table, `chatTemplateSave`/`Delete` IPC) |
 | Message editing / regeneration | ✅ | Planning chat: edit any of your messages or regenerate the last reply; later turns are replaced (`Store.rewindChat`). Attached images are not resent |
 | Conversation export | ✅ | "Export transcript" saves the active session as Markdown (`## You` / `## Assistant (model)` turns); `chatExport` IPC + `shared/transcript.ts`. Empty sessions refuse to export |
-| Branching | ❌ | Not implemented |
+| Branching | ✅ | "Branch from here" on any message creates a new session holding the turns up to it; the original is untouched. Sidebar shows "(from Session N)". `chatBranch` IPC + `Store.branchConversation` |
 
 ## Phase 4 — Agent Management
 | Feature | Status | Notes |
