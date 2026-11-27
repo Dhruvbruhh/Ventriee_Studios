@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { guard, useStore } from '../store'
 import { Modal, Switch } from '../shell'
 import { ENGINE_LABELS, type Agent, type AppSettings, type EngineKind, type Difficulty, type ModelProfile } from '../../../shared/types'
+import { ACCENT_PRESETS } from '../../../shared/accent'
 import { effectiveProfile, MIN_OUTCOME_SAMPLES, routeModels } from '../../../shared/routing'
 import type { RemoteStatus } from '../../../shared/ipc'
 // CLI adapters spawn a process per request; mirrors isCliEngine in main.
@@ -1288,16 +1289,27 @@ function GithubTab() {
 
 function AppearanceTab() {
   const theme = useStore((s) => s.snapshot!.settings.theme)
+  const accent = useStore((s) => s.snapshot!.settings.accent) ?? ''
   const [pluginThemes, setPluginThemes] = useState<Array<[AppSettings['theme'], string]>>([])
   useEffect(() => { void window.ventriee.pluginList().then((list) => setPluginThemes(list.flatMap((p) => p.themes.map((t): [AppSettings['theme'], string] => [`plugin:${p.id}:${t.id}`, `${t.name} (${p.name})`])))) }, [])
   const options: Array<[AppSettings['theme'], string]> = [['dark', 'Dark'], ['light', 'Light'], ['system', 'Match Windows']]
   const pick = (id: AppSettings['theme']) => void guard(() => window.ventriee.saveSettings({ theme: id }))
+  const pickAccent = (value: string) => void guard(() => window.ventriee.saveSettings({ accent: value }), value ? 'Accent colour updated' : 'Accent reset to the theme default')
   return <>
     <PaneHead title="Appearance">The studio's colours. The code editor keeps its own theme (Code → editor theme).</PaneHead>
     <div className="vx-modes" role="radiogroup" aria-label="Theme" style={{ maxWidth: 360 }}>
       {options.map(([id, label]) => (
         <button key={id} role="radio" aria-checked={theme === id} className={theme === id ? 'on' : ''} onClick={() => pick(id)}>{label}</button>
       ))}
+    </div>
+    <div className="section-label space-above">Accent colour</div>
+    <div className="mk-chips" role="group" aria-label="Accent colour">
+      {ACCENT_PRESETS.map((hex) => <button key={hex} className="vx-chip" aria-pressed={accent === hex} title={hex} onClick={() => pickAccent(hex)}><span aria-hidden style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 6, background: hex, marginRight: 6, verticalAlign: -2 }} />{accent === hex ? '✓ ' : ''}{hex}</button>)}
+      <label className="vx-chip" title="Pick any colour">
+        <input type="color" aria-label="Custom accent colour" value={accent || ACCENT_PRESETS[0]} onChange={(e) => pickAccent(e.target.value)} style={{ width: 16, height: 16, padding: 0, border: 'none', background: 'none', marginRight: 6, verticalAlign: -3 }} />
+        Custom
+      </label>
+      {accent ? <button className="vx-chip" onClick={() => pickAccent('')}>Reset</button> : null}
     </div>
     {pluginThemes.length ? <>
       <div className="section-label space-above">From plugins</div>

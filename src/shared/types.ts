@@ -698,6 +698,8 @@ export interface AppSettings {
   onboardingSeen?: boolean
   /** A built-in theme, or `plugin:<plugin id>:<theme id>`. */
   theme: 'dark' | 'light' | 'system' | `plugin:${string}`
+  /** Custom accent colour as a #rrggbb hex; '' keeps the theme's own accent. */
+  accent: string
   voice: VoiceSettings
   /** API keys for outbound services injected into agent environment. */
   connectors: {

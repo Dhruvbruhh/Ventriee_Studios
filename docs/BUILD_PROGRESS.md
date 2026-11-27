@@ -39,6 +39,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W28 | xAI (Grok) + Groq providers (FEATURE_STATUS Phase 2) | - | Done | `api-xai` + `api-groq` registered in `ENGINE_ENDPOINTS`/`ENGINE_LABELS` with env keys `XAI_API_KEY`/`GROQ_API_KEY`; both stream through the existing OpenAI-compatible adapter; `tests/routing.test.ts` asserts registration |
 | W29 | Browser tabs (FEATURE_STATUS Phase 10) | - | Done | `browserAutomation.ts`: one sandboxed window per tab in the same session, only the active one visible; `tab new`/`tab <n>`/`tab close` steps in `browserSteps.ts` (1-12); new-tab links open a background tab without stealing focus; `tests/browser-steps.test.ts` (tab parsing) |
 | W30 | Resizable panels: app sidebar, code sidebar, bottom panel (FEATURE_STATUS Phase 1) | - | Done | new `src/renderer/src/components/Resize.tsx`: `useDragSize` (pointer drag + arrow-key nudge + double-click reset, persisted in localStorage, min/max clamped), `ResizeHandle` (role=separator, aria-labelled), `sizeVar`; handles wired in `App.tsx` shell and `CodeWorkspace.tsx` (code sidebar x, bottom panel y with dynamic ceiling); sizes applied as CSS custom properties overriding the grid defaults (unlayered rules at the end of `styles.css`); `tests/resize.test.ts` (3 tests) |
+| W31 | Accent picker (FEATURE_STATUS Phase 16) | - | Done | `settings.accent` (hex string, '' keeps the theme accent); validated in the saveSettings IPC handler by `normaliseAccent` (src/shared/accent.ts, hex-only, also exports 8 `ACCENT_PRESETS`); App.tsx applies it as `--accent` on `document.documentElement` on top of built-in and plugin themes (re-applied after plugin colours load, removed on cleanup); Settings → Appearance gains preset swatches, a custom colour input and Reset; `tests/accent.test.ts` (3 tests) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -285,3 +286,14 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   shell, closed bottom panel). `tests/resize.test.ts` (3 tests) covers the
   clamp, the CSS-variable helper and the handle markup; both tsconfigs and the
   full vitest run are green.
+- 2026-11-27: W31. The accent colour is now owner-settable from Settings →
+  Appearance instead of a CSS variable only the code could change. The choice
+  is stored as `settings.accent` (#abc to #rrggbbaa hex, empty for the theme's
+  own accent) and validated on the main side by `normaliseAccent`, so a stray
+  value can never reach the style layer. App applies it by setting `--accent`
+  on the document root, above built-in dark/light and plugin themes alike: the
+  derived `--accent-soft/-faint/-glow` mixes keep working automatically because
+  they are computed from `--accent`. A small palette of eight presets, a custom
+  colour picker and a Reset chip cover the UI. `tests/accent.test.ts` (3 tests)
+  covers validation and the preset list; both tsconfigs and the full vitest run
+  are green.
