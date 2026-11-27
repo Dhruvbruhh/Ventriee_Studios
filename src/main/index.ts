@@ -44,6 +44,7 @@ import { CheckpointService } from './checkpoint'
 import { WorktreeService } from './worktrees'
 import { summarizeRuns } from './runs'
 import { validMcpServers, writeMcpConfig } from './mcp'
+import { normaliseAccent } from '../shared/accent'
 import { GraphifyService } from './graphify'
 import { applyTemplate, type TemplateId } from './templates'
 import { Updater } from './updater'
@@ -1172,6 +1173,7 @@ function registerIpc() {
 
   handle(IPC.saveSettings, async (_e, patch: Partial<AppSettings>) => {
     if (patch && 'mcpServers' in patch) patch = { ...patch, mcpServers: validMcpServers(patch.mcpServers) }
+    if (patch && 'accent' in patch) patch = { ...patch, accent: normaliseAccent(patch.accent) }
     for (const key of ['dailyBudgetUsd', 'projectBudgetUsd'] as const) if (patch && key in patch) patch = { ...patch, [key]: Math.min(100_000, Math.max(0, Number(patch[key]) || 0)) }
     const before = store.settings().companyPack
     const next = store.saveSettings(patch)

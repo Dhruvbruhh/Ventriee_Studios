@@ -208,7 +208,7 @@ Last updated: 2026-11-26
 | Feature | Status | Notes |
 |---|---|---|
 | Dark-first CSS design system | ✅ | styles.css with CSS variables |
-| Accent customization | 🟡 | CSS var, no UI picker |
+| Accent customization | ✅ | Settings → Appearance: presets, custom colour, reset; saved as settings.accent |
 | Light theme | ✅ | Settings → Appearance |
 | Command palette | ✅ | CommandBar |
 | Keyboard shortcuts | ✅ | keybindings setting |

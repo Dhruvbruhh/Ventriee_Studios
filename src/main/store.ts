@@ -78,6 +78,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   completionEndpoint: '',
   onboardingSeen: false,
   theme: 'dark',
+  accent: '',
   voice: {
     source: 'cloud',
     localModel: '',

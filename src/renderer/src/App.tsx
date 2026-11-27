@@ -69,13 +69,17 @@ export function App() {
   const [codeOpened, setCodeOpened] = useState(false)
   useEffect(() => { if (workspace === 'code') setCodeOpened(true) }, [workspace])
   const theme = snapshot?.settings.theme ?? 'dark'
+  const accent = snapshot?.settings.accent ?? ''
   useEffect(() => {
     const root = document.documentElement
     const media = window.matchMedia('(prefers-color-scheme: light)')
     let vars: string[] = []
     let cancelled = false
     const apply = () => { if (!theme.startsWith('plugin:')) root.dataset.theme = theme === 'system' ? (media.matches ? 'light' : 'dark') : theme }
+    // the owner's accent sits on top of every theme, plugin ones included
+    const applyAccent = () => { if (accent) root.style.setProperty('--accent', accent); else root.style.removeProperty('--accent') }
     apply()
+    applyAccent()
     if (theme.startsWith('plugin:')) {
       const [, pluginId, themeId] = theme.split(':')
       void window.ventriee.pluginList().then((list) => {
@@ -83,12 +87,13 @@ export function App() {
         const t = list.find((p) => p.id === pluginId)?.themes.find((x) => x.id === themeId)
         root.dataset.theme = t?.base ?? 'dark'
         for (const [k, v] of Object.entries(t?.colors ?? {})) root.style.setProperty(k, v)
+        applyAccent()
         vars = Object.keys(t?.colors ?? {})
       }).catch(() => { root.dataset.theme = 'dark' })
     }
     media.addEventListener('change', apply)
-    return () => { cancelled = true; media.removeEventListener('change', apply); for (const k of vars) root.style.removeProperty(k) }
-  }, [theme])
+    return () => { cancelled = true; media.removeEventListener('change', apply); for (const k of vars) root.style.removeProperty(k); root.style.removeProperty('--accent') }
+  }, [theme, accent])
 
   useEffect(() => {
     let mounted = true

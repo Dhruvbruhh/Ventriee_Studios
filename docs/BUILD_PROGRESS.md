@@ -31,6 +31,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
+| W31 | Accent picker (FEATURE_STATUS Phase 16) | - | Done | `settings.accent` (hex string, '' keeps the theme accent); validated in the saveSettings IPC handler by `normaliseAccent` (src/shared/accent.ts, hex-only, also exports 8 `ACCENT_PRESETS`); App.tsx applies it as `--accent` on `document.documentElement` on top of built-in and plugin themes (re-applied after plugin colours load, removed on cleanup); Settings → Appearance gains preset swatches, a custom colour input and Reset; `tests/accent.test.ts` (3 tests) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -202,3 +203,14 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W31. The accent colour is now owner-settable from Settings →
+  Appearance instead of a CSS variable only the code could change. The choice
+  is stored as `settings.accent` (#abc to #rrggbbaa hex, empty for the theme's
+  own accent) and validated on the main side by `normaliseAccent`, so a stray
+  value can never reach the style layer. App applies it by setting `--accent`
+  on the document root, above built-in dark/light and plugin themes alike: the
+  derived `--accent-soft/-faint/-glow` mixes keep working automatically because
+  they are computed from `--accent`. A small palette of eight presets, a custom
+  colour picker and a Reset chip cover the UI. `tests/accent.test.ts` (3 tests)
+  covers validation and the preset list; both tsconfigs and the full vitest run
+  are green.
