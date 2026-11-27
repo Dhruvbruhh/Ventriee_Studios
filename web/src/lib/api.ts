@@ -23,6 +23,12 @@ export async function signOut(): Promise<void> {
   await supabase.auth.signOut()
 }
 
+/** Send a password-reset email; the link lands back on this app's origin. */
+export async function resetPassword(email: string): Promise<void> {
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin })
+  if (error) throw new Error(error.message)
+}
+
 // --- Workspaces -----------------------------------------------------------
 
 /** Personal workspace plus every org the user belongs to, with their role. */

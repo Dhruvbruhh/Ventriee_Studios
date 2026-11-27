@@ -46,6 +46,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W35 | Ollama model profiles from `/api/show` (FINAL_AUDIT #5 P2) | - | Done | `cliModels` asks Ollama's `/api/show` for every listed local model (5 s timeout, failures ignored); the reported parameter size (`details.parameter_size`) and context length (`context_length` or `model_info.*.context_length`) ride on `ModelOption.paramsB`/`contextLength`; `deriveProfile` ranks by the real size (>=70b strong, <=8b fast) and uses the real context window, name regexes stay the fallback; `tests/routing.test.ts` (+1) |
 | W36 | Per-project device grants (FINAL_AUDIT #6) | - | Done | Migration `0007_per_project_grants.sql`: `device_grants.project_id` (null = whole device, unchanged behavior); `can_control_device(device, project)` and the `commands_insert` policy pass `payload.projectId`, failing closed when absent or not a uuid; `CloudClient.grantDevice` accepts `projectId`; `tests/migrations.test.ts` (scoped-grant case: granted project enqueues, other project and unnamed target rejected) |
 | W37 | Stemmed lexical retrieval (FINAL_AUDIT #10) | - | Done | Light suffix stemmer in the intelligence tokenizer (`src/main/intelligence/index.ts`): ing/ed/s/e/doubled-consonant stripping above a length floor, applied identically to index and query sides; `INDEX_VERSION` 1→2 so stale indexes rebuild; `tests/intelligence.test.ts` (the audit's "git commit staging" query now ranks `git.ts` first) |
+| W38 | Web forgot-password (FINAL_AUDIT #7, client half) | - | Done | `resetPassword` in `web/src/lib/api.ts` (supabase `resetPasswordForEmail`, redirect to the app origin); "Forgot password?" mode on `SignIn.tsx` with a confirmation state and a back link; `.link` button style in `web/src/index.css`. Email invitations stay out of scope: they need an Edge Function with the service key. Web typecheck + vitest green |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -378,3 +379,12 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   existing indexes rebuild once. Known limit: this fixes inflection, not
   synonyms ("commit code changes" still will not find `git.ts`); that needs
   embeddings, which stay out of scope for the dependency-free engine.
+- 2026-11-27: W38. Forgot-password on the web dashboard (FINAL_AUDIT #7, client
+  half). "Forgot password?" on the sign-in card switches to a reset mode: one
+  email field, a Supabase `resetPasswordForEmail` send with the app origin as
+  the redirect, and a confirmation state with a back link. Supabase delivers
+  the email and hosts the update form; no server code is involved, so this
+  works with the public key. Email invitations remain open: adding a user by
+  email needs an Edge Function holding the service key, which cannot ship from
+  the client. The reset flow was typechecked and built but not exercised with
+  a real inbox (needs a configured Supabase project).
