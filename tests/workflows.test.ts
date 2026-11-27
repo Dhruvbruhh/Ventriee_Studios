@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { conditionPasses, fileMatches, runWorkflow, triggerOf, type WorkflowDeps } from '../src/main/workflows'
+import { ciDigest, conditionPasses, fileMatches, prDigest, runWorkflow, triggerOf, type WorkflowDeps } from '../src/main/workflows'
 import type { Workflow, WorkflowNode, WorkflowRunEvent } from '../src/shared/types'
 
 const node = (id: string, kind: WorkflowNode['kind'], config: Record<string, string> = {}): WorkflowNode => ({ id, kind, x: 0, y: 0, label: id, config })
@@ -105,6 +105,39 @@ describe('workflow steps and triggers', () => {
   it('reads the trigger from the Start step', () => {
     expect(triggerOf(flow([node('t', 'trigger', { on: 'webhook', token: 'abc' })], [])).on).toBe('webhook')
     expect(triggerOf(flow([node('t', 'trigger', { on: 'nonsense' })], [])).on).toBe('manual')
+    expect(triggerOf(flow([node('t', 'trigger', { on: 'github_pr' })], [])).on).toBe('github_pr')
+    expect(triggerOf(flow([node('t', 'trigger', { on: 'github_ci' })], [])).on).toBe('github_ci')
+  })
+
+  it('digests the GitHub PR list into a stable signature and a readable input', () => {
+    const payload = JSON.stringify([{ number: 7, title: 'Fix login', updatedAt: '2026-11-27T10:00:00Z' }, { number: 3, title: 'Docs', updatedAt: '2026-11-26T09:00:00Z' }])
+    const first = prDigest(payload)
+    expect(first.signature).toContain('7:2026-11-27T10:00:00Z')
+    expect(first.input).toContain('#7 Fix login')
+    // the same list digests identically; a changed updatedAt digests differently
+    expect(prDigest(payload).signature).toBe(first.signature)
+    expect(prDigest(JSON.stringify([{ number: 7, title: 'Fix login', updatedAt: '2026-11-27T11:00:00Z' }])).signature).not.toBe(first.signature)
+    // junk, an empty list and a payload without numbers never fire
+    expect(prDigest('not json').signature).toBe('')
+    expect(prDigest('[]').signature).toBe('')
+    expect(prDigest(JSON.stringify([{ nope: true }])).signature).toBe('')
+  })
+
+  it('digests GitHub CI runs by failed id only, so a still-red run fires once', () => {
+    const payload = JSON.stringify([
+      { databaseId: 11, conclusion: 'success', displayTitle: 'green' },
+      { databaseId: 12, conclusion: 'failure', displayTitle: 'W30 tests' },
+      { databaseId: 13, conclusion: null, displayTitle: 'running' }
+    ])
+    const first = ciDigest(payload)
+    expect(first.signature).toBe('12')
+    expect(first.input).toContain('12 W30 tests')
+    // the same failed run on the next tick does not fire again
+    expect(ciDigest(payload).signature).toBe(first.signature)
+    // a new failure changes the signature
+    expect(ciDigest(JSON.stringify([{ databaseId: 12, conclusion: 'failure' }, { databaseId: 14, conclusion: 'failure' }])).signature).toBe('12|14')
+    expect(ciDigest('[]').signature).toBe('')
+    expect(ciDigest('nope').signature).toBe('')
   })
 
   it('ignores generated folders and applies the path filter', () => {

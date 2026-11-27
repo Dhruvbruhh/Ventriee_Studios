@@ -33,7 +33,7 @@ import { ExtensionService } from './extensions'
 import { TestService, detectRunners } from './testrunner'
 import { listTasks } from './tasks'
 import { HistoryService } from './history'
-import { github, githubAuth } from './github'
+import { github, githubAuth, gh } from './github'
 import { ErrorLog, issueUrl } from './errorlog'
 import { baseCatalog, type Catalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
@@ -58,7 +58,7 @@ import { listResources } from './resources'
 import { parseManifest, toManifest } from '../shared/agents'
 import { scanProject } from './securityScan'
 import { RemoteJobs, E2BProvider } from './remote'
-import { fileMatches, runWorkflow, triggerOf } from './workflows'
+import { ciDigest, fileMatches, prDigest, runWorkflow, triggerOf } from './workflows'
 import { BrowserAutomation } from './browserAutomation'
 import { exec, execFile } from 'node:child_process'
 import { watch, type FSWatcher } from 'node:fs'
@@ -1497,6 +1497,8 @@ const workflowFinishedAt = new Map<string, number>()
 /** Last seen HEAD per project and last seen job per project, so git and run triggers fire on changes only. */
 const gitHeads = new Map<string, string>()
 const lastJobs = new Map<string, string>()
+/** Last seen GitHub PR / CI signatures per project, so GitHub triggers fire on changes only. */
+const lastGithub = new Map<string, string>()
 
 /** Start, or restart, the file watchers for files-triggered workflows. */
 function syncWorkflowTriggers() {
@@ -1574,6 +1576,21 @@ async function checkEventTriggers() {
       if (before === undefined || before === key) continue
       if (job.status === 'failed') fire('run_failed', `Run failed: ${job.instruction}\n${job.error ?? ''}`)
       else if (job.status === 'done') fire('run_done', `Run finished: ${job.instruction}`)
+    }
+    if (kinds.includes('github_pr') || kinds.includes('github_ci')) {
+      // One gh call per kind per tick; failures (no gh, unsigned in, no repo) resolve to '' and never fire.
+      const [prs, runs] = await Promise.all([
+        kinds.includes('github_pr') ? gh(project.path, ['pr', 'list', '--json', 'number,title,updatedAt', '--limit', '30']).catch(() => '') : Promise.resolve(''),
+        kinds.includes('github_ci') ? gh(project.path, ['run', 'list', '--json', 'databaseId,conclusion,displayTitle', '--limit', '20']).catch(() => '') : Promise.resolve('')
+      ])
+      for (const [kind, payload] of [['github_pr', prs], ['github_ci', runs]] as const) {
+        if (!payload) continue
+        const digest = kind === 'github_pr' ? prDigest(payload) : ciDigest(payload)
+        const key = `${projectId}:${kind}`
+        const before = lastGithub.get(key)
+        lastGithub.set(key, digest.signature)
+        if (digest.signature && before !== undefined && before !== digest.signature) fire(kind, digest.input)
+      }
     }
   }
 }

@@ -31,6 +31,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
+| W32 | GitHub-event workflow triggers: PR list changes, CI failures (FEATURE_STATUS Phase 8) | - | Done | two new Start-step trigger kinds, `github_pr` (the project's PR list changes) and `github_ci` (a CI run fails), polled every 30 s on the existing scheduler tick via the owner's `gh` login (one `gh pr list` / `gh run list` call per tick); `prDigest` / `ciDigest` in `src/main/workflows.ts` turn the JSON into a change signature (PRs by number+updatedAt; CI by failed run ids only, so a run that stays red fires once) plus a readable trigger input; an empty payload (no gh, signed out, no repo) never fires, and the first observation only records the baseline; Workflows panel lists both options and demands a project like the other event triggers; `tests/workflows.test.ts` (+5 cases) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -202,3 +203,20 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W32. Workflows can now start from GitHub events. A Start step
+  gains two trigger kinds: `github_pr` fires when the project's open-PR list
+  changes (new, closed or updated PR), `github_ci` fires when a GitHub Actions
+  run fails. Both are polled on the existing 30-second scheduler tick through
+  the owner's own `gh` CLI login, one `gh pr list` / `gh run list` call per
+  interested project, so no extra credentials and no webhooks. The payload is
+  reduced to a change signature: PRs by number and updatedAt, CI by the ids of
+  failed runs only, which means a run that stays red does not re-fire on every
+  tick, but a second failure does. Empty results (gh missing, signed out, no
+  GitHub remote) and the first observation never fire, mirroring how the git
+  commit trigger treats its baseline. The digest text ("GitHub PRs open now",
+  "GitHub Actions failures" with ids and titles) becomes the workflow input, so
+  an If step can branch on it and an AI step can summarise it. The Workflows
+  panel lists both options and, like the file/git/run triggers, requires a
+  project before the trigger can watch anything. Tests for both digests and the
+  new trigger kinds were added to `tests/workflows.test.ts` (13 tests total);
+  both tsconfigs and the full vitest run are green.
