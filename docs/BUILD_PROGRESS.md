@@ -36,6 +36,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W21 | Usage dashboard: per-worker breakdown (§22) | - | Done | `analyticsOverview` gains `byAgent` (sessions, cost, time per worker, deleted workers shown as unknown); Analytics panel adds a "By worker" table and the per-model time column; `tests/analytics-agents.test.ts` (2) |
 | W22 | Workspace switching in the desktop topbar (§4) | W14, W18 | Done | The switch itself existed (IPC `cloudWorkspace` → `auth.setWorkspace` → `cloudSync.setSession`), but was only reachable in the Memory panel. New topbar `OrgPicker` (hidden when signed out or org-less): Personal or any org of the account, drives cloud-sync target and which org new projects join; `src/renderer/src/components/OrgPicker.tsx` |
 | W26 | Workflow + provider manifests: export/import (§26) | - | Done | `src/shared/manifests.ts` (workflow + provider manifest validation, mirroring the agent manifest rules; provider manifests never carry keys); IPC `workflow:export/import`, `provider:export/import`; handlers in `src/main/index.ts` (2 MB cap, imports arrive switched off / keyless); Export + Import buttons in the Workflows panel and Settings › Engines; `tests/manifests.test.ts` (10 tests) |
+| W28 | xAI (Grok) + Groq providers (FEATURE_STATUS Phase 2) | - | Done | `api-xai` + `api-groq` registered in `ENGINE_ENDPOINTS`/`ENGINE_LABELS` with env keys `XAI_API_KEY`/`GROQ_API_KEY`; both stream through the existing OpenAI-compatible adapter; `tests/routing.test.ts` asserts registration |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -247,3 +248,11 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   export saves only the active session (per-session export lives in the sidebar
   later if wanted). The UI was typechecked and tested at the store/IPC level
   but not clicked through (needs a signed-in session).
+- 2026-11-27: W28. xAI (Grok) and Groq are registered hosted providers:
+  `api-xai` (https://api.x.ai/v1) and `api-groq` (https://api.groq.com/openai/v1)
+  in `ENGINE_ENDPOINTS`, labelled in `ENGINE_LABELS`, with `XAI_API_KEY` /
+  `GROQ_API_KEY` as credential env fallbacks. Both speak the OpenAI chat
+  protocol, so they stream through the existing OpenAI-compatible adapter with
+  no new code; they appear in Settings > Engines, model discovery, routing and
+  the pickers automatically. Known limit: live calls were not run (needs real
+  API keys); the adapter path is identical to DeepSeek/Mistral, which do run.

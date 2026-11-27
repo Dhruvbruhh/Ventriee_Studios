@@ -11,6 +11,8 @@ export type EngineKind =
   | 'api-openrouter'
   | 'api-deepseek'
   | 'api-mistral'
+  | 'api-xai'
+  | 'api-groq'
   | 'api-deploy'
   | 'api-inception'
   | 'api-ollama'
@@ -31,6 +33,8 @@ export const ENGINE_LABELS: Record<EngineKind, string> = {
   'api-openrouter': 'OpenRouter',
   'api-deepseek': 'DeepSeek API',
   'api-mistral': 'Mistral API',
+  'api-xai': 'xAI (Grok)',
+  'api-groq': 'Groq',
   'api-deploy': 'Deploy (DeepSeek V4.1)',
   'api-inception': 'Inception (Mercury)',
   'api-ollama': 'Ollama HTTP',
@@ -47,6 +51,8 @@ export const ENGINE_ENDPOINTS: Partial<Record<EngineKind, string>> = {
   'api-openrouter': 'https://openrouter.ai/api/v1',
   'api-deepseek': 'https://api.deepseek.com/v1',
   'api-mistral': 'https://api.mistral.ai/v1',
+  'api-xai': 'https://api.x.ai/v1',
+  'api-groq': 'https://api.groq.com/openai/v1',
   'api-deploy': 'https://api-sf1-cdn.deploy.com/api/v1',
   'api-inception': 'https://api.inceptionlabs.ai/v1',
   'api-ollama': 'http://127.0.0.1:11434/v1',

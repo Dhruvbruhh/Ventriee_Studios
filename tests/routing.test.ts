@@ -57,6 +57,11 @@ describe('provider lists', () => {
     const { LOCAL_API_ENGINES, KEYED_API_ENGINES, ENGINE_ENDPOINTS } = await import('../src/shared/types')
     expect(LOCAL_API_ENGINES).toEqual(['api-ollama', 'api-lmstudio', 'api-vllm'])
     expect(KEYED_API_ENGINES.length + LOCAL_API_ENGINES.length).toBe(Object.keys(ENGINE_ENDPOINTS).length)
+    // xAI and Groq are registered hosted providers (OpenAI-compatible, keyed).
+    expect(KEYED_API_ENGINES).toContain('api-xai')
+    expect(KEYED_API_ENGINES).toContain('api-groq')
+    expect(ENGINE_ENDPOINTS['api-xai']).toBe('https://api.x.ai/v1')
+    expect(ENGINE_ENDPOINTS['api-groq']).toBe('https://api.groq.com/openai/v1')
   })
 })
 

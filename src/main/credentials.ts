@@ -13,6 +13,8 @@ const ENV_KEY: Partial<Record<EngineKind, string>> = {
   'api-openrouter': 'OPENROUTER_API_KEY',
   'api-deepseek': 'DEEPSEEK_API_KEY',
   'api-mistral': 'MISTRAL_API_KEY',
+ 'api-xai': 'XAI_API_KEY',
+ 'api-groq': 'GROQ_API_KEY',
   'api-deploy': 'DEPLOY_API_KEY',
   'api-inception': 'INCEPTION_API_KEY'
 }
