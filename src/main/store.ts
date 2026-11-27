@@ -51,6 +51,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   plannerFallback: true,
   companyPack: '',
   clarifyBrief: true,
+  researchUrls: true,
   routingMode: 'automatic',
   costPreference: 'balanced',
   modelProfiles: {},
@@ -551,6 +552,16 @@ export class Store {
       samples: Number(r.samples), passed: Number(r.passed), rework: Number(r.rework), failed: Number(r.failed),
       avgTokens: Math.round(Number(r.avgTokens)), avgLatencyMs: Math.round(Number(r.avgLatencyMs))
     }))
+  }
+
+  /** Average real cost of finished tasks per role, for the pre-run cost estimate. */
+  roleCostStats(): Array<{ role: string; avgCostUsd: number; samples: number }> {
+    return this.db.all<Record<string, unknown>>(
+      `SELECT t.role AS role, AVG(s.costUsd) AS avgCostUsd, COUNT(*) AS samples
+       FROM sessions s JOIN tasks t ON t.id = s.taskId
+       WHERE s.costUsd > 0 AND t.role IS NOT NULL AND t.role != ''
+       GROUP BY t.role ORDER BY t.role`
+    ).map((r) => ({ role: String(r.role), avgCostUsd: Number(r.avgCostUsd), samples: Number(r.samples) }))
   }
 
   searchMemory(query: string, projectId?: string | null): MemoryDoc[] {

@@ -1003,6 +1003,13 @@ function RunPolicy() {
         </div>
         <Switch on={settings.clarifyBrief} onClick={() => void update({ clarifyBrief: !settings.clarifyBrief })} label="Clarifying questions" />
       </div>
+      <div className="kv-row">
+        <div className="kv-row-main">
+          <div className="kv-row-title">Research reference URLs</div>
+          <div className="kv-row-sub">When the brief contains URLs, the pages are fetched before planning so the planner sees the real site. Failures never block the run.</div>
+        </div>
+        <Switch on={settings.researchUrls} onClick={() => void update({ researchUrls: !settings.researchUrls })} label="Reference URL research" />
+      </div>
     </div>
   )
 }

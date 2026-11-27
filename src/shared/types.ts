@@ -636,6 +636,8 @@ export interface AppSettings {
   companyPack: string
   /** Ask the owner clarifying questions before planning a vague brief. */
   clarifyBrief: boolean
+  /** Fetch reference URLs from the brief and give the planner the page text. */
+  researchUrls: boolean
   /** Who picks models: the owner, the orchestrator, or both. */
   routingMode: RoutingMode
   costPreference: CostPreference
