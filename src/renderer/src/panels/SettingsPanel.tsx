@@ -267,6 +267,10 @@ function Engines() {
         )
       })}
       </div>
+      <div className="flex gap-8 space-above">
+        <button className="btn" onClick={async () => { const path = await guard(() => window.ventriee.providerExport()); if (path) useStore.getState().notify(`Saved ${path}`) }}>Export providers</button>
+        <button className="btn" onClick={async () => { const r = await guard(() => window.ventriee.providerImport()); if (r) useStore.getState().notify(`Imported ${r.added.length} provider${r.added.length === 1 ? '' : 's'}: enter their API keys above`, 'info') }}>Import providers…</button>
+      </div>
       <div className="hint space-above">
         Env vars are also honoured (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY,
         DEEPSEEK_API_KEY, MISTRAL_API_KEY). A key set here overrides the environment.

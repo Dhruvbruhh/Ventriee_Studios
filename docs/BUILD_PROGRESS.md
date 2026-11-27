@@ -31,6 +31,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
+| W26 | Workflow + provider manifests: export/import (§26) | - | Done | `src/shared/manifests.ts` (workflow + provider manifest validation, mirroring the agent manifest rules; provider manifests never carry keys); IPC `workflow:export/import`, `provider:export/import`; handlers in `src/main/index.ts` (2 MB cap, imports arrive switched off / keyless); Export + Import buttons in the Workflows panel and Settings › Engines; `tests/manifests.test.ts` (10 tests) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -202,3 +203,17 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W26. Workflow and provider manifests (§26). `src/shared/manifests.ts`
+  validates both formats with the same strictness as the agent manifest: exact
+  field sets, size caps (100 workflows / 50 providers per file, 200 nodes, 400
+  edges), node kinds limited to the 14 real workflow steps, edge endpoints must
+  reference known node ids, schedule minutes clamped to 0-43200. Provider
+  manifests never carry keys: the parser refuses `apiKey`/`key` with a message
+  telling the owner to enter the key in Settings after import. IPC adds
+  `workflow:export/import` and `provider:export/import`; main handlers mirror the
+  agent ones (2 MB file cap, JSON parse errors surfaced) and imports arrive
+  switched off (workflows) or keyless (providers). The Workflows panel gets
+  Export / Import buttons next to the template picker; Settings › Engines gets
+  Export providers / Import providers. Known limits: workflow imports always
+  arrive disabled and lose their project link (manifests carry no project ids);
+  exported providers keep their model list but never their key.
