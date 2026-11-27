@@ -732,7 +732,9 @@ export class Store {
    * that message; the original session keeps everything and stays active.
    */
   branchConversation(projectId: string, messageId: string): Conversation {
-    const msg = this.db.get<ChatMessage>('SELECT * FROM chat_messages WHERE id = ? AND projectId = ?', messageId, projectId)
+    // rowid tie-breaks same-millisecond messages: on a fast clock several turns
+    // can share createdAt, so the cut point must be positional, not timestamp.
+    const msg = this.db.get<ChatMessage & { rowid: number }>('SELECT rowid, * FROM chat_messages WHERE id = ? AND projectId = ?', messageId, projectId)
     if (!msg) throw new Error('Message not found in this project')
     const now = Date.now()
     const row: Conversation = {
@@ -744,8 +746,8 @@ export class Store {
       row.id, row.projectId, row.title, row.branchedFrom, row.branchedFromMessageId, row.createdAt, row.updatedAt
     )
     for (const m of this.db.all<ChatMessage>(
-      'SELECT * FROM chat_messages WHERE conversationId = ? AND createdAt <= ? ORDER BY createdAt ASC',
-      msg.conversationId, msg.createdAt
+      'SELECT * FROM chat_messages WHERE conversationId = ? AND (createdAt < ? OR (createdAt = ? AND rowid <= ?)) ORDER BY createdAt ASC, rowid ASC',
+      msg.conversationId, msg.createdAt, msg.createdAt, msg.rowid
     )) {
       this.db.run(
         'INSERT INTO chat_messages(id,projectId,conversationId,role,content,model,status,createdAt) VALUES(?,?,?,?,?,?,?,?)',
