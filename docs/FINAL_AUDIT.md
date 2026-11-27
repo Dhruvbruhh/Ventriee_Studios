@@ -34,7 +34,7 @@ test accounts before release.
 | 1 | ~~P0~~ | ~~Live Supabase had no Ventriee tables.~~ Fixed 2026-11-26: 0001–0006 live. | — |
 | 2 | P1 | No signed-in end-to-end pass of desktop, web or mobile, and no live owner-vs-employee check. | Create two test accounts after #1, then run the manual script in RELEASE_CHECKLIST.md. |
 | 3 | P1 | Push notifications not implemented (no EAS projectId, no push_tokens table, nothing sends). Mobile shows statuses on refresh only. | Accept for v1, or implement push. |
-| 4 | P2 | Local and cloud projects are not linked; remote commands match by name. Duplicate names are refused, not guessed. | Store the cloud project id on local projects. |
+| 4 | P2 | ~~Local and cloud projects are not linked; remote commands match by name. Duplicate names are refused, not guessed.~~ | Fixed (W34): cloud sync already stores the cloud project id per local project (cloud_sync table); remote commands now match a phone's projectId against that link first (unique match required, ambiguity throws), falling back to local id then unique name as before. |
 | 5 | P2 | Model profiles come from model-name patterns. Ollama's reported parameter size is ignored, so all local models here tie. Owner overrides exist in Settings. | Use `/api/show` details for Ollama profiles. |
 | 6 | P2 | Device grants cover a whole device, not per project. A grantee can target any project on it. | Documented; scope grants if employees get device access. |
 | 7 | P2 | Web has no email invitations (adds existing users by id), and no forgot-password on web sign-in. | Supabase Edge Function with the service key. |

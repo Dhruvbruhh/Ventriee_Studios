@@ -31,6 +31,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
+| W34 | Remote commands target projects by their linked cloud id (FINAL_AUDIT #4, P2) | - | Done | cloud sync already stores the cloud project id per local project in the `cloud_sync` table, so no schema change was needed: `resolveRemoteProject` (src/main/remote.ts) now matches a phone's `projectId` against that link before falling back to the local id and a unique exact name; an ambiguous link (two local projects joined to one cloud row) throws instead of guessing; the main-process call site joins the link ids onto the project list it passes in; `tests/remote.test.ts` (+2 cases) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -202,3 +203,15 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W34. A phone can now address a desktop project by its cloud id.
+  Cloud sync already stored the cloud project id for every mirrored local
+  project in its `cloud_sync` table, so the fix needed no schema change:
+  `resolveRemoteProject` first tries the local id, then the linked cloud id
+  (joined in by the main process from that table), then a unique exact name, in
+  that order. A phone sending the cloud id of a linked project now reaches the
+  right desktop project even when several projects share a name; an ambiguous
+  link (two local projects joined to the same cloud row) is refused rather
+  than guessed, as is an unknown id. Unlinked projects keep working exactly as
+  before, so this is purely additive. Two new cases in `tests/remote.test.ts`
+  cover the cloud-id match and the ambiguity refusal; both tsconfigs and the
+  full vitest run are green.

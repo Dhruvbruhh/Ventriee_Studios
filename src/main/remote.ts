@@ -462,15 +462,20 @@ function asRecord(value: unknown): Record<string, unknown> {
 function message(e: unknown): string { return e instanceof Error ? e.message : String(e) }
 
 /**
- * Which local project a remote command targets. Phones send the cloud project's id and
- * name; local projects have their own ids, so match id first, then a unique exact name.
- * Never guesses: an ambiguous or unknown target throws instead of acting on the wrong project.
- * shortcut: name matching until local projects store their cloud project id.
+ * Which local project a remote command targets. Phones send the cloud project's
+ * id and name; local projects match by their own id, their linked cloud id
+ * (cloud sync stores it), or a unique exact name. Never guesses: an ambiguous
+ * or unknown target throws instead of acting on the wrong project.
  */
-export function resolveRemoteProject<P extends { id: string; name: string }>(payload: Record<string, unknown>, projects: P[]): P {
+export function resolveRemoteProject<P extends { id: string; name: string; cloudId?: string | null }>(payload: Record<string, unknown>, projects: P[]): P {
   const id = payload.projectId
-  const byId = typeof id === 'string' ? projects.find((p) => p.id === id) : undefined
-  if (byId) return byId
+  if (typeof id === 'string') {
+    const byId = projects.find((p) => p.id === id)
+    if (byId) return byId
+    const byCloud = projects.filter((p) => p.cloudId === id)
+    if (byCloud.length === 1) return byCloud[0]
+    if (byCloud.length > 1) throw new Error('more than one project on this device is linked to that cloud project')
+  }
   const name = typeof payload.projectName === 'string' ? payload.projectName.trim().toLowerCase() : ''
   if (name) {
     const named = projects.filter((p) => p.name.trim().toLowerCase() === name)
