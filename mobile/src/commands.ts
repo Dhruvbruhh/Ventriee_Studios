@@ -1,68 +1,70 @@
 // Remote-control command queue client + payload building.
 //
-// The mobile app enqueues a command (status 'pending'); the desktop (W5) drains the
-// queue, runs it, and writes back status + result. We only insert and read here.
-//
-// TODO(W5): confirm column names against 0002_remote_control.sql. See src/types.ts.
+// Contract (supabase/migrations/0002_remote_control.sql + 0005, desktop src/main/index.ts):
+// the phone inserts a row into `commands`; status defaults to 'queued', requested_by to
+// the caller and expires_at to +1 day server-side. The desktop only runs `type`s in its
+// allowlist, and refuses high-risk ones unless requires_confirmation is true.
 import type { Command } from './types'
 
-/** Column names assumed for the `commands` table. Adjust here if W5 differs. */
 export const COMMAND_TABLE = 'commands'
 
-export type CommandType = 'ask_project_status' | 'start_agent_run' | 'stop_agent_run'
+/** Must match the desktop's remoteCapabilities keys exactly. */
+export type CommandType = 'project.status' | 'run.start' | 'run.stop'
 
 export interface CommandSpec {
   type: CommandType
   label: string
   /** Human summary of what the desktop will do. */
   description: string
-  /** Whether this command targets a specific project. */
-  needsProject: boolean
+  /** Desktop refuses these unless the user confirmed on the phone. */
+  highRisk: boolean
+  /** Needs an instruction typed by the user. */
+  needsInstruction: boolean
 }
 
 export const COMMAND_SPECS: CommandSpec[] = [
-  { type: 'ask_project_status', label: 'Ask project status', description: 'Request a status summary for a project.', needsProject: true },
-  { type: 'start_agent_run', label: 'Start agent run', description: 'Tell the desktop agent to begin a run.', needsProject: true },
-  { type: 'stop_agent_run', label: 'Stop agent run', description: 'Ask the desktop agent to stop the current run.', needsProject: false },
+  { type: 'project.status', label: 'Ask project status', description: 'Ask the desktop whether this project has a run going.', highRisk: false, needsInstruction: false },
+  { type: 'run.start', label: 'Start agent run', description: 'Tell the desktop to start an agent run with your instruction.', highRisk: true, needsInstruction: true },
+  { type: 'run.stop', label: 'Stop agent run', description: 'Stop the run going on this project.', highRisk: true, needsInstruction: false },
 ]
 
 export interface BuildCommandInput {
   type: CommandType
   deviceId: string
   orgId?: string | null
-  projectId?: string | null
-  /** Extra free-form args merged into the payload (e.g. a prompt). */
-  args?: Record<string, unknown>
+  /** Cloud project; the desktop matches it to its local project by id, then by name. */
+  project: { id: string; name: string } | null
+  instruction?: string
 }
 
-/** The row inserted into the commands table. New commands always start 'pending'. */
+/** The row inserted into the commands table. */
 export interface NewCommandRow {
   device_id: string
   org_id: string | null
   type: CommandType
   payload: Record<string, unknown>
-  status: 'pending'
+  requires_confirmation: boolean
 }
 
-/**
- * Build the insert row for a command. Validates that a project-scoped command
- * carries a projectId, so we never enqueue a command the desktop can't act on.
- */
+/** Build the insert row. Every command targets a project so nothing lands on the wrong one. */
 export function buildCommandRow(input: BuildCommandInput): NewCommandRow {
   if (!input.deviceId) throw new Error('Pick a device to send the command to')
   const spec = COMMAND_SPECS.find((s) => s.type === input.type)
   if (!spec) throw new Error(`Unknown command type: ${input.type}`)
-  if (spec.needsProject && !input.projectId) throw new Error(`"${spec.label}" needs a project`)
+  if (!input.project) throw new Error(`"${spec.label}" needs a project`)
+  const instruction = input.instruction?.trim() ?? ''
+  if (spec.needsInstruction && !instruction) throw new Error(`"${spec.label}" needs an instruction`)
 
-  const payload: Record<string, unknown> = { ...(input.args ?? {}) }
-  if (input.projectId) payload.project_id = input.projectId
+  const payload: Record<string, unknown> = { projectId: input.project.id, projectName: input.project.name }
+  if (spec.needsInstruction) payload.instruction = instruction
 
   return {
     device_id: input.deviceId,
     org_id: input.orgId ?? null,
     type: input.type,
     payload,
-    status: 'pending',
+    // Only reached after the user confirmed in the app (see command screen).
+    requires_confirmation: spec.highRisk,
   }
 }
 
@@ -70,6 +72,6 @@ export function buildCommandRow(input: BuildCommandInput): NewCommandRow {
 export function describeCommand(command: Pick<Command, 'type' | 'payload'>): string {
   const spec = COMMAND_SPECS.find((s) => s.type === command.type)
   const base = spec?.label ?? command.type
-  const project = command.payload?.project_id
-  return typeof project === 'string' ? `${base}` : base
+  const project = command.payload?.projectName
+  return typeof project === 'string' && project ? `${base} · ${project}` : base
 }

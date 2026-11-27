@@ -25,8 +25,9 @@ describe('isPendingApproval', () => {
 
 describe('approvalDecisionStatus', () => {
   it('maps a decision to the written status', () => {
-    expect(approvalDecisionStatus('approve')).toBe('approved')
-    expect(approvalDecisionStatus('reject')).toBe('rejected')
+    expect(approvalDecisionStatus('approve')).toBe('completed')
+    expect(approvalDecisionStatus('reject')).toBe('in_progress')
+    expect(isPendingApproval('in_review')).toBe(true)
   })
 })
 
@@ -40,7 +41,8 @@ describe('status meta tones', () => {
   })
   it('gives commands the right tone and label', () => {
     expect(commandStatusMeta('running')).toEqual({ label: 'Running', tone: 'progress' })
-    expect(commandStatusMeta('error').tone).toBe('danger')
+    expect(commandStatusMeta('failed').tone).toBe('danger')
+    expect(commandStatusMeta('queued').tone).toBe('pending')
   })
 })
 

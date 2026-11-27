@@ -7,7 +7,7 @@ import { hostname } from 'node:os'
 import { StudioAuth } from './auth'
 import { SupabaseCloudClient } from './cloud'
 import { CloudSync } from './cloud/sync'
-import { RemoteControl, ownsAttachedDevice, type Capability } from './remote'
+import { RemoteControl, ownsAttachedDevice, resolveRemoteProject, type Capability } from './remote'
 import { FileService, workspacePath } from './files'
 import { GitService } from './git'
 import type { TextFile, GitAction } from '../shared/workspace'
@@ -187,12 +187,9 @@ async function syncRemoteDevice(session: { userId: string; activeOrgId: string |
     remoteUserId = session.userId
   } catch (e) { errors?.record('remote-register', e instanceof Error ? e.message : String(e)) }
 }
-/** Resolve the target project for a remote command (its payload.projectId, else the only/first project). */
+/** Resolve the target project for a remote command; throws rather than guess. */
 function remoteProject(cmd: { payload: Record<string, unknown> }): Project {
-  const id = cmd.payload.projectId
-  const project = typeof id === 'string' ? store.project(id) : store.projects()[0]
-  if (!project) throw new Error('no such project on this device')
-  return project
+  return resolveRemoteProject(cmd.payload, store.projects())
 }
 protocol.registerSchemesAsPrivileged([{ scheme: RENDERER_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
 
