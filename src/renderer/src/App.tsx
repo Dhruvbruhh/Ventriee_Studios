@@ -12,6 +12,7 @@ import { Dashboard } from './components/Dashboard'
 import { SideChat } from './components/SideChat'
 import { SimpleMode } from './components/SimpleMode'
 import { CloudSyncBadge } from './components/CloudSync'
+import { OrgPicker } from './components/OrgPicker'
 import { TerminalView } from './components/Terminal'
 import { SettingsPanel } from './panels/SettingsPanel'
 import { MemoryPanel } from './panels/MemoryPanel'
@@ -185,6 +186,7 @@ export function App() {
           </span>
         </div>
         <CloudSyncBadge />
+        <OrgPicker />
         <button className="btn ghost" onClick={() => void guard(() => window.ventriee.saveSettings({ simpleMode: true }))} title="Switch to the chat-first Simple mode">Simple mode</button>
         <button className={`icon-btn${showAdvisor ? ' active' : ''}`} onClick={() => setShowAdvisor((v) => !v)} title="Side chat" aria-label="Side chat">
           <IconSpark />

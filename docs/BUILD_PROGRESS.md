@@ -33,6 +33,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
 | W20 | URL research gate + pre-run cost estimate (§8) | - | Done | `src/main/urlResearch.ts` (brief URLs fetched before planning, context block in the planner prompt, never blocks); `src/main/costEstimate.ts` (estimate from recorded per-role session costs, unknown roles named not priced); Settings toggle "Research reference URLs"; `tests/urlResearch.test.ts` (7), `tests/costEstimate.test.ts` (3) |
 | W21 | Usage dashboard: per-worker breakdown (§22) | - | Done | `analyticsOverview` gains `byAgent` (sessions, cost, time per worker, deleted workers shown as unknown); Analytics panel adds a "By worker" table and the per-model time column; `tests/analytics-agents.test.ts` (2) |
+| W22 | Workspace switching in the desktop topbar (§4) | W14, W18 | Done | The switch itself existed (IPC `cloudWorkspace` → `auth.setWorkspace` → `cloudSync.setSession`), but was only reachable in the Memory panel. New topbar `OrgPicker` (hidden when signed out or org-less): Personal or any org of the account, drives cloud-sync target and which org new projects join; `src/renderer/src/components/OrgPicker.tsx` |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
