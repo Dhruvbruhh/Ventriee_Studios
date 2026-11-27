@@ -6,7 +6,8 @@ import { Character } from '../office/Character'
 import { DeskScreen } from '../office/DeskScreen'
 import { MessageEnvelope, type MessageAct } from '../office/MessageEnvelope'
 import { TiledMapRenderer } from '../office/TiledMapRenderer'
-import { characterForRole } from '../office/cast'
+import { characterForRole, type OfficeCharacterName } from '../office/cast'
+import type { Mood } from '../office/portraitArt'
 import { OFFICE_THEME, type Tile } from '../office/themeRegistry'
 import { resolveThemeMap, themeTilesetUrls } from '../office/themeLoader'
 import { hexNum } from '../office/tokens'
@@ -19,6 +20,20 @@ interface Runtime {
   waitTile: Tile
   screen?: DeskScreen
   prevStatus?: Agent['status']
+  name: OfficeCharacterName
+  /** Short-lived faces (surprised on a new task, laugh then wink when done), oldest first. */
+  flashes: Array<{ mood: Mood; until: number }>
+  face?: string
+}
+
+/** The face an agent wears for its state; undefined is the character's own resting face. */
+export function moodFor(status: Agent['status'], selected: boolean): Mood | undefined {
+  if (status === 'error') return 'cry'
+  if (status === 'paused') return 'angry'
+  if (selected) return 'blush'
+  if (status === 'working') return 'smile'
+  if (status === 'waiting' || status === 'offline') return 'tired'
+  return undefined
 }
 
 const ACT: Record<Message['type'], MessageAct> = {
@@ -165,6 +180,9 @@ export function OfficeFloor({ onSelect }: { onSelect: (id: string) => void }) {
         const character = runtime.character
         const activity = liveActivity(agent, snapshot, output)
         const wasWorking = runtime.prevStatus === 'working'
+        const now = performance.now()
+        if (!reduced && runtime.prevStatus && runtime.prevStatus !== 'working' && agent.status === 'working') runtime.flashes = [{ mood: 'surprised', until: now + 1500 }]
+        if (!reduced && wasWorking && agent.status === 'idle') runtime.flashes = [{ mood: 'laugh', until: now + 2500 }, { mood: 'wink', until: now + 4500 }]
         runtime.prevStatus = agent.status
 
         // An agent that just finished a long session gets a small celebration.
@@ -222,12 +240,25 @@ export function OfficeFloor({ onSelect }: { onSelect: (id: string) => void }) {
         }
         character.setBaseAlpha(agent.enabled ? 1 : 0.45)
         runtime.screen?.setOn(agent.status === 'working' || agent.status === 'waiting')
+        updateFace(agent, runtime)
+      }
+
+      /** Put on the face for the agent's state, or a running short-lived one; swaps frames only on a change. */
+      const updateFace = (agent: Agent, runtime: Runtime) => {
+        const now = performance.now()
+        while (runtime.flashes.length && runtime.flashes[0].until <= now) runtime.flashes.shift()
+        const mood = runtime.flashes[0]?.mood ?? moodFor(agent.status, useStore.getState().selectedAgentId === agent.id)
+        const face = mood ?? ''
+        if (face === runtime.face) return
+        runtime.face = face
+        runtime.character.sprite.setFrames(theme.cast.getFrames(runtime.name, mood))
       }
 
       const addCharacter = async (agent: Agent) => {
         const seat = Math.min(Math.max(agent.desk, 0), seatTiles.length - 1)
         const seatTile = seatTiles[seat] ?? entrance
-        const frames = await OFFICE_THEME.cast.getFrames(characterForRole(agent.role))
+        const name = characterForRole(agent.role)
+        const frames = await OFFICE_THEME.cast.getFrames(name)
         if (disposed) return
         const current = useStore.getState().snapshot?.agents.find((a) => a.id === agent.id)
         if (!current) return
@@ -248,7 +279,9 @@ export function OfficeFloor({ onSelect }: { onSelect: (id: string) => void }) {
         const runtime: Runtime = {
           character,
           seat,
-          waitTile: waitTiles[seat % waitTiles.length] ?? entrance
+          waitTile: waitTiles[seat % waitTiles.length] ?? entrance,
+          name,
+          flashes: []
         }
         if (map.gidAt('furniture-above', seatTile.x, seatTile.y - 2) === theme.monitor.offTopLeftGid) {
           const top = { x: seatTile.x, y: seatTile.y - 2 }
@@ -312,6 +345,13 @@ export function OfficeFloor({ onSelect }: { onSelect: (id: string) => void }) {
           syncAgents()
           onSnapshot(state.snapshot)
         }
+        if (state.selectedAgentId !== prev.selectedAgentId) {
+          for (const id of [prev.selectedAgentId, state.selectedAgentId]) {
+            const agent = id ? state.snapshot?.agents.find((a) => a.id === id) : undefined
+            const runtime = id ? runtimes.get(id) : undefined
+            if (agent && runtime) updateFace(agent, runtime)
+          }
+        }
         if (state.selectedAgentId !== prev.selectedAgentId && state.selectedAgentId) {
           const runtime = runtimes.get(state.selectedAgentId)
           if (runtime) {
@@ -328,7 +368,8 @@ export function OfficeFloor({ onSelect }: { onSelect: (id: string) => void }) {
         const dt = ticker.deltaMS / 1000
         camera.update(dt)
         const zoom = world.scale.x
-        for (const runtime of runtimes.values()) {
+        for (const [id, runtime] of runtimes) {
+          if (runtime.flashes.length) { const agent = useStore.getState().snapshot?.agents.find((a) => a.id === id); if (agent) updateFace(agent, runtime) }
           runtime.character.setBubbleZoom(zoom)
           runtime.character.update(dt)
           runtime.screen?.update(dt)
