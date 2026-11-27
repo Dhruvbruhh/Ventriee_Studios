@@ -96,6 +96,7 @@ function McpTools() {
       MCP servers give workers extra tools (a browser, a database, GitHub…). Enabled servers are passed to <b>Claude Code</b> workers on every run.
       Codex and Gemini CLI read MCP servers from their own config files (<code>~/.codex/config.toml</code>, <code>~/.gemini/settings.json</code>), so add them there for those engines.
       A server runs as a program on this computer with your permissions: add only ones you trust.
+      {(useStore.getState().snapshot?.mcpPlaintext ?? false) ? <div className="form-error" role="alert">Secure storage is unavailable on this system, so MCP environment variables and headers are saved in plain text.</div> : null}
     </PaneHead>
     {!servers.length ? <p className="settings-empty">No MCP servers yet. Add one below.</p> : <div className="settings-list">{servers.map((s, i) => {
       const check = checks[s.name]

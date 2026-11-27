@@ -787,6 +787,8 @@ export interface Snapshot {
   automations: Automation[]
   providers: ProviderStatus[]
   settings: AppSettings
+  /** MCP env/header values stay in plain text because secure storage is unavailable. */
+  mcpPlaintext: boolean
   jobs: Job[]
   preview: PreviewState
   running: boolean

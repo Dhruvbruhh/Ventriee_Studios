@@ -1133,6 +1133,9 @@ export class Store {
       automations: projectId ? this.automations(projectId) : [],
       providers,
       settings: this.settings(),
+      // Set by the main process after the startup migration; default false keeps
+      // the field honest for direct store users (tests).
+      mcpPlaintext: false,
       jobs: projectId ? this.jobs(projectId) : [],
       preview: preview ?? {
         projectId,
