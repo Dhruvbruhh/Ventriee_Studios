@@ -32,6 +32,10 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
 | W27 | Chat templates + conversation export (FEATURE_STATUS Phase 3) | - | Done | `chat_templates` table (global, SQLite migration 17); `Store.saveChatTemplate`/`deleteChatTemplate`; Templates picker in the planning composer (insert anywhere, save draft as template); `shared/transcript.ts` + `chatExport` IPC saving a session as Markdown; `tests/chat-templates.test.ts` (2 tests) |
+| W20 | URL research gate + pre-run cost estimate (§8) | - | Done | `src/main/urlResearch.ts` (brief URLs fetched before planning, context block in the planner prompt, never blocks); `src/main/costEstimate.ts` (estimate from recorded per-role session costs, unknown roles named not priced); Settings toggle "Research reference URLs"; `tests/urlResearch.test.ts` (7), `tests/costEstimate.test.ts` (3) |
+| W21 | Usage dashboard: per-worker breakdown (§22) | - | Done | `analyticsOverview` gains `byAgent` (sessions, cost, time per worker, deleted workers shown as unknown); Analytics panel adds a "By worker" table and the per-model time column; `tests/analytics-agents.test.ts` (2) |
+| W22 | Workspace switching in the desktop topbar (§4) | W14, W18 | Done | The switch itself existed (IPC `cloudWorkspace` → `auth.setWorkspace` → `cloudSync.setSession`), but was only reachable in the Memory panel. New topbar `OrgPicker` (hidden when signed out or org-less): Personal or any org of the account, drives cloud-sync target and which org new projects join; `src/renderer/src/components/OrgPicker.tsx` |
+| W26 | Workflow + provider manifests: export/import (§26) | - | Done | `src/shared/manifests.ts` (workflow + provider manifest validation, mirroring the agent manifest rules; provider manifests never carry keys); IPC `workflow:export/import`, `provider:export/import`; handlers in `src/main/index.ts` (2 MB cap, imports arrive switched off / keyless); Export + Import buttons in the Workflows panel and Settings › Engines; `tests/manifests.test.ts` (10 tests) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -192,6 +196,19 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   subquery. Known limits: deleting a desktop project does not delete its cloud
   copy; there is no "take cloud version" (only keep desktop); a project already
   linked stays in the workspace it was first pushed to.
+- 2026-11-27: W20. Two §8 gaps were left after W16's clarifying questions: the
+  brief's reference URLs were never looked at, and runs started with no idea of
+  what they would cost. When a brief contains http(s) URLs, up to two are now
+  fetched before planning (10 s timeout each); title, description and readable
+  text become a background block in the planner prompt next to stored memory. A
+  failed fetch is logged and planning continues; the gate never blocks a run
+  (setting "Research reference URLs", on by default). After planning, the plan
+  note carries a cost estimate built from what this studio's past tasks really
+  cost per role (sessions joined to tasks); roles with no history are named as
+  unknown instead of priced, and a studio with no history gets no estimate at
+  all — real spend still shows in Analytics when the run finishes. New files:
+  `src/main/urlResearch.ts`, `src/main/costEstimate.ts`,
+  `tests/urlResearch.test.ts` (7), `tests/costEstimate.test.ts` (3).
 - 2026-11-27: W19. Reconciled FEATURE_STATUS with the code: "Fallback models"
   and "Intelligent model routing" were stale (W1 shipped capability profiles and
   a fallback chain that escalates a failed task); both are now ✅. The other
@@ -203,6 +220,20 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W26. Workflow and provider manifests (§26). `src/shared/manifests.ts`
+  validates both formats with the same strictness as the agent manifest: exact
+  field sets, size caps (100 workflows / 50 providers per file, 200 nodes, 400
+  edges), node kinds limited to the 14 real workflow steps, edge endpoints must
+  reference known node ids, schedule minutes clamped to 0-43200. Provider
+  manifests never carry keys: the parser refuses `apiKey`/`key` with a message
+  telling the owner to enter the key in Settings after import. IPC adds
+  `workflow:export/import` and `provider:export/import`; main handlers mirror the
+  agent ones (2 MB file cap, JSON parse errors surfaced) and imports arrive
+  switched off (workflows) or keyless (providers). The Workflows panel gets
+  Export / Import buttons next to the template picker; Settings › Engines gets
+  Export providers / Import providers. Known limits: workflow imports always
+  arrive disabled and lose their project link (manifests carry no project ids);
+  exported providers keep their model list but never their key.
 - 2026-11-27: W27. Two Phase 3 gaps closed. Reusable templates: a global
   `chat_templates` table (SQLite migration 17) with a Templates picker in the
   planning composer; "Save current draft as template" names it from the draft's
