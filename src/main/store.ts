@@ -765,8 +765,9 @@ export class Store {
 
   /** Messages of one session (the active one when not given), oldest first, newest `limit` kept. */
   chatMessages(projectId: string, limit = 400, conversationId = this.conversation(projectId).id): ChatMessage[] {
+    // rowid breaks ties: messages written in the same millisecond must keep insertion order.
     return this.db.all<ChatMessage>(
-      'SELECT * FROM (SELECT * FROM chat_messages WHERE projectId = ? AND conversationId = ? ORDER BY createdAt DESC LIMIT ?) ORDER BY createdAt ASC',
+      'SELECT * FROM (SELECT *, rowid AS rid FROM chat_messages WHERE projectId = ? AND conversationId = ? ORDER BY createdAt DESC, rowid DESC LIMIT ?) ORDER BY createdAt ASC, rid ASC',
       projectId, conversationId, limit
     )
   }
