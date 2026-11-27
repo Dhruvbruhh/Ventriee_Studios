@@ -95,6 +95,7 @@ describe('cloud migrations', () => {
       '0004_ownership_guard.sql',
       '0005_desktop_sync.sql',
       '0006_command_defaults.sql',
+      '0007_actor_defaults.sql',
     ])
   })
 
@@ -254,5 +255,18 @@ describe('cloud migrations', () => {
     ).rejects.toThrow(/at least one owner/)
     const res = await seed(`select role from public.memberships where org_id = $1 and user_id = $2`, [orgId, U1])
     expect(res.rows).toEqual([{ role: 'owner' }])
+  })
+  it('fills the acting user in when the desktop client omits it, and RLS still checks it', async () => {
+    // The desktop CloudClient only holds a token, so it never sends these columns.
+    const project = await as(U2, `insert into public.projects (name) values ('Desktop sync') returning owner_id, id`)
+    expect(project.rows[0]).toMatchObject({ owner_id: U2 })
+    const pid = (project.rows[0] as { id: string }).id
+    const task = await as(U2, `insert into public.tasks (project_id, title) values ($1, 'Synced task') returning created_by`, [pid])
+    expect(task.rows).toEqual([{ created_by: U2 }])
+    const device = await as(U2, `insert into public.devices (name) values ('Laptop') returning user_id`)
+    expect(device.rows).toEqual([{ user_id: U2 }])
+    const audit = await as(U2, `insert into public.audit_log (action) values ('sync.test') returning actor_id`)
+    expect(audit.rows).toEqual([{ actor_id: U2 }])
+    await expect(as(U2, `insert into public.projects (name, owner_id) values ('Forged', $1)`, [U1])).rejects.toThrow(/row-level security/)
   })
 })
