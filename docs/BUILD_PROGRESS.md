@@ -31,6 +31,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
+| W38 | Web forgot-password (FINAL_AUDIT #7, client half) | - | Done | `resetPassword` in `web/src/lib/api.ts` (supabase `resetPasswordForEmail`, redirect to the app origin); "Forgot password?" mode on `SignIn.tsx` with a confirmation state and a back link; `.link` button style in `web/src/index.css`. Email invitations stay out of scope: they need an Edge Function with the service key. Web typecheck + vitest green |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -202,3 +203,12 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W38. Forgot-password on the web dashboard (FINAL_AUDIT #7, client
+  half). "Forgot password?" on the sign-in card switches to a reset mode: one
+  email field, a Supabase `resetPasswordForEmail` send with the app origin as
+  the redirect, and a confirmation state with a back link. Supabase delivers
+  the email and hosts the update form; no server code is involved, so this
+  works with the public key. Email invitations remain open: adding a user by
+  email needs an Edge Function holding the service key, which cannot ship from
+  the client. The reset flow was typechecked and built but not exercised with
+  a real inbox (needs a configured Supabase project).
