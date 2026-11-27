@@ -74,12 +74,25 @@ export async function removeMember(membershipId: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-/** Add an existing user to the org by their auth user id. Email invites need a
- *  server-side function (not possible with the public key) — see README TODO. */
+/** Add an existing user to the org by their auth user id. */
 export async function addMember(orgId: string, userId: string, role: MembershipRole): Promise<Membership> {
   return must(
     await supabase.from('memberships').insert({ org_id: orgId, user_id: userId, role }).select().single(),
   )
+}
+
+/** Invite someone by email through the invite-member Edge Function (owner/admin only, server-checked). */
+export async function inviteMember(orgId: string, email: string, role: MembershipRole): Promise<{ invited: boolean }> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('Not signed in')
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-member`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${session.access_token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ orgId, email: email.trim(), role }),
+  })
+  const body = await res.json().catch(() => null) as { ok?: boolean; invited?: boolean; error?: string } | null
+  if (!res.ok || !body?.ok) throw new Error(body?.error ?? 'Invite failed')
+  return { invited: body.invited ?? false }
 }
 
 /** Profiles for the given user ids, as a map. Missing ids are simply absent. */
