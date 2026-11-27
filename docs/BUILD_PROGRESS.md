@@ -44,6 +44,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W33 | Main window `sandbox: true` (FINAL_AUDIT #9, P3) | - | Done | the preload only uses `contextBridge` + `ipcRenderer` (everything else is type-only imports), so it qualifies for the Chromium sandbox; electron-vite now emits the preload as CommonJS (`out/preload/index.cjs`, required for sandboxed preloads since the ESM loader is unavailable there) and the main window runs with `sandbox: true` while keeping `contextIsolation: true` and `nodeIntegration: false`; the automation browser window was already sandboxed with no preload; verified with a full `npm run build` and the whole vitest run |
 | W34 | Remote commands target projects by their linked cloud id (FINAL_AUDIT #4, P2) | - | Done | cloud sync already stores the cloud project id per local project in the `cloud_sync` table, so no schema change was needed: `resolveRemoteProject` (src/main/remote.ts) now matches a phone's `projectId` against that link before falling back to the local id and a unique exact name; an ambiguous link (two local projects joined to one cloud row) throws instead of guessing; the main-process call site joins the link ids onto the project list it passes in; `tests/remote.test.ts` (+2 cases) |
 | W35 | Ollama model profiles from `/api/show` (FINAL_AUDIT #5 P2) | - | Done | `cliModels` asks Ollama's `/api/show` for every listed local model (5 s timeout, failures ignored); the reported parameter size (`details.parameter_size`) and context length (`context_length` or `model_info.*.context_length`) ride on `ModelOption.paramsB`/`contextLength`; `deriveProfile` ranks by the real size (>=70b strong, <=8b fast) and uses the real context window, name regexes stay the fallback; `tests/routing.test.ts` (+1) |
+| W36 | Per-project device grants (FINAL_AUDIT #6) | - | Done | Migration `0007_per_project_grants.sql`: `device_grants.project_id` (null = whole device, unchanged behavior); `can_control_device(device, project)` and the `commands_insert` policy pass `payload.projectId`, failing closed when absent or not a uuid; `CloudClient.grantDevice` accepts `projectId`; `tests/migrations.test.ts` (scoped-grant case: granted project enqueues, other project and unnamed target rejected) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -356,3 +357,14 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   treated as a 7b one. `tests/routing.test.ts` (+1) covers strong, fast,
   mid-size and unreported sizes; both tsconfigs and the full vitest run are
   green.
+- 2026-11-27: W36. Scoped device grants per project (FINAL_AUDIT #6). Until now
+  a device grant authorized the grantee against every project on the device.
+  Migration 0007 adds `device_grants.project_id`: null keeps the old whole-device
+  meaning (existing rows untouched), a uuid limits the grant to that cloud
+  project. `can_control_device` takes the target project and the commands_insert
+  policy passes `payload.projectId`; a missing or non-uuid project id fails
+  closed (only a whole-device grant or ownership authorizes it). Enforcement
+  stays in RLS, so every client (desktop, web, mobile) is covered by the same
+  rule. `CloudClient.grantDevice` accepts an optional `projectId`; the desktop
+  UI does not yet offer a project picker when granting. Proven on PGlite: the
+  granted project enqueues, another project and an unnamed target are refused.

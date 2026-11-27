@@ -96,6 +96,7 @@ describe('cloud migrations', () => {
       '0005_desktop_sync.sql',
       '0006_command_defaults.sql',
       '0007_actor_defaults.sql',
+      '0007_per_project_grants.sql',
     ])
   })
 
@@ -226,6 +227,26 @@ describe('cloud migrations', () => {
     expect(res.rows).toEqual([{ requested_by: U2, live: true }])
     await expect(as(U2, `insert into public.commands (device_id, type, requested_by) values ($1, 'run.start', $2)`, [deviceId, U1]))
       .rejects.toThrow(/row-level security/)
+  })
+
+  it('scopes a grant to one project: other projects and unnamed targets fail closed', async () => {
+    const p2 = await as(U1, `insert into public.projects (org_id, owner_id, name) values ($1, $2, 'Other client') returning id`, [orgId, U1])
+    const project2 = (p2.rows[0] as { id: string }).id
+
+    // Swap U2's whole-device grant for a per-project one.
+    await as(U1, `delete from public.device_grants where device_id = $1 and user_id = $2`, [deviceId, U2])
+    await as(U1, `insert into public.device_grants (device_id, user_id, granted_by, project_id) values ($1, $2, $3, $4)`, [deviceId, U2, U1, u1Project])
+
+    const enqueue = (payload: string) =>
+      as(U2, `insert into public.commands (device_id, type, payload, requires_confirmation)
+              values ($1, 'run.start', $2::jsonb, true) returning id`, [deviceId, payload])
+    await enqueue(`{"projectId":"${u1Project}"}`) // the granted project goes through
+    await expect(enqueue(`{"projectId":"${project2}"}`)).rejects.toThrow(/row-level security/)
+    await expect(enqueue('{}')).rejects.toThrow(/row-level security/) // no parseable target: whole-device grant only
+
+    // Restore the whole-device grant; later tests enqueue without a project id.
+    await as(U1, `delete from public.device_grants where device_id = $1 and user_id = $2`, [deviceId, U2])
+    await as(U1, `insert into public.device_grants (device_id, user_id, granted_by) values ($1, $2, $3)`, [deviceId, U2, U1])
   })
 
   it('cannot enqueue a command for a device in another org scope', async () => {

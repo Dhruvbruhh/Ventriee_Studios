@@ -113,8 +113,8 @@ export class SupabaseCloudClient implements CloudClient {
   }
 
   listGrants(deviceId: string) { return this.rest<DeviceGrant[]>(`device_grants?select=*&device_id=eq.${enc(deviceId)}&order=created_at.asc`) }
-  grantDevice(input: { deviceId: string; userId: string; expiresAt?: string | null }) {
-    return this.insert<DeviceGrant>('device_grants', { device_id: input.deviceId, user_id: input.userId, expires_at: input.expiresAt ?? null })
+  grantDevice(input: { deviceId: string; userId: string; projectId?: string | null; expiresAt?: string | null }) {
+    return this.insert<DeviceGrant>('device_grants', { device_id: input.deviceId, user_id: input.userId, project_id: input.projectId ?? null, expires_at: input.expiresAt ?? null })
   }
   async revokeGrant(grantId: string) { await this.rest<void>(`device_grants?id=eq.${enc(grantId)}`, { method: 'DELETE' }) }
 
