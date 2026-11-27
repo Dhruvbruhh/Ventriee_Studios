@@ -359,6 +359,10 @@ export interface ModelOption {
   free: boolean | null
   configured: boolean
   note?: string
+  /** Reported parameter count in billions (Ollama /api/show), when the server answers. */
+  paramsB?: number
+  /** Reported context length in tokens (Ollama /api/show), when the server answers. */
+  contextLength?: number
 }
 
 /**

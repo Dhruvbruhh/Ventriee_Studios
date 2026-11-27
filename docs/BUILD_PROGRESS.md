@@ -43,6 +43,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W32 | GitHub-event workflow triggers: PR list changes, CI failures (FEATURE_STATUS Phase 8) | - | Done | two new Start-step trigger kinds, `github_pr` (the project's PR list changes) and `github_ci` (a CI run fails), polled every 30 s on the existing scheduler tick via the owner's `gh` login (one `gh pr list` / `gh run list` call per tick); `prDigest` / `ciDigest` in `src/main/workflows.ts` turn the JSON into a change signature (PRs by number+updatedAt; CI by failed run ids only, so a run that stays red fires once) plus a readable trigger input; an empty payload (no gh, signed out, no repo) never fires, and the first observation only records the baseline; Workflows panel lists both options and demands a project like the other event triggers; `tests/workflows.test.ts` (+5 cases) |
 | W33 | Main window `sandbox: true` (FINAL_AUDIT #9, P3) | - | Done | the preload only uses `contextBridge` + `ipcRenderer` (everything else is type-only imports), so it qualifies for the Chromium sandbox; electron-vite now emits the preload as CommonJS (`out/preload/index.cjs`, required for sandboxed preloads since the ESM loader is unavailable there) and the main window runs with `sandbox: true` while keeping `contextIsolation: true` and `nodeIntegration: false`; the automation browser window was already sandboxed with no preload; verified with a full `npm run build` and the whole vitest run |
 | W34 | Remote commands target projects by their linked cloud id (FINAL_AUDIT #4, P2) | - | Done | cloud sync already stores the cloud project id per local project in the `cloud_sync` table, so no schema change was needed: `resolveRemoteProject` (src/main/remote.ts) now matches a phone's `projectId` against that link before falling back to the local id and a unique exact name; an ambiguous link (two local projects joined to one cloud row) throws instead of guessing; the main-process call site joins the link ids onto the project list it passes in; `tests/remote.test.ts` (+2 cases) |
+| W35 | Ollama model profiles from `/api/show` (FINAL_AUDIT #5 P2) | - | Done | `cliModels` asks Ollama's `/api/show` for every listed local model (5 s timeout, failures ignored); the reported parameter size (`details.parameter_size`) and context length (`context_length` or `model_info.*.context_length`) ride on `ModelOption.paramsB`/`contextLength`; `deriveProfile` ranks by the real size (>=70b strong, <=8b fast) and uses the real context window, name regexes stay the fallback; `tests/routing.test.ts` (+1) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -342,3 +343,16 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   before, so this is purely additive. Two new cases in `tests/remote.test.ts`
   cover the cloud-id match and the ambiguity refusal; both tsconfigs and the
   full vitest run are green.
+- 2026-11-27: W35. Local model profiles now come from Ollama itself instead of
+  the model name alone. When the model list is built, every Ollama model gets a
+  5-second `/api/show` probe; a failure or a server that does not answer is
+  ignored and the name-based guess stands. When the probe answers, the reported
+  parameter size and context length ride on `ModelOption.paramsB` /
+  `contextLength` and drive the capability profile: 70b and above counts as a
+  strong model, 8b and below as fast, and the real context window replaces the
+  guessed one. This fixes the audit finding that all local models tied because
+  Ollama names like `llama3.1:latest` carry no size hint. A reported size
+  always outranks the name, so a 70b model named without "70b" is no longer
+  treated as a 7b one. `tests/routing.test.ts` (+1) covers strong, fast,
+  mid-size and unreported sizes; both tsconfigs and the full vitest run are
+  green.

@@ -31,14 +31,19 @@ export function deriveProfile(option: ModelOption): ModelProfile {
   const name = option.model
   const strong = STRONG.test(name)
   const fast = FAST.test(name)
+  // A reported parameter size outranks the name: Ollama models all look local, but 70b is not 7b.
+  const params = option.paramsB
+  const real = params != null && Number.isFinite(params) && params > 0
+  const strongTier = real ? params >= 70 : strong
+  const fastTier = real ? params <= 8 : fast
   return {
-    contextWindow: contextWindow(name),
+    contextWindow: option.contextLength ?? contextWindow(name),
     toolCalling: !/embed|base\b/i.test(name),
     vision: MULTIMODAL.test(name),
-    codingScore: CODER.test(name) ? 85 : strong ? 80 : fast ? 50 : 65,
-    reasoningScore: THINKS.test(name) ? 90 : strong ? 80 : fast ? 45 : 60,
-    costTier: option.free === true ? 'free' : fast ? 'low' : strong && option.free === false ? 'high' : strong ? 'high' : 'medium',
-    latencyTier: fast ? 'fast' : strong ? 'slow' : 'medium',
+    codingScore: CODER.test(name) ? 85 : strongTier ? 80 : fastTier ? 50 : 65,
+    reasoningScore: THINKS.test(name) ? 90 : strongTier ? 80 : fastTier ? 45 : 60,
+    costTier: option.free === true ? 'free' : fastTier ? 'low' : strongTier && option.free === false ? 'high' : strongTier ? 'high' : 'medium',
+    latencyTier: fastTier ? 'fast' : strongTier ? 'slow' : 'medium',
     availability: 'available'
   }
 }
