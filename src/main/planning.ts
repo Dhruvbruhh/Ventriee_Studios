@@ -486,12 +486,13 @@ export class PlanningService {
         .slice(1)
         .map((line) => line.trim().split(/\s+/)[0] ?? '')
         .filter(Boolean)
-      return names.map((model) => ({
-        provider: engine,
-        providerLabel: label,
-        model,
-        free: true,
-        configured: true
+      return Promise.all(names.map(async (model) => {
+        const option: ModelOption = { provider: engine, providerLabel: label, model, free: true, configured: true }
+        // /api/show reports what the model really is; the name alone guesses wrong about local models.
+        const details = await ollamaShow(model)
+        if (details?.paramsB != null) option.paramsB = details.paramsB
+        if (details?.contextLength != null) option.contextLength = details.contextLength
+        return option
       }))
     }
     // Presence on PATH without a listing command: offer the adapter, not fake models.
@@ -508,6 +509,27 @@ export class PlanningService {
       }
     ]
   }
+}
+
+/** Ask Ollama what a listed model really is (parameter size, context length); null when it will not say. */
+async function ollamaShow(model: string): Promise<{ paramsB?: number; contextLength?: number } | null> {
+  try {
+    const base = defaultEndpoint('api-ollama').replace(/\/$/, '')
+    const res = await fetch(`${base}/api/show`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model }),
+      signal: AbortSignal.timeout(5_000)
+    })
+    if (!res.ok) return null
+    const body = (await res.json()) as { details?: { parameter_size?: string }; context_length?: number; model_info?: Record<string, unknown> }
+    const size = Number.parseFloat(body.details?.parameter_size ?? '')
+    const context = body.context_length ?? Number(Object.entries(body.model_info ?? {}).find(([k, v]) => k.endsWith('.context_length') && typeof v === 'number')?.[1])
+    return {
+      paramsB: Number.isFinite(size) ? size : undefined,
+      contextLength: Number.isFinite(context) ? context : undefined
+    }
+  } catch { return null }
 }
 
 function parseModelLines(raw: string, engine: EngineKind, label: string): ModelOption[] {

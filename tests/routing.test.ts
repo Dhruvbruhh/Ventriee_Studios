@@ -35,6 +35,19 @@ describe('capability profiles', () => {
     const pick = routeModel({ role: 'backend', models, costPreference: 'quality', difficulty: 'high', profiles })!
     expect(pick.option.model).toBe('gemini-2.5-flash')
   })
+  it('ranks local models by their reported parameter size, not their name', () => {
+    const big = deriveProfile({ ...option('mistral-local'), paramsB: 70, contextLength: 32_768 })
+    const small = deriveProfile({ ...option('mistral-local'), paramsB: 7 })
+    const mid = deriveProfile({ ...option('mistral-local'), paramsB: 13 })
+    expect(big.reasoningScore).toBe(80)
+    expect(big.contextWindow).toBe(32_768)
+    expect(big.latencyTier).toBe('slow')
+    expect(small.reasoningScore).toBe(45)
+    expect(small.latencyTier).toBe('fast')
+    expect(mid.reasoningScore).toBe(60)
+    // a bogus size falls back to the name-derived profile
+    expect(deriveProfile({ ...option('mistral-local'), paramsB: 0 }).reasoningScore).toBe(60)
+  })
 })
 
 describe('fallback chain', () => {
