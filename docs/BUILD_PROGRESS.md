@@ -31,6 +31,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
+| W20 | URL research gate + pre-run cost estimate (§8) | - | Done | `src/main/urlResearch.ts` (brief URLs fetched before planning, context block in the planner prompt, never blocks); `src/main/costEstimate.ts` (estimate from recorded per-role session costs, unknown roles named not priced); Settings toggle "Research reference URLs"; `tests/urlResearch.test.ts` (7), `tests/costEstimate.test.ts` (3) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -191,6 +192,19 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   subquery. Known limits: deleting a desktop project does not delete its cloud
   copy; there is no "take cloud version" (only keep desktop); a project already
   linked stays in the workspace it was first pushed to.
+- 2026-11-27: W20. Two §8 gaps were left after W16's clarifying questions: the
+  brief's reference URLs were never looked at, and runs started with no idea of
+  what they would cost. When a brief contains http(s) URLs, up to two are now
+  fetched before planning (10 s timeout each); title, description and readable
+  text become a background block in the planner prompt next to stored memory. A
+  failed fetch is logged and planning continues; the gate never blocks a run
+  (setting "Research reference URLs", on by default). After planning, the plan
+  note carries a cost estimate built from what this studio's past tasks really
+  cost per role (sessions joined to tasks); roles with no history are named as
+  unknown instead of priced, and a studio with no history gets no estimate at
+  all — real spend still shows in Analytics when the run finishes. New files:
+  `src/main/urlResearch.ts`, `src/main/costEstimate.ts`,
+  `tests/urlResearch.test.ts` (7), `tests/costEstimate.test.ts` (3).
 - 2026-11-27: W19. Reconciled FEATURE_STATUS with the code: "Fallback models"
   and "Intelligent model routing" were stale (W1 shipped capability profiles and
   a fallback chain that escalates a failed task); both are now ✅. The other

@@ -17,6 +17,8 @@ import { parseVerdict } from './review'
 import { roleByName, MANDATORY_SKILLS, WEBSITE_ROLES, type Phase } from './roles'
 import { scopeToRole, DELIVERABLE_BY_ROLE } from './brief'
 import { clarifyPrompt, foldClarifications, parseClarifyAnswer } from './clarify'
+import { researchBriefUrls } from './urlResearch'
+import { estimatePlanCost } from './costEstimate'
 import { heuristicPlan, normalizeRole, orderTasks, parsePlanAnswer, pickSpecialists, type Plan } from './planner'
 import { promotable } from './queue'
 import { routeModel, routeModels, type RouteChoice } from './routing'
@@ -299,7 +301,7 @@ export class Orchestrator {
   }
 
   // ------------------------------------------------------------------ planning
-  private planningPrompt(project: Project, instruction: string, roster: Agent[], memoryBlock: string) {
+  private planningPrompt(project: Project, instruction: string, roster: Agent[], memoryBlock: string, researchBlock = '') {
     const website = this.profiles.get(project.id) === 'website'
     const roles = this.plannableRoles(roster, website).filter((role) => role !== 'orchestrator')
       .map((role) => `${role} (${roster.find((a) => a.role === role)?.title ?? this.template(role)?.title ?? role})`).join(', ')
@@ -329,7 +331,7 @@ ${specialists || '(none installed)'}
 
 Relevant stored memory:
 ${memoryBlock}
-
+${researchBlock ? `\n${researchBlock}\n` : ''}
 JSON shape:
 {"summary":"one line","tasks":[{"key":"t1","title":"...","description":"...","acceptance":"...","role":"researcher","phase":"research","difficulty":"low","skills":[],"dependsOn":[]}]}`
   }
@@ -355,13 +357,17 @@ JSON shape:
       return noPlan(`Orchestrator engine ${orchestrator.engine} is unavailable`)
     }
     const memoryDocs = this.deps.memory.retrieve(project.id, instruction, 5)
+    const research = this.deps.store.settings().researchUrls
+      ? await researchBriefUrls(instruction)
+      : { block: '', note: '' }
+    if (research.note) this.log(project.id, orchestrator.id, null, 'plan', research.note)
     const result = await runEngine(
       {
         engine: orchestrator.engine,
         model: orchestrator.model,
         endpoint: orchestrator.endpoint,
         system: withRules(orchestrator.instructions, project.path),
-        prompt: this.planningPrompt(project, instruction, roster, this.deps.memory.promptBlock(memoryDocs)),
+        prompt: this.planningPrompt(project, instruction, roster, this.deps.memory.promptBlock(memoryDocs), research.block),
         images: this.images.get(project.id),
         cwd: project.path,
         maxTokens: 3000,
@@ -456,7 +462,7 @@ JSON shape:
         sender: 'orchestrator',
         recipient: 'owner',
         type: 'note',
-        content: `${plan.summary}\n\n${assigned} tasks queued (${plan.source} plan).${plan.skipped.length ? `\nSkipped: ${plan.skipped.join('; ')}` : ''}`,
+        content: `${plan.summary}\n\n${assigned} tasks queued (${plan.source} plan).${plan.skipped.length ? `\nSkipped: ${plan.skipped.join('; ')}` : ''}\n\n${estimatePlanCost(plan.tasks, this.deps.store.roleCostStats()).text}`.trimEnd(),
         status: 'read'
       })
       const ended = await this.runQueue(job, project)
@@ -1721,7 +1727,7 @@ Answer with a JSON object only: {"verdict":"pass"|"fail","reasoning":"...","bloc
         sender: 'orchestrator',
         recipient: 'owner',
         type: 'note',
-        content: `${plan.summary}\n\n${assigned} tasks queued from the approved prompt (${plan.source} plan).`,
+        content: `${plan.summary}\n\n${assigned} tasks queued from the approved prompt (${plan.source} plan).\n\n${estimatePlanCost(plan.tasks, this.deps.store.roleCostStats()).text}`.trimEnd(),
         status: 'read'
       })
       await this.runQueue(job, project)
