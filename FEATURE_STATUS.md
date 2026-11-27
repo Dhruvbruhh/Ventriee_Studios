@@ -16,7 +16,7 @@ Last updated: 2026-11-26
 | Collapsible sidebar | ✅ | Ctrl+B toggle |
 | Command palette | ✅ | CommandBar.tsx |
 | Multi-workspace tabs (Home/Plan/Office/Code) | ✅ | ws-toggle in topbar |
-| Resizable panels | 🟡 | Fixed layout; no drag-resize |
+| Resizable panels | ✅ | Sidebar, code sidebar and bottom panel drag-resize; sizes persist |
 | Dark theme | ✅ | CSS variables in styles.css |
 | Light theme | ✅ | Settings → Appearance: Dark / Light / Match Windows (`settings.theme`) |
 | Monaco Editor | ✅ | monaco-editor 0.55.1 |
@@ -36,7 +36,7 @@ Last updated: 2026-11-26
 | Ollama (local) | ✅ | api-ollama + cli-ollama |
 | LM Studio | ✅ | compatible endpoint |
 | Custom OpenAI endpoints | ✅ | api-custom + cli-custom |
-| xAI / Groq | 🟡 | Needs adapter registration |
+| xAI / Groq | ✅ | api-xai + api-groq adapters (OpenAI-compatible, keyed; XAI_API_KEY / GROQ_API_KEY) |
 | Add / edit / remove providers | ✅ | SettingsPanel → Engines |
 | Model discovery | ✅ | Models fetched per provider |
 | Secure credential storage | ✅ | integrationCredentials.ts AES-256-GCM |
@@ -59,9 +59,9 @@ Last updated: 2026-11-26
 | Prompt creation from chat | ✅ | promptCreate IPC |
 | Prompt enhancement via optimizer model | ✅ | promptEnhance IPC, Ollama supported |
 | Prompt history | ✅ | PromptPanel with version list |
-| Reusable templates | ❌ | Not implemented |
+| Reusable templates | ✅ | Templates picker in the chat composer: save the current draft as a named snippet, insert it in any project, delete it (`chat_templates` table, `chatTemplateSave`/`Delete` IPC) |
 | Message editing / regeneration | ✅ | Planning chat: edit any of your messages or regenerate the last reply; later turns are replaced (`Store.rewindChat`). Attached images are not resent |
-| Conversation export | ❌ | Not implemented |
+| Conversation export | ✅ | "Export transcript" saves the active session as Markdown (`## You` / `## Assistant (model)` turns); `chatExport` IPC + `shared/transcript.ts`. Empty sessions refuse to export |
 | Branching | ❌ | Not implemented |
 
 ## Phase 4 — Agent Management
@@ -125,7 +125,7 @@ Last updated: 2026-11-26
 | Trigger types | ✅ | Through Workflows: manual, schedule, webhook, file change, git commit, agent run finished / failed |
 | Actions (run agent, command, etc.) | ✅ | Through Workflows: agent run, command, AI, HTTP, browser steps, notify, run another workflow |
 | Retry policy | ✅ | Per step, up to 3 retries with backoff |
-| GitHub PR / issue triggers, build/test-failure triggers | 🟡 | No GitHub event trigger; a failing test command fails its step, and an If step can branch on output |
+| GitHub PR / issue triggers, build/test-failure triggers | ✅ | Workflows: github_pr (PR list changes) and github_ci (a CI run fails) triggers, polled every 30 s via gh; fires on change only |
 | Execution logs | ✅ | events table |
 | Enable / disable | ✅ | enabled flag |
 
@@ -150,7 +150,7 @@ Last updated: 2026-11-26
 | Console / network / downloads | ✅ | Console and network logs per session; downloads saved to Downloads/Ventriee browser |
 | Approval for sensitive actions | ✅ | Clicking, typing or pressing keys on a non-local site asks first (once per site per run) |
 | Agents | 🟡 | Workflows' Browser step; Claude Code workers can also use the pre-seeded Playwright MCP server (off by default) |
-| Tabs | ❌ | One page per window; new-tab links open in the same window |
+| Tabs | ✅ | `tab new` / `tab <n>` / `tab close` steps; target=_blank links open a new tab in the same window instead of navigating in place |
 
 ## Phase 11 — Cloud Agents
 | Feature | Status | Notes |
@@ -208,7 +208,7 @@ Last updated: 2026-11-26
 | Feature | Status | Notes |
 |---|---|---|
 | Dark-first CSS design system | ✅ | styles.css with CSS variables |
-| Accent customization | 🟡 | CSS var, no UI picker |
+| Accent customization | ✅ | Settings → Appearance: presets, custom colour, reset; saved as settings.accent |
 | Light theme | ✅ | Settings → Appearance |
 | Command palette | ✅ | CommandBar |
 | Keyboard shortcuts | ✅ | keybindings setting |
@@ -247,6 +247,5 @@ Last updated: 2026-11-26
 ---
 
 ## Still open
-- GitHub-event workflow triggers (PR open, CI failure)
 - Plugin code (UI extensions, editor enhancements) — kept out on purpose for safety
 - Voice: not yet measured with a real microphone

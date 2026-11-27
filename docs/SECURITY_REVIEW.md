@@ -22,7 +22,7 @@ read-only REST probes that confirmed the schema is missing.
 | P1 | Remote commands could act on the wrong local project (silent fallback to the first one). | **Fixed**: exact match or refuse |
 | P2 | Device grants are whole-device: a grantee can target any project on that laptop. Grants are off by default and created only by the device owner. | Open, documented |
 | P2 | High-risk remote commands rely on the phone's confirmation dialog (`requires_confirmation`). The laptop does not ask again. The command allowlist has no shell access. | Accepted by design; revisit if more powerful commands are added |
-| P3 | Electron main window `sandbox: false`. Mitigations in place: `contextIsolation: true`, `nodeIntegration: false`, CSP, `setWindowOpenHandler`, `will-navigate` guard, a narrow `contextBridge` API. | Open |
+| P3 | Electron main window `sandbox: false`. Mitigations in place: `contextIsolation: true`, `nodeIntegration: false`, CSP, `setWindowOpenHandler`, `will-navigate` guard, a narrow `contextBridge` API. | Fixed (W33): the main window now runs with `sandbox: true`; the preload uses only `contextBridge` + `ipcRenderer`, so it ships as CommonJS (`out/preload/index.cjs`), which sandboxed preloads require. |
 | Info | Desktop terminal and preview run user-chosen commands in the project folder. That is expected IDE behaviour and only reachable after sign-in. | — |
 | Info | Agent workers run through external CLIs (OpenCode/Claude/Codex) with those tools' own permission models. | — |
 

@@ -208,6 +208,13 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (kind, localId)
   );
   CREATE INDEX IF NOT EXISTS idx_cloud_sync_cloud ON cloud_sync(cloudId);
+  `,
+  // Reusable chat templates: named snippets the owner drops into the planning
+  // composer. Global (not per project), so a good brief opener follows you around.
+  `
+  CREATE TABLE IF NOT EXISTS chat_templates (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, content TEXT NOT NULL, createdAt INTEGER
+  );
   `
 ]
 

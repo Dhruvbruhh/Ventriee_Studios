@@ -14,7 +14,7 @@ import type { CompiledContext, IndexSyncResult, RetrievedFile } from '../../shar
  * richer index can supersede it.
  */
 
-const INDEX_VERSION = 1
+const INDEX_VERSION = 2
 /** Keep the walk and the index bounded so a large repository stays responsive. */
 const LIMITS = { files: 1500, fileChars: 400_000 }
 /** Noise that is text but never worth retrieving over. */
@@ -44,12 +44,27 @@ function splitIdentifier(raw: string): string[] {
   const out: string[] = []
   for (const chunk of raw.split(/[^A-Za-z0-9]+/)) {
     if (!chunk) continue
-    out.push(chunk.toLowerCase())
+    out.push(stem(chunk.toLowerCase()))
     for (const part of chunk.split(/(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/)) {
-      if (part && part.toLowerCase() !== chunk.toLowerCase()) out.push(part.toLowerCase())
+      if (part && part.toLowerCase() !== chunk.toLowerCase()) out.push(stem(part.toLowerCase()))
     }
   }
   return out
+}
+
+/**
+ * Light suffix stemmer so "staging" matches "stage"/"staged" and "commits" matches
+ * "commit". A recall boost, not linguistics: suffixes are only stripped above a
+ * length floor, so short tokens and the index/query sides always stem the same way.
+ */
+function stem(token: string): string {
+  let t = token
+  if (t.length > 5 && t.endsWith('ing')) t = t.slice(0, -3)
+  else if (t.length > 4 && t.endsWith('ed')) t = t.slice(0, -2)
+  if (t.length > 3 && t.endsWith('s') && !t.endsWith('ss')) t = t.slice(0, -1)
+  if (t.length > 3 && t.endsWith('e')) t = t.slice(0, -1)
+  if (t.length > 3 && /(.)\1$/.test(t) && !/(ll|ss)$/.test(t)) t = t.slice(0, -1) // running -> runn -> run
+  return t
 }
 
 function keep(token: string): boolean {

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { guard, useStore } from '../store'
-import { IconCheck, IconCopy, IconEdit, IconRefresh, IconSend, IconSpark } from '../icons'
+import { IconCheck, IconChevron, IconCopy, IconEdit, IconRefresh, IconSend, IconSpark, IconTrash } from '../icons'
 import { ModelPicker, resolveModel, type ResolvedModel } from './ModelPicker'
 import { AddProviderDialog } from './AddProviderDialog'
 import { AssignDialog, RecentAssignments } from './AssignDialog'
 import { BackgroundSection, EnvironmentSection } from './PlanSide'
 import { RichText } from './RichText'
 import { useAttachments, useVoice } from './Attachments'
-import type { ChatMessage, PromptDoc } from '../../../shared/types'
+import type { ChatMessage, ChatTemplate, PromptDoc } from '../../../shared/types'
 
 /** Six stages, in order. Two of them leave this screen; the rest happen here. */
 type Stage = 1 | 2 | 3 | 4 | 5 | 6
@@ -142,6 +142,9 @@ export function Workspace() {
         <div className="session-tabs">
           {linkedClient ? <span className="client-badge"><span className="client-badge-dot" />Client: {linkedClient.name}{linkedClient.niche ? ` · ${linkedClient.niche}` : ''}</span> : null}
           {snapshot.conversations.length > 1 ? <span className="session-hint">Type @Session 2 to bring another session into this one</span> : null}
+          <button className="session-export" onClick={() => void guard(async () => { const p = await window.ventriee.chatExport(project.id); if (p) useStore.getState().notify('Transcript exported') })} title="Save this session as a Markdown transcript">
+            Export transcript
+          </button>
         </div>
         <ChatThread chat={chat} stream={chatStream} busy={sending} editingId={editingId} onEdit={startEdit} onRegenerate={regenerate} />
         <ChatComposer
@@ -150,6 +153,7 @@ export function Workspace() {
           sending={sending}
           send={send}
           planner={planner}
+          templates={snapshot.chatTemplates}
           onPick={savePlanner}
           onAddProvider={() => setAdding(true)}
           canCreate={chat.some((m) => m.role === 'owner' && m.content.trim())}
@@ -286,12 +290,57 @@ function ChatThread({ chat, stream, busy, editingId, onEdit, onRegenerate }: {
   )
 }
 
+function TemplatePicker({ templates, draft, onInsert }: {
+  templates: ChatTemplate[]
+  draft: string
+  onInsert: (content: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false) }
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [open])
+
+  // No name dialog (Electron has no prompt): the first line of the draft names it.
+  const saveDraft = async () => {
+    const content = draft.trim()
+    if (!content) return
+    const saved = await guard(() => window.ventriee.chatTemplateSave({ name: content.split('\n')[0].slice(0, 60), content }), 'Template saved')
+    if (saved) setOpen(false)
+  }
+
+  return (
+    <div className="tpl" ref={box}>
+      <button className="btn" onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open} title="Insert a saved template, or save the current draft as one">
+        Templates <IconChevron width={11} height={11} />
+      </button>
+      {open ? (
+        <div className="tpl-pop" role="menu" aria-label="Chat templates">
+          {templates.length ? templates.map((t) => (
+            <div key={t.id} className="tpl-row">
+              <button role="menuitem" title={t.content} onClick={() => { onInsert(t.content); setOpen(false) }}>{t.name}</button>
+              <button className="tpl-del" aria-label={`Delete template ${t.name}`} onClick={() => void guard(() => window.ventriee.chatTemplateDelete(t.id))}>
+                <IconTrash width={12} height={12} />
+              </button>
+            </div>
+          )) : <div className="tpl-empty">No templates yet. Write a message, then save it here to reuse it in any project.</div>}
+          <button className="tpl-save" disabled={!draft.trim()} onClick={() => void saveDraft()}>Save current draft as template</button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function ChatComposer({
   editing,
   onCancelEdit,
   sending,
   send,
   planner,
+  templates,
   onPick,
   onAddProvider,
   canCreate,
@@ -303,6 +352,7 @@ function ChatComposer({
   sending: boolean
   send: (text: string, images?: string[]) => void
   planner: ResolvedModel
+  templates: ChatTemplate[]
   onPick: (pick: ResolvedModel) => void
   onAddProvider: () => void
   canCreate: boolean
@@ -358,6 +408,11 @@ function ChatComposer({
           <ModelPicker value={planner} onPick={(o) => onPick(resolveModel(o, useStore.getState().snapshot!.providerConfigs))} onAddProvider={onAddProvider} compact />
           <span className="chat-hint"><span className="kbd">Enter</span> send · <span className="kbd">Shift</span>+<span className="kbd">Enter</span> newline</span>
           <div className="ml-auto flex gap-8">
+            <TemplatePicker
+              templates={templates}
+              draft={draft}
+              onInsert={(content) => setDraft(draft ? `${draft}\n\n${content}` : content)}
+            />
             {attach.button}{mic}
             <button className="btn" onClick={createPrompt} disabled={!canCreate || creating} title="Turn the conversation into a structured development prompt">
               <IconSpark width={12} height={12} /> {creating ? 'Writing…' : 'Create prompt'}

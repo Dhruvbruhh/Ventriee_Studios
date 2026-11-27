@@ -7,9 +7,11 @@ import type { BrowserLog, BrowserRunResult, BrowserStepResult } from '../shared/
 const PARTITION = 'persist:ventriee-automation'
 const LOG_LIMIT = 300
 
-/** A separate, sandboxed browser window that scripts drive while the owner watches. */
+/** A separate, sandboxed browser window whose tabs scripts drive while the owner watches. */
 export class BrowserAutomation {
-  private win: BrowserWindow | null = null
+  /** Open tabs in creation order; exactly one is visible (the active one). */
+  private tabs: BrowserWindow[] = []
+  private active = 0
   private consoleLog: BrowserLog[] = []
   private networkLog: BrowserLog[] = []
   private hooked = false
@@ -18,12 +20,14 @@ export class BrowserAutomation {
   constructor(private shotDir: () => string, private downloadDir: () => string, private onEvent: (r: BrowserStepResult) => void) {}
 
   logs() {
-    return { console: this.consoleLog.slice(-LOG_LIMIT), network: this.networkLog.slice(-LOG_LIMIT), url: this.win && !this.win.isDestroyed() ? this.win.webContents.getURL() : '' }
+    const win = this.tabs[this.active]
+    return { console: this.consoleLog.slice(-LOG_LIMIT), network: this.networkLog.slice(-LOG_LIMIT), url: win && !win.isDestroyed() ? win.webContents.getURL() : '' }
   }
 
   close() {
-    if (this.win && !this.win.isDestroyed()) this.win.close()
-    this.win = null
+    for (const t of this.tabs) if (!t.isDestroyed()) t.close()
+    this.tabs = []
+    this.active = 0
   }
 
   private push(list: BrowserLog[], entry: BrowserLog) {
@@ -31,8 +35,15 @@ export class BrowserAutomation {
     if (list.length > LOG_LIMIT * 2) list.splice(0, list.length - LOG_LIMIT)
   }
 
+  private activeWin(): BrowserWindow | null {
+    const win = this.tabs[this.active]
+    return win && !win.isDestroyed() ? win : null
+  }
+
+  /** The active tab, creating the first one on demand. */
   private window(): BrowserWindow {
-    if (this.win && !this.win.isDestroyed()) return this.win
+    const cur = this.activeWin()
+    if (cur) return cur
     const ses = session.fromPartition(PARTITION)
     if (!this.hooked) {
       this.hooked = true
@@ -47,18 +58,43 @@ export class BrowserAutomation {
       })
     }
     const win = new BrowserWindow({
-      width: 1280, height: 820, title: 'Ventriee browser', autoHideMenuBar: true,
+      width: 1280, height: 820, title: 'Ventriee browser', autoHideMenuBar: true, show: false,
       webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false, webviewTag: false }
     })
+    // target=_blank / window.open become a new tab instead of navigating the current one.
     win.webContents.setWindowOpenHandler(({ url }) => {
-      if (/^https?:/i.test(url)) void win.loadURL(url)
+      if (/^https?:/i.test(url)) this.openTab(url)
       return { action: 'deny' }
     })
     win.webContents.on('will-navigate', (e, url) => { if (!/^https?:/i.test(url)) e.preventDefault() })
     win.webContents.on('console-message', (e) => !e.message.startsWith('Electron Security Warning') && this.push(this.consoleLog, { at: Date.now(), level: e.level === 'error' ? 'error' : e.level === 'warning' ? 'warn' : 'info', text: e.message.slice(0, 2000) }))
-    win.on('closed', () => { if (this.win === win) this.win = null })
-    this.win = win
+    win.on('closed', () => {
+      const i = this.tabs.indexOf(win)
+      if (i !== -1) this.tabs.splice(i, 1)
+      if (this.active >= this.tabs.length) this.active = Math.max(0, this.tabs.length - 1)
+      // Keep exactly one window on screen until the studio closes the browser.
+      if (this.activeWin() && !this.activeWin()!.isVisible()) this.activeWin()!.show()
+    })
+    this.tabs.push(win)
+    this.active = this.tabs.length - 1
     return win
+  }
+
+  /** A new tab behind the scenes; it becomes visible when a step targets it. */
+  private openTab(url?: string): BrowserWindow {
+    const prevActive = this.active
+    const prev = this.activeWin()
+    this.active = this.tabs.length // window() appends and selects the new tab
+    const win = this.window()
+    if (prev) prev.show() // the caller decides visibility; a link click should not steal focus
+    this.active = prevActive
+    if (url) void win.loadURL(url).catch(() => { /* step results report failures, not the open handler */ })
+    return win
+  }
+
+  private show(win: BrowserWindow) {
+    this.active = Math.max(0, this.tabs.indexOf(win))
+    if (!win.isVisible()) win.show()
   }
 
   private js<T>(code: string): Promise<T> {
@@ -149,6 +185,32 @@ export class BrowserAutomation {
         win.setContentSize(s.width, s.height)
         await new Promise((r) => setTimeout(r, 300))
         return { output: `Viewport ${s.width}×${s.height}` }
+      case 'tab': {
+        if (s.target === 'new') {
+          const t = this.openTab('about:blank')
+          this.show(t)
+          return { output: `Opened tab ${this.active + 1}` }
+        }
+        if (s.target === 'close') {
+          if (this.tabs.length < 2) throw new Error('The last tab cannot be closed')
+          const n = this.active + 1
+          // Splice synchronously: the next step must never land on a closing
+          // window that still passes isDestroyed() during teardown.
+          const win = this.activeWin()
+          const i = this.tabs.indexOf(win!)
+          this.tabs.splice(i, 1)
+          this.active = Math.min(i, this.tabs.length - 1)
+          const survivor = this.activeWin()
+          if (survivor && !survivor.isVisible()) survivor.show()
+          win?.destroy() // the 'closed' handler finds no tab entry, so it is a no-op
+          return { output: `Closed tab ${n}` }
+        }
+        const n = Number(s.target)
+        const t = this.tabs[n - 1]
+        if (!t || t.isDestroyed()) throw new Error(`No tab ${n} (open: ${this.tabs.length})`)
+        this.show(t)
+        return { output: `Switched to tab ${n} (${t.webContents.getURL() || 'empty'})` }
+      }
       case 'expect': {
         const text = await this.js<string | null>(`(() => { const el = document.querySelector(${sel(s.selector)}); return el ? el.innerText : null })()`)
         if (text === null) throw new Error(`Expected ${s.selector} to exist, but nothing matches`)

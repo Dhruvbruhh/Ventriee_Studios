@@ -22,6 +22,7 @@ import { Orchestrator } from './orchestrator'
 import { foldClarifications } from './clarify'
 import { PlanningService } from './planning'
 import { isInside } from './paths'
+import { chatTranscriptMarkdown } from '../shared/transcript'
 import { detectProviders, testEngine, defaultEndpoint, runEngine } from './engines'
 import { IPC } from '../shared/ipc'
 import { TerminalService, shells } from './terminal'
@@ -33,7 +34,7 @@ import { ExtensionService } from './extensions'
 import { TestService, detectRunners } from './testrunner'
 import { listTasks } from './tasks'
 import { HistoryService } from './history'
-import { github, githubAuth } from './github'
+import { github, githubAuth, gh } from './github'
 import { ErrorLog, issueUrl } from './errorlog'
 import { baseCatalog, type Catalog } from '../shared/catalog'
 import { askCode, changeFiles, completeCode } from './code-agent'
@@ -44,6 +45,7 @@ import { CheckpointService } from './checkpoint'
 import { WorktreeService } from './worktrees'
 import { summarizeRuns } from './runs'
 import { validMcpServers, writeMcpConfig } from './mcp'
+import { normaliseAccent } from '../shared/accent'
 import { GraphifyService } from './graphify'
 import { applyTemplate, type TemplateId } from './templates'
 import { Updater } from './updater'
@@ -56,9 +58,10 @@ import { installServer, searchRegistry } from './mcpRegistry'
 import { PluginService } from './plugins'
 import { listResources } from './resources'
 import { parseManifest, toManifest } from '../shared/agents'
+import { parseProviderManifest, parseWorkflowManifest, providersToManifest, workflowsToManifest } from '../shared/manifests'
 import { scanProject } from './securityScan'
 import { RemoteJobs, E2BProvider } from './remote'
-import { fileMatches, runWorkflow, triggerOf } from './workflows'
+import { ciDigest, fileMatches, prDigest, runWorkflow, triggerOf } from './workflows'
 import { BrowserAutomation } from './browserAutomation'
 import { exec, execFile } from 'node:child_process'
 import { watch, type FSWatcher } from 'node:fs'
@@ -189,7 +192,14 @@ async function syncRemoteDevice(session: { userId: string; activeOrgId: string |
 }
 /** Resolve the target project for a remote command; throws rather than guess. */
 function remoteProject(cmd: { payload: Record<string, unknown> }): Project {
-  return resolveRemoteProject(cmd.payload, store.projects())
+  // cloud sync links each local project to its cloud row; phones address that cloud id.
+  // Filter to the signed-in user's links so rows from a previously signed-in account
+  // can never resolve (same rule as cloud/sync.ts).
+  const links = remoteUserId
+    ? store.db.all<{ localId: string; cloudId: string }>(`SELECT localId, cloudId FROM cloud_sync WHERE kind = 'project' AND cloudId IS NOT NULL AND userId = ?`, [remoteUserId])
+    : []
+  const linkOf = new Map(links.map((l) => [l.localId, l.cloudId]))
+  return resolveRemoteProject(cmd.payload, store.projects().map((p) => ({ ...p, cloudId: linkOf.get(p.id) ?? null })))
 }
 protocol.registerSchemesAsPrivileged([{ scheme: RENDERER_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
 
@@ -317,8 +327,10 @@ function createWindow(projectId?: string) {
     icon: windowIcon,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
-      sandbox: false,
+      preload: join(__dirname, '../preload/index.cjs'),
+      // The preload only touches electron APIs (contextBridge + ipcRenderer), so the
+      // renderer can run fully sandboxed; contextIsolation keeps the bridge narrow.
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -561,6 +573,52 @@ function registerIpc() {
     store.importAgents(parsed)
     debouncedNotify()
     return { added: parsed.templates.map((t) => t.role), missing: parsed.missing }
+  })
+  handle(IPC.workflowExport, async (event) => {
+    const manifest = workflowsToManifest(store.workflows().map((w) => ({ name: w.name, nodes: w.nodes, edges: w.edges, scheduleMinutes: w.scheduleMinutes })))
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showSaveDialog(parent ?? undefined!, { defaultPath: 'workflows.manifest.json', filters: [{ name: 'Workflow manifest', extensions: ['json'] }] })
+    if (result.canceled || !result.filePath) return null
+    writeFileSync(result.filePath, JSON.stringify(manifest, null, 2))
+    return result.filePath
+  })
+  handle(IPC.workflowImport, async (event) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showOpenDialog(parent ?? undefined!, { properties: ['openFile'], filters: [{ name: 'Workflow manifest', extensions: ['json'] }] })
+    const file = result.canceled ? null : result.filePaths[0]
+    if (!file) return null
+    if (statSync(file).size > 2_000_000) throw new Error('That file is too large to be a workflow manifest')
+    let raw: unknown
+    try { raw = JSON.parse(readFileSync(file, 'utf8')) } catch { throw new Error('That file is not valid JSON') }
+    const parsed = parseWorkflowManifest(raw)
+    for (const wf of parsed) store.saveWorkflow({ ...wf, enabled: false })
+    debouncedNotify()
+    return { added: parsed.map((w) => w.name) }
+  })
+  handle(IPC.providerExport, async (event) => {
+    const manifest = providersToManifest(store.providers().map((p) => ({ label: p.label, kind: p.kind, engine: p.engine, baseUrl: p.baseUrl, models: p.models })))
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showSaveDialog(parent ?? undefined!, { defaultPath: 'providers.manifest.json', filters: [{ name: 'Provider manifest', extensions: ['json'] }] })
+    if (result.canceled || !result.filePath) return null
+    writeFileSync(result.filePath, JSON.stringify(manifest, null, 2))
+    return result.filePath
+  })
+  handle(IPC.providerImport, async (event) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showOpenDialog(parent ?? undefined!, { properties: ['openFile'], filters: [{ name: 'Provider manifest', extensions: ['json'] }] })
+    const file = result.canceled ? null : result.filePaths[0]
+    if (!file) return null
+    if (statSync(file).size > 2_000_000) throw new Error('That file is too large to be a provider manifest')
+    let raw: unknown
+    try { raw = JSON.parse(readFileSync(file, 'utf8')) } catch { throw new Error('That file is not valid JSON') }
+    const parsed = parseProviderManifest(raw)
+    for (const entry of parsed) {
+      store.addProvider({ id: newId('prv'), label: entry.label, kind: entry.kind, engine: entry.engine, baseUrl: entry.baseUrl || defaultEndpoint(entry.engine), models: entry.models, createdAt: Date.now() })
+    }
+    await refreshProviders()
+    await refreshModels(store.activeProjectId())
+    debouncedNotify()
+    return { added: parsed.map((p) => p.label) }
   })
   handle(IPC.securityScan, async (_e, projectId: string) => {
     const project = store.project(String(projectId))
@@ -1172,6 +1230,7 @@ function registerIpc() {
 
   handle(IPC.saveSettings, async (_e, patch: Partial<AppSettings>) => {
     if (patch && 'mcpServers' in patch) patch = { ...patch, mcpServers: validMcpServers(patch.mcpServers) }
+    if (patch && 'accent' in patch) patch = { ...patch, accent: normaliseAccent(patch.accent) }
     for (const key of ['dailyBudgetUsd', 'projectBudgetUsd'] as const) if (patch && key in patch) patch = { ...patch, [key]: Math.min(100_000, Math.max(0, Number(patch[key]) || 0)) }
     const before = store.settings().companyPack
     const next = store.saveSettings(patch)
@@ -1254,6 +1313,28 @@ function registerIpc() {
   handle(IPC.chatSessionSelect, (_e, projectId: string, conversationId: string) => {
     store.setActiveConversation(projectId, conversationId)
     debouncedNotify()
+  })
+  handle(IPC.chatTemplateSave, (_e, input: { id?: string; name: string; content: string }) => {
+    const saved = store.saveChatTemplate(input)
+    debouncedNotify()
+    return saved
+  })
+  handle(IPC.chatTemplateDelete, (_e, id: string) => {
+    store.deleteChatTemplate(String(id))
+    debouncedNotify()
+  })
+  handle(IPC.chatExport, async (event, projectId: string, conversationId?: string) => {
+    if (!store.project(projectId)) throw new Error('Project not found')
+    const { title, messages } = store.exportConversation(projectId, typeof conversationId === 'string' ? conversationId : undefined)
+    if (!messages.length) throw new Error('This session has no messages to export yet')
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showSaveDialog(parent ?? undefined!, {
+      defaultPath: `${title.replace(/[^\w-]+/g, '-') || 'session'}.md`,
+      filters: [{ name: 'Markdown transcript', extensions: ['md'] }]
+    })
+    if (result.canceled || !result.filePath) return null
+    writeFileSync(result.filePath, chatTranscriptMarkdown(title, messages))
+    return result.filePath
   })
   handle(IPC.chatSend, async (_e, input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string; images?: string[]; replaceFrom?: string }) => {
     const project = store.project(input.projectId)
@@ -1497,6 +1578,10 @@ const workflowFinishedAt = new Map<string, number>()
 /** Last seen HEAD per project and last seen job per project, so git and run triggers fire on changes only. */
 const gitHeads = new Map<string, string>()
 const lastJobs = new Map<string, string>()
+/** Last seen GitHub PR / CI signatures per project, so GitHub triggers fire on changes only. */
+const lastGithub = new Map<string, string>()
+/** A hung gh call (60 s timeout) must not let ticks overlap and double-fire triggers. */
+let checkEventTriggersRunning = false
 
 /** Start, or restart, the file watchers for files-triggered workflows. */
 function syncWorkflowTriggers() {
@@ -1550,6 +1635,9 @@ function startWebhookServer() {
 
 /** Git-commit and run-finished triggers, checked on the scheduler tick. */
 async function checkEventTriggers() {
+  if (checkEventTriggersRunning) return
+  checkEventTriggersRunning = true
+  try {
   const flows = store.workflows().filter((w) => w.enabled && w.projectId)
   const wanted = new Map<string, ReturnType<typeof triggerOf>['on'][]>()
   for (const wf of flows) wanted.set(wf.projectId!, [...(wanted.get(wf.projectId!) ?? []), triggerOf(wf).on])
@@ -1575,7 +1663,23 @@ async function checkEventTriggers() {
       if (job.status === 'failed') fire('run_failed', `Run failed: ${job.instruction}\n${job.error ?? ''}`)
       else if (job.status === 'done') fire('run_done', `Run finished: ${job.instruction}`)
     }
+    if (kinds.includes('github_pr') || kinds.includes('github_ci')) {
+      // One gh call per kind per tick; failures (no gh, unsigned in, no repo) resolve to '' and never fire.
+      const [prs, runs] = await Promise.all([
+        kinds.includes('github_pr') ? gh(project.path, ['pr', 'list', '--json', 'number,title,updatedAt', '--limit', '30']).catch(() => '') : Promise.resolve(''),
+        kinds.includes('github_ci') ? gh(project.path, ['run', 'list', '--json', 'databaseId,conclusion,displayTitle', '--limit', '20']).catch(() => '') : Promise.resolve('')
+      ])
+      for (const [kind, payload] of [['github_pr', prs], ['github_ci', runs]] as const) {
+        if (!payload) continue
+        const digest = kind === 'github_pr' ? prDigest(payload) : ciDigest(payload)
+        const key = `${projectId}:${kind}`
+        const before = lastGithub.get(key)
+        lastGithub.set(key, digest.signature)
+        if (digest.signature && before !== undefined && before !== digest.signature) fire(kind, digest.input)
+      }
+    }
   }
+  } finally { checkEventTriggersRunning = false }
 }
 
 function startScheduler() {

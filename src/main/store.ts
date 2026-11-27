@@ -8,6 +8,7 @@ import type {
   Assignment,
   Automation,
   ChatMessage,
+  ChatTemplate,
   Conversation,
   EngineKind,
   Job,
@@ -51,6 +52,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   plannerFallback: true,
   companyPack: '',
   clarifyBrief: true,
+  researchUrls: true,
   routingMode: 'automatic',
   costPreference: 'balanced',
   modelProfiles: {},
@@ -78,6 +80,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   completionEndpoint: '',
   onboardingSeen: false,
   theme: 'dark',
+  accent: '',
   voice: {
     source: 'cloud',
     localModel: '',
@@ -553,6 +556,16 @@ export class Store {
     }))
   }
 
+  /** Average real cost of finished tasks per role, for the pre-run cost estimate. */
+  roleCostStats(): Array<{ role: string; avgCostUsd: number; samples: number }> {
+    return this.db.all<Record<string, unknown>>(
+      `SELECT t.role AS role, AVG(s.costUsd) AS avgCostUsd, COUNT(*) AS samples
+       FROM sessions s JOIN tasks t ON t.id = s.taskId
+       WHERE s.costUsd > 0 AND t.role IS NOT NULL AND t.role != ''
+       GROUP BY t.role ORDER BY t.role`
+    ).map((r) => ({ role: String(r.role), avgCostUsd: Number(r.avgCostUsd), samples: Number(r.samples) }))
+  }
+
   searchMemory(query: string, projectId?: string | null): MemoryDoc[] {
     const q = `%${query.toLowerCase()}%`
     const rows = this.db.all<Record<string, unknown>>(
@@ -803,6 +816,41 @@ export class Store {
     return doc
   }
 
+  // ---------- chat templates ----------
+  chatTemplates(): ChatTemplate[] {
+    return this.db.all<ChatTemplate>('SELECT * FROM chat_templates ORDER BY createdAt ASC')
+  }
+
+  saveChatTemplate(input: { id?: string; name: string; content: string }): ChatTemplate {
+    const name = input.name.trim()
+    const content = input.content
+    if (!name) throw new Error('A template needs a name')
+    if (!content.trim()) throw new Error('A template cannot be empty')
+    if (input.id) {
+      const cur = this.db.get<ChatTemplate>('SELECT * FROM chat_templates WHERE id = ?', input.id)
+      if (!cur) throw new Error('Template not found')
+      this.db.run('UPDATE chat_templates SET name=?, content=? WHERE id=?', name, content, cur.id)
+      return { ...cur, name, content }
+    }
+    const row: ChatTemplate = { id: newId('tpl'), name, content, createdAt: Date.now() }
+    this.db.run('INSERT INTO chat_templates(id,name,content,createdAt) VALUES(?,?,?,?)', row.id, row.name, row.content, row.createdAt)
+    return row
+  }
+
+  deleteChatTemplate(id: string) {
+    this.db.run('DELETE FROM chat_templates WHERE id = ?', id)
+  }
+
+  /** One session's messages for export, oldest first. */
+  exportConversation(projectId: string, conversationId?: string): { title: string; messages: ChatMessage[] } {
+    const all = this.conversations(projectId)
+    // No create-on-demand here: exporting a fresh project must not leave a stray empty session.
+    const convo = conversationId ? all.find((c) => c.id === conversationId) : all.at(-1)
+    if (!convo) throw new Error('Session not found in this project')
+    const n = all.findIndex((c) => c.id === convo.id) + 1
+    return { title: convo.title || `Session ${n}`, messages: this.chatMessages(projectId, 400, convo.id) }
+  }
+
   // ---------- providers ----------
   providers(): ProviderConfig[] {
     return this.db.all<Record<string, unknown>>(
@@ -1027,6 +1075,14 @@ export class Store {
        GROUP BY projectId ORDER BY costUsd DESC LIMIT 20`, sinceMs
     )
 
+    type AgentRow = { name: string; sessions: number; costUsd: number; seconds: number }
+    const byAgentRaw = this.db.all<AgentRow>(
+      `SELECT COALESCE(a.name, 'unknown') as name, COUNT(*) as sessions, SUM(s.costUsd) as costUsd,
+        SUM(COALESCE((s.endedAt - s.startedAt)/1000, 0)) as seconds
+       FROM sessions s LEFT JOIN agents a ON a.id = s.agentId WHERE s.startedAt >= ?
+       GROUP BY s.agentId ORDER BY costUsd DESC LIMIT 20`, sinceMs
+    )
+
     const dailyRaw = this.db.all<DayRow>(
       `SELECT date(startedAt/1000, 'unixepoch') as day, SUM(costUsd) as costUsd,
        SUM(inputTokens) as inputTokens, SUM(outputTokens) as outputTokens, COUNT(*) as sessions
@@ -1048,6 +1104,7 @@ export class Store {
       totalOutputTokens: totals.outputTokens ?? 0,
       successRate: totals.total > 0 ? (totals.done / totals.total) * 100 : 0,
       byModel: byModelRaw.map((r) => ({ name: r.model || 'unknown', sessions: r.sessions, inputTokens: r.inputTokens ?? 0, outputTokens: r.outputTokens ?? 0, costUsd: r.costUsd ?? 0, seconds: r.seconds ?? 0 })),
+      byAgent: byAgentRaw.map((r) => ({ name: r.name, sessions: r.sessions, costUsd: r.costUsd ?? 0, seconds: r.seconds ?? 0 })),
       byProject,
       daily: dailyRaw.map((r): AnalyticsDayBucket => ({ date: r.day, costUsd: r.costUsd ?? 0, inputTokens: r.inputTokens ?? 0, outputTokens: r.outputTokens ?? 0, sessions: r.sessions ?? 0 }))
     }
@@ -1099,6 +1156,7 @@ export class Store {
       // Every project's sessions, for the sidebar; titles only, no messages.
       sessionIndex: this.db.all<{ id: string; projectId: string; title: string }>('SELECT id, projectId, title FROM conversations ORDER BY createdAt ASC, rowid ASC'),
       chat: projectId ? this.chatMessages(projectId) : [],
+      chatTemplates: this.chatTemplates(),
       prompts: projectId ? this.prompts(projectId) : [],
       providerConfigs: this.providers(),
       assignments: projectId ? this.assignments(projectId) : [],

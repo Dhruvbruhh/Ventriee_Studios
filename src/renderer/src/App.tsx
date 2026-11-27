@@ -12,6 +12,7 @@ import { Dashboard } from './components/Dashboard'
 import { SideChat } from './components/SideChat'
 import { SimpleMode } from './components/SimpleMode'
 import { CloudSyncBadge } from './components/CloudSync'
+import { OrgPicker } from './components/OrgPicker'
 import { TerminalView } from './components/Terminal'
 import { SettingsPanel } from './panels/SettingsPanel'
 import { MemoryPanel } from './panels/MemoryPanel'
@@ -31,6 +32,7 @@ import { HelpPanel } from './panels/HelpPanel'
 import { VoiceAssistant } from './components/VoiceAssistant'
 import { IconSidebar, IconSpark } from './icons'
 import { Sidebar } from './components/Sidebar'
+import { ResizeHandle, sizeVar, useDragSize } from './components/Resize'
 import { UpdateNotice } from './components/UpdateNotice'
 import { Toolchains } from './components/Toolchains'
 import { impact } from './fx'
@@ -67,15 +69,20 @@ export function App() {
     return () => window.removeEventListener('keydown', keys)
   }, [])
   const [codeOpened, setCodeOpened] = useState(false)
+  const [sideW, sideDown, sideDragging, sideNudge, sideReset] = useDragSize('.shell > .sidebar', 'app-sidebar', 'x', 200, 480)
   useEffect(() => { if (workspace === 'code') setCodeOpened(true) }, [workspace])
   const theme = snapshot?.settings.theme ?? 'dark'
+  const accent = snapshot?.settings.accent ?? ''
   useEffect(() => {
     const root = document.documentElement
     const media = window.matchMedia('(prefers-color-scheme: light)')
     let vars: string[] = []
     let cancelled = false
     const apply = () => { if (!theme.startsWith('plugin:')) root.dataset.theme = theme === 'system' ? (media.matches ? 'light' : 'dark') : theme }
+    // the owner's accent sits on top of every theme, plugin ones included
+    const applyAccent = () => { if (accent) root.style.setProperty('--accent', accent); else root.style.removeProperty('--accent') }
     apply()
+    applyAccent()
     if (theme.startsWith('plugin:')) {
       const [, pluginId, themeId] = theme.split(':')
       void window.ventriee.pluginList().then((list) => {
@@ -83,12 +90,13 @@ export function App() {
         const t = list.find((p) => p.id === pluginId)?.themes.find((x) => x.id === themeId)
         root.dataset.theme = t?.base ?? 'dark'
         for (const [k, v] of Object.entries(t?.colors ?? {})) root.style.setProperty(k, v)
+        applyAccent()
         vars = Object.keys(t?.colors ?? {})
       }).catch(() => { root.dataset.theme = 'dark' })
     }
     media.addEventListener('change', apply)
-    return () => { cancelled = true; media.removeEventListener('change', apply); for (const k of vars) root.style.removeProperty(k) }
-  }, [theme])
+    return () => { cancelled = true; media.removeEventListener('change', apply); for (const k of vars) root.style.removeProperty(k); root.style.removeProperty('--accent') }
+  }, [theme, accent])
 
   useEffect(() => {
     let mounted = true
@@ -150,8 +158,9 @@ export function App() {
   const sessionTitle = snapshot.conversation?.title || (sessionNumber ? `Session ${sessionNumber}` : 'Chat')
 
   return (
-    <div className={`shell${sidebar ? '' : ' no-sidebar'}`}>
+    <div className={`shell${sidebar ? '' : ' no-sidebar'}`} style={sizeVar('--shell-side-w', sidebar ? sideW : null)}>
     {sidebar ? <Sidebar onNewProject={() => setNewProject(true)} /> : null}
+    {sidebar ? <ResizeHandle axis="x" label="Resize the sidebar" size={sideW} dragging={sideDragging} onPointerDown={sideDown} onNudge={sideNudge} onReset={sideReset} /> : null}
     <div className="app">
       <header className="topbar">
         <button className="icon-btn" onClick={() => setSidebar((v) => !v)} aria-label={sidebar ? 'Hide sidebar' : 'Show sidebar'} aria-expanded={sidebar} title="Toggle sidebar (Ctrl+B)">
@@ -185,6 +194,7 @@ export function App() {
           </span>
         </div>
         <CloudSyncBadge />
+        <OrgPicker />
         <button className="btn ghost" onClick={() => void guard(() => window.ventriee.saveSettings({ simpleMode: true }))} title="Switch to the chat-first Simple mode">Simple mode</button>
         <button className={`icon-btn${showAdvisor ? ' active' : ''}`} onClick={() => setShowAdvisor((v) => !v)} title="Side chat" aria-label="Side chat">
           <IconSpark />

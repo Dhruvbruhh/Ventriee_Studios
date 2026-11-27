@@ -6,6 +6,7 @@ import type {
   Assignment,
   Automation,
   ChatMessage,
+  ChatTemplate,
   CreateAgentInput,
   EngineKind,
   MemoryDoc,
@@ -115,6 +116,7 @@ export const IPC = {
   openExternal: 'shell:openExternal',
   revealFile: 'shell:reveal',
   chatSend: 'chat:send', chatSessionNew: 'chat:session-new', chatSessionSelect: 'chat:session-select',
+  chatTemplateSave: 'chat:template-save', chatTemplateDelete: 'chat:template-delete', chatExport: 'chat:export',
   promptCreate: 'prompt:create',
   promptEnhance: 'prompt:enhance',
   promptSave: 'prompt:save',
@@ -170,6 +172,10 @@ export const IPC = {
   agentDepartmentsSave: 'agents:departments',
   agentExport: 'agents:export',
   agentImport: 'agents:import',
+  workflowExport: 'workflow:export',
+  workflowImport: 'workflow:import',
+  providerExport: 'provider:export',
+  providerImport: 'provider:import',
   remoteList: 'remote:list',
   remoteTest: 'remote:test',
   remoteStart: 'remote:start',
@@ -377,6 +383,11 @@ export interface VentrieeApi {
   chatSend(input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string; images?: string[]; replaceFrom?: string }): Promise<ChatMessage>
   chatSessionNew(projectId: string): Promise<void>
   chatSessionSelect(projectId: string, conversationId: string): Promise<void>
+  /** Save (create or update) a reusable chat template. */
+  chatTemplateSave(input: { id?: string; name: string; content: string }): Promise<ChatTemplate>
+  chatTemplateDelete(id: string): Promise<void>
+  /** Writes the session transcript to a Markdown file via a save dialog; null when canceled. */
+  chatExport(projectId: string, conversationId?: string): Promise<string | null>
   onChatChunk(cb: (payload: { projectId: string; messageId: string; chunk: string }) => void): () => void
   promptCreate(input: { projectId: string; engine: EngineKind; model: string; endpoint: string }): Promise<PromptDoc>
   promptEnhance(input: { projectId: string; promptId: string; engine: EngineKind; model: string; endpoint: string }): Promise<PromptDoc>
@@ -471,6 +482,14 @@ export interface VentrieeApi {
   agentExport(pick: { role?: string; department?: string }): Promise<string | null>
   /** Validate and import a manifest; imported agents arrive switched off. Null when cancelled. */
   agentImport(): Promise<{ added: string[]; missing: string[] } | null>
+  /** Save saved workflows to a JSON manifest; null when cancelled. */
+  workflowExport(): Promise<string | null>
+  /** Validate and import a workflow manifest; imported workflows arrive switched off. Null when cancelled. */
+  workflowImport(): Promise<{ added: string[] } | null>
+  /** Save custom providers to a JSON manifest (never any key material); null when cancelled. */
+  providerExport(): Promise<string | null>
+  /** Validate and import a provider manifest; the owner enters each key afterwards. Null when cancelled. */
+  providerImport(): Promise<{ added: string[] } | null>
   remoteList(): Promise<RemoteJob[]>
   /** Check the SSH connection and the tools a remote run needs. */
   remoteTest(host: string): Promise<string>

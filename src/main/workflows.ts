@@ -157,11 +157,31 @@ export async function runWorkflow(wf: Workflow, deps: WorkflowDeps, emit: (e: Wo
 }
 
 /** What starts a workflow automatically, read from its Start step. */
-export type TriggerKind = 'manual' | 'webhook' | 'files' | 'git' | 'run_done' | 'run_failed'
+export type TriggerKind = 'manual' | 'webhook' | 'files' | 'git' | 'run_done' | 'run_failed' | 'github_pr' | 'github_ci'
 export function triggerOf(wf: Workflow): { on: TriggerKind; filter: string; token: string } {
   const c = wf.nodes.find((n) => n.kind === 'trigger')?.config ?? {}
-  const on = (['webhook', 'files', 'git', 'run_done', 'run_failed'] as const).find((k) => k === c.on) ?? 'manual'
+  const on = (['webhook', 'files', 'git', 'run_done', 'run_failed', 'github_pr', 'github_ci'] as const).find((k) => k === c.on) ?? 'manual'
   return { on, filter: c.filter ?? '', token: c.token ?? '' }
+}
+
+export interface PrDigest { signature: string; input: string }
+/** Summarise `gh pr list --json number,title,updatedAt`: a stable signature to compare between ticks, plus the trigger input. Empty payload (gh missing, unsigned in, no repo) digests to an empty signature that never fires. */
+export function prDigest(payload: string): PrDigest {
+  let prs: Array<{ number: number; title?: string; updatedAt?: string }> = []
+  try { const parsed: unknown = JSON.parse(payload); if (Array.isArray(parsed)) prs = parsed.filter((p): p is { number: number } => typeof (p as { number?: unknown })?.number === 'number') } catch { /* nothing to compare */ }
+  const lines = prs.map((p) => `#${p.number} ${String(p.title ?? '').slice(0, 80)}`)
+  return { signature: prs.map((p) => `${p.number}:${p.updatedAt ?? ''}`).sort().join('|'), input: lines.length ? `GitHub PRs open now:\n${lines.join('\n')}` : '' }
+}
+
+/** Summarise `gh run list --json databaseId,conclusion,displayTitle`: the signature covers failed runs only, so a run that stays red does not fire twice. */
+export function ciDigest(payload: string): PrDigest {
+  let runs: Array<{ databaseId?: number; conclusion?: string | null; displayTitle?: string }> = []
+  try { const parsed: unknown = JSON.parse(payload); if (Array.isArray(parsed)) runs = parsed } catch { /* nothing to compare */ }
+  const failed = runs.filter((r) => typeof r.databaseId === 'number' && r.conclusion === 'failure')
+  return {
+    signature: failed.map((r) => String(r.databaseId)).sort().join('|'),
+    input: failed.length ? `GitHub Actions failures:\n${failed.map((r) => `${r.databaseId} ${String(r.displayTitle ?? '').slice(0, 80)}`).join('\n')}` : ''
+  }
 }
 
 const IGNORED_DIRS = /(^|[\\/])(node_modules|\.git|\.ventriee|dist|out|build|\.next|coverage)([\\/]|$)/

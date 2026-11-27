@@ -11,6 +11,8 @@ export type EngineKind =
   | 'api-openrouter'
   | 'api-deepseek'
   | 'api-mistral'
+  | 'api-xai'
+  | 'api-groq'
   | 'api-deploy'
   | 'api-inception'
   | 'api-ollama'
@@ -31,6 +33,8 @@ export const ENGINE_LABELS: Record<EngineKind, string> = {
   'api-openrouter': 'OpenRouter',
   'api-deepseek': 'DeepSeek API',
   'api-mistral': 'Mistral API',
+  'api-xai': 'xAI (Grok)',
+  'api-groq': 'Groq',
   'api-deploy': 'Deploy (DeepSeek V4.1)',
   'api-inception': 'Inception (Mercury)',
   'api-ollama': 'Ollama HTTP',
@@ -47,6 +51,8 @@ export const ENGINE_ENDPOINTS: Partial<Record<EngineKind, string>> = {
   'api-openrouter': 'https://openrouter.ai/api/v1',
   'api-deepseek': 'https://api.deepseek.com/v1',
   'api-mistral': 'https://api.mistral.ai/v1',
+  'api-xai': 'https://api.x.ai/v1',
+  'api-groq': 'https://api.groq.com/openai/v1',
   'api-deploy': 'https://api-sf1-cdn.deploy.com/api/v1',
   'api-inception': 'https://api.inceptionlabs.ai/v1',
   'api-ollama': 'http://127.0.0.1:11434/v1',
@@ -267,6 +273,7 @@ export interface AnalyticsOverview {
   totalOutputTokens: number
   successRate: number
   byModel: UsageRow[]
+  byAgent: Array<{ name: string; sessions: number; costUsd: number; seconds: number }>
   byProject: Array<{ id: string; name: string; sessions: number; costUsd: number }>
   daily: AnalyticsDayBucket[]
 }
@@ -310,6 +317,14 @@ export interface Conversation {
   updatedAt: number
 }
 
+/** A reusable snippet the owner drops into the planning composer instead of retyping it. */
+export interface ChatTemplate {
+  id: string
+  name: string
+  content: string
+  createdAt: number
+}
+
 export type PromptSource = 'generated' | 'enhanced' | 'edited' | 'restored'
 
 /** Every prompt revision is a row. Nothing is overwritten in place. */
@@ -344,6 +359,10 @@ export interface ModelOption {
   free: boolean | null
   configured: boolean
   note?: string
+  /** Reported parameter count in billions (Ollama /api/show), when the server answers. */
+  paramsB?: number
+  /** Reported context length in tokens (Ollama /api/show), when the server answers. */
+  contextLength?: number
 }
 
 /**
@@ -636,6 +655,8 @@ export interface AppSettings {
   companyPack: string
   /** Ask the owner clarifying questions before planning a vague brief. */
   clarifyBrief: boolean
+  /** Fetch reference URLs from the brief and give the planner the page text. */
+  researchUrls: boolean
   /** Who picks models: the owner, the orchestrator, or both. */
   routingMode: RoutingMode
   costPreference: CostPreference
@@ -681,6 +702,8 @@ export interface AppSettings {
   onboardingSeen?: boolean
   /** A built-in theme, or `plugin:<plugin id>:<theme id>`. */
   theme: 'dark' | 'light' | 'system' | `plugin:${string}`
+  /** Custom accent colour as a #rrggbb hex; '' keeps the theme's own accent. */
+  accent: string
   voice: VoiceSettings
   /** API keys for outbound services injected into agent environment. */
   connectors: {
@@ -772,6 +795,7 @@ export interface Snapshot {
   conversations: Conversation[]
   sessionIndex: Array<{ id: string; projectId: string; title: string }>
   chat: ChatMessage[]
+  chatTemplates: ChatTemplate[]
   prompts: PromptDoc[]
   providerConfigs: ProviderConfig[]
   assignments: Assignment[]

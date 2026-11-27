@@ -6,7 +6,8 @@ import { WEBHOOK_PORT, type Workflow, type WorkflowEdge, type WorkflowNode, type
 type Field = { key: string; label: string; multiline?: boolean; placeholder?: string; options?: Array<[string, string]> }
 const TRIGGERS: Array<[string, string]> = [
   ['manual', 'By hand (and the schedule, if set)'], ['webhook', 'Webhook (an HTTP POST on this computer)'], ['files', 'A file in the project changes'],
-  ['git', 'A new git commit in the project'], ['run_done', 'An agent run finishes'], ['run_failed', 'An agent run fails']
+  ['git', 'A new git commit in the project'], ['run_done', 'An agent run finishes'], ['run_failed', 'An agent run fails'],
+  ['github_pr', 'GitHub: the PR list changes'], ['github_ci', 'GitHub: a CI run fails']
 ]
 const KINDS: Record<WorkflowNodeKind, { label: string; hint: string; fields: Field[] }> = {
   trigger: { label: 'Start', hint: 'Where every run begins. The trigger\'s details (the webhook body, changed files, the commit) become the input of the next step.', fields: [
@@ -105,6 +106,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
 }
 
 export function WorkflowsPanel({ onClose }: { onClose: () => void }) {
+  const notify = useStore((s) => s.notify)
   const projects = useStore((s) => s.snapshot?.projects ?? [])
   const activeProjectId = useStore((s) => s.snapshot?.activeProjectId ?? null)
   const [list, setList] = useState<Workflow[]>([])
@@ -162,6 +164,15 @@ export function WorkflowsPanel({ onClose }: { onClose: () => void }) {
     if (!t) return
     const wf = await guard(() => window.ventriee.workflowSave(fromTemplate(t, activeProjectId)), `Added "${t.name}"`)
     if (wf) { setRun(null); setSelected(null); await load(wf.id) }
+  }
+  const exportAll = async () => {
+    const path = await guard(() => window.ventriee.workflowExport())
+    if (path) notify(`Saved ${path}`)
+  }
+  const importFile = async () => {
+    const r = await guard(() => window.ventriee.workflowImport())
+    if (r) notify(`Imported ${r.added.length} workflow${r.added.length === 1 ? '' : 's'}, switched off until you enable them`)
+    await load()
   }
   const save = async () => {
     if (!draft) return null
@@ -280,6 +291,10 @@ export function WorkflowsPanel({ onClose }: { onClose: () => void }) {
             <option value="" disabled>From a template…</option>
             {TEMPLATES.map((t, i) => <option key={t.name} value={i}>{t.name}</option>)}
           </select>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn" onClick={() => void exportAll()}>Export</button>
+            <button className="btn" onClick={() => void importFile()}>Import…</button>
+          </div>
           <nav className="wf-list" aria-label="Workflows">
             {list.map((w) => <button key={w.id} className={w.id === draft?.id ? 'on' : ''} onClick={() => void choose(w)}>{w.name}{w.scheduleMinutes ? ' ⏱' : ''}</button>)}
           </nav>
@@ -376,7 +391,7 @@ export function WorkflowsPanel({ onClose }: { onClose: () => void }) {
                   <span className="dim">Only reachable from this computer. Save first; anyone with this address on this machine can start the workflow.</span>
                 </label>
               ) : null}
-              {node.kind === 'trigger' && ['files', 'git', 'run_done', 'run_failed'].includes(node.config.on ?? '') && !draft.projectId
+              {node.kind === 'trigger' && ['files', 'git', 'run_done', 'run_failed', 'github_pr', 'github_ci'].includes(node.config.on ?? '') && !draft.projectId
                 ? <p className="vx-err">Pick a project for this workflow (click the empty canvas) so this trigger knows where to watch.</p> : null}
               {node.kind !== 'trigger' && node.kind !== 'condition' ? (
                 <label>If it fails

@@ -31,6 +31,22 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
+| W27 | Chat templates + conversation export (FEATURE_STATUS Phase 3) | - | Done | `chat_templates` table (global, SQLite migration 17); `Store.saveChatTemplate`/`deleteChatTemplate`; Templates picker in the planning composer (insert anywhere, save draft as template); `shared/transcript.ts` + `chatExport` IPC saving a session as Markdown; `tests/chat-templates.test.ts` (2 tests) |
+| W20 | URL research gate + pre-run cost estimate (§8) | - | Done | `src/main/urlResearch.ts` (brief URLs fetched before planning, context block in the planner prompt, never blocks); `src/main/costEstimate.ts` (estimate from recorded per-role session costs, unknown roles named not priced); Settings toggle "Research reference URLs"; `tests/urlResearch.test.ts` (7), `tests/costEstimate.test.ts` (3) |
+| W21 | Usage dashboard: per-worker breakdown (§22) | - | Done | `analyticsOverview` gains `byAgent` (sessions, cost, time per worker, deleted workers shown as unknown); Analytics panel adds a "By worker" table and the per-model time column; `tests/analytics-agents.test.ts` (2) |
+| W22 | Workspace switching in the desktop topbar (§4) | W14, W18 | Done | The switch itself existed (IPC `cloudWorkspace` → `auth.setWorkspace` → `cloudSync.setSession`), but was only reachable in the Memory panel. New topbar `OrgPicker` (hidden when signed out or org-less): Personal or any org of the account, drives cloud-sync target and which org new projects join; `src/renderer/src/components/OrgPicker.tsx` |
+| W26 | Workflow + provider manifests: export/import (§26) | - | Done | `src/shared/manifests.ts` (workflow + provider manifest validation, mirroring the agent manifest rules; provider manifests never carry keys); IPC `workflow:export/import`, `provider:export/import`; handlers in `src/main/index.ts` (2 MB cap, imports arrive switched off / keyless); Export + Import buttons in the Workflows panel and Settings › Engines; `tests/manifests.test.ts` (10 tests) |
+| W28 | xAI (Grok) + Groq providers (FEATURE_STATUS Phase 2) | - | Done | `api-xai` + `api-groq` registered in `ENGINE_ENDPOINTS`/`ENGINE_LABELS` with env keys `XAI_API_KEY`/`GROQ_API_KEY`; both stream through the existing OpenAI-compatible adapter; `tests/routing.test.ts` asserts registration |
+| W29 | Browser tabs (FEATURE_STATUS Phase 10) | - | Done | `browserAutomation.ts`: one sandboxed window per tab in the same session, only the active one visible; `tab new`/`tab <n>`/`tab close` steps in `browserSteps.ts` (1-12); new-tab links open a background tab without stealing focus; `tests/browser-steps.test.ts` (tab parsing) |
+| W30 | Resizable panels: app sidebar, code sidebar, bottom panel (FEATURE_STATUS Phase 1) | - | Done | new `src/renderer/src/components/Resize.tsx`: `useDragSize` (pointer drag + arrow-key nudge + double-click reset, persisted in localStorage, min/max clamped), `ResizeHandle` (role=separator, aria-labelled), `sizeVar`; handles wired in `App.tsx` shell and `CodeWorkspace.tsx` (code sidebar x, bottom panel y with dynamic ceiling); sizes applied as CSS custom properties overriding the grid defaults (unlayered rules at the end of `styles.css`); `tests/resize.test.ts` (3 tests) |
+| W31 | Accent picker (FEATURE_STATUS Phase 16) | - | Done | `settings.accent` (hex string, '' keeps the theme accent); validated in the saveSettings IPC handler by `normaliseAccent` (src/shared/accent.ts, hex-only, also exports 8 `ACCENT_PRESETS`); App.tsx applies it as `--accent` on `document.documentElement` on top of built-in and plugin themes (re-applied after plugin colours load, removed on cleanup); Settings → Appearance gains preset swatches, a custom colour input and Reset; `tests/accent.test.ts` (3 tests) |
+| W32 | GitHub-event workflow triggers: PR list changes, CI failures (FEATURE_STATUS Phase 8) | - | Done | two new Start-step trigger kinds, `github_pr` (the project's PR list changes) and `github_ci` (a CI run fails), polled every 30 s on the existing scheduler tick via the owner's `gh` login (one `gh pr list` / `gh run list` call per tick); `prDigest` / `ciDigest` in `src/main/workflows.ts` turn the JSON into a change signature (PRs by number+updatedAt; CI by failed run ids only, so a run that stays red fires once) plus a readable trigger input; an empty payload (no gh, signed out, no repo) never fires, and the first observation only records the baseline; Workflows panel lists both options and demands a project like the other event triggers; `tests/workflows.test.ts` (+5 cases) |
+| W33 | Main window `sandbox: true` (FINAL_AUDIT #9, P3) | - | Done | the preload only uses `contextBridge` + `ipcRenderer` (everything else is type-only imports), so it qualifies for the Chromium sandbox; electron-vite now emits the preload as CommonJS (`out/preload/index.cjs`, required for sandboxed preloads since the ESM loader is unavailable there) and the main window runs with `sandbox: true` while keeping `contextIsolation: true` and `nodeIntegration: false`; the automation browser window was already sandboxed with no preload; verified with a full `npm run build` and the whole vitest run |
+| W34 | Remote commands target projects by their linked cloud id (FINAL_AUDIT #4, P2) | - | Done | cloud sync already stores the cloud project id per local project in the `cloud_sync` table, so no schema change was needed: `resolveRemoteProject` (src/main/remote.ts) now matches a phone's `projectId` against that link before falling back to the local id and a unique exact name; an ambiguous link (two local projects joined to one cloud row) throws instead of guessing; the main-process call site joins the link ids onto the project list it passes in; `tests/remote.test.ts` (+2 cases) |
+| W35 | Ollama model profiles from `/api/show` (FINAL_AUDIT #5 P2) | - | Done | `cliModels` asks Ollama's `/api/show` for every listed local model (5 s timeout, failures ignored); the reported parameter size (`details.parameter_size`) and context length (`context_length` or `model_info.*.context_length`) ride on `ModelOption.paramsB`/`contextLength`; `deriveProfile` ranks by the real size (>=70b strong, <=8b fast) and uses the real context window, name regexes stay the fallback; `tests/routing.test.ts` (+1) |
+| W36 | Per-project device grants (FINAL_AUDIT #6) | - | Done | Migration `0007_per_project_grants.sql`: `device_grants.project_id` (null = whole device, unchanged behavior); `can_control_device(device, project)` and the `commands_insert` policy pass `payload.projectId`, failing closed when absent or not a uuid; `CloudClient.grantDevice` accepts `projectId`; `tests/migrations.test.ts` (scoped-grant case: granted project enqueues, other project and unnamed target rejected) |
+| W37 | Stemmed lexical retrieval (FINAL_AUDIT #10) | - | Done | Light suffix stemmer in the intelligence tokenizer (`src/main/intelligence/index.ts`): ing/ed/s/e/doubled-consonant stripping above a length floor, applied identically to index and query sides; `INDEX_VERSION` 1→2 so stale indexes rebuild; `tests/intelligence.test.ts` (the audit's "git commit staging" query now ranks `git.ts` first) |
+| W38 | Web forgot-password (FINAL_AUDIT #7, client half) | - | Done | `resetPassword` in `web/src/lib/api.ts` (supabase `resetPasswordForEmail`, redirect to the app origin); "Forgot password?" mode on `SignIn.tsx` with a confirmation state and a back link; `.link` button style in `web/src/index.css`. Email invitations stay out of scope: they need an Edge Function with the service key. Web typecheck + vitest green |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -191,6 +207,19 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   subquery. Known limits: deleting a desktop project does not delete its cloud
   copy; there is no "take cloud version" (only keep desktop); a project already
   linked stays in the workspace it was first pushed to.
+- 2026-11-27: W20. Two §8 gaps were left after W16's clarifying questions: the
+  brief's reference URLs were never looked at, and runs started with no idea of
+  what they would cost. When a brief contains http(s) URLs, up to two are now
+  fetched before planning (10 s timeout each); title, description and readable
+  text become a background block in the planner prompt next to stored memory. A
+  failed fetch is logged and planning continues; the gate never blocks a run
+  (setting "Research reference URLs", on by default). After planning, the plan
+  note carries a cost estimate built from what this studio's past tasks really
+  cost per role (sessions joined to tasks); roles with no history are named as
+  unknown instead of priced, and a studio with no history gets no estimate at
+  all — real spend still shows in Analytics when the run finishes. New files:
+  `src/main/urlResearch.ts`, `src/main/costEstimate.ts`,
+  `tests/urlResearch.test.ts` (7), `tests/costEstimate.test.ts` (3).
 - 2026-11-27: W19. Reconciled FEATURE_STATUS with the code: "Fallback models"
   and "Intelligent model routing" were stale (W1 shipped capability profiles and
   a fallback chain that escalates a failed task); both are now ✅. The other
@@ -202,3 +231,190 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W26. Workflow and provider manifests (§26). `src/shared/manifests.ts`
+  validates both formats with the same strictness as the agent manifest: exact
+  field sets, size caps (100 workflows / 50 providers per file, 200 nodes, 400
+  edges), node kinds limited to the 14 real workflow steps, edge endpoints must
+  reference known node ids, schedule minutes clamped to 0-43200. Provider
+  manifests never carry keys: the parser refuses `apiKey`/`key` with a message
+  telling the owner to enter the key in Settings after import. IPC adds
+  `workflow:export/import` and `provider:export/import`; main handlers mirror the
+  agent ones (2 MB file cap, JSON parse errors surfaced) and imports arrive
+  switched off (workflows) or keyless (providers). The Workflows panel gets
+  Export / Import buttons next to the template picker; Settings › Engines gets
+  Export providers / Import providers. Known limits: workflow imports always
+  arrive disabled and lose their project link (manifests carry no project ids);
+  exported providers keep their model list but never their key.
+- 2026-11-27: W27. Two Phase 3 gaps closed. Reusable templates: a global
+  `chat_templates` table (SQLite migration 17) with a Templates picker in the
+  planning composer; "Save current draft as template" names it from the draft's
+  first line, picking a template inserts its text into the composer, and the
+  trash icon deletes it. Templates are shared across projects on purpose (a
+  good brief opener follows you around). Conversation export: "Export transcript"
+  above the composer writes the active session to Markdown via a save dialog,
+  one `## You` / `## Assistant (model)` heading per turn, `## Session N` title
+  when the session has none; empty sessions refuse to export. Known limits: the
+  picker lists every template with no search (fine at personal scale), and
+  export saves only the active session (per-session export lives in the sidebar
+  later if wanted). The UI was typechecked and tested at the store/IPC level
+  but not clicked through (needs a signed-in session).
+- 2026-11-27: W28. xAI (Grok) and Groq are registered hosted providers:
+  `api-xai` (https://api.x.ai/v1) and `api-groq` (https://api.groq.com/openai/v1)
+  in `ENGINE_ENDPOINTS`, labelled in `ENGINE_LABELS`, with `XAI_API_KEY` /
+  `GROQ_API_KEY` as credential env fallbacks. Both speak the OpenAI chat
+  protocol, so they stream through the existing OpenAI-compatible adapter with
+  no new code; they appear in Settings > Engines, model discovery, routing and
+  the pickers automatically. Known limit: live calls were not run (needs real
+  API keys); the adapter path is identical to DeepSeek/Mistral, which do run.
+- 2026-11-27: W29. The sandboxed browser is no longer one page per window.
+  Each tab is its own sandboxed BrowserWindow in the same session, with only
+  the active one visible. Steps gained `tab new`, `tab <n>` (1 to 12) and
+  `tab close` (the last tab refuses to close); goto/click/type/screenshot and
+  friends always act on the active tab. Links that open new windows
+  (target=_blank, window.open) now open a background tab in the same session
+  instead of navigating the current page away, and the running tab keeps focus.
+  Closing a tab re-points the active tab and re-shows it. Known limits: the
+  live watch window shows one tab at a time (switch with `tab <n>`); tab state
+  is per run, not persisted between runs; only the parsing is covered by tests
+  (driving real windows needs the app running).
+- 2026-11-27: W30. The three main panels are drag-resizable: the app sidebar
+  (200 to 480 px), the code workspace sidebar (180 to 520 px) and the editor's
+  bottom panel (120 px up to the window minus 180 px, so it can never swallow
+  the editor). Drag the edge, or focus it and use the arrow keys; double-click
+  resets to the CSS default. New `src/renderer/src/components/Resize.tsx`
+  exposes `useDragSize` (pointer drag with body-wide capture, keyboard nudges
+  in 24 px steps, persisted per panel in localStorage under `ventriee.resize.*`
+  and re-clamped to the current bounds on load) and `ResizeHandle`, a
+  role=separator element labelled for screen readers. Sizes flow into the
+  existing grids as CSS custom properties (`--shell-side-w`, `--code-side-w`,
+  `--code-panel-h`), so every layout variant (three-column preview, narrow
+  window, no-sidebar shell) keeps working with its old fallback when a panel
+  was never resized. Handles are hidden when their panel is hidden (no-sidebar
+  shell, closed bottom panel). `tests/resize.test.ts` (3 tests) covers the
+  clamp, the CSS-variable helper and the handle markup; both tsconfigs and the
+  full vitest run are green.
+- 2026-11-27: W31. The accent colour is now owner-settable from Settings →
+  Appearance instead of a CSS variable only the code could change. The choice
+  is stored as `settings.accent` (#abc to #rrggbbaa hex, empty for the theme's
+  own accent) and validated on the main side by `normaliseAccent`, so a stray
+  value can never reach the style layer. App applies it by setting `--accent`
+  on the document root, above built-in dark/light and plugin themes alike: the
+  derived `--accent-soft/-faint/-glow` mixes keep working automatically because
+  they are computed from `--accent`. A small palette of eight presets, a custom
+  colour picker and a Reset chip cover the UI. `tests/accent.test.ts` (3 tests)
+  covers validation and the preset list; both tsconfigs and the full vitest run
+  are green.
+- 2026-11-27: W32. Workflows can now start from GitHub events. A Start step
+  gains two trigger kinds: `github_pr` fires when the project's open-PR list
+  changes (new, closed or updated PR), `github_ci` fires when a GitHub Actions
+  run fails. Both are polled on the existing 30-second scheduler tick through
+  the owner's own `gh` CLI login, one `gh pr list` / `gh run list` call per
+  interested project, so no extra credentials and no webhooks. The payload is
+  reduced to a change signature: PRs by number and updatedAt, CI by the ids of
+  failed runs only, which means a run that stays red does not re-fire on every
+  tick, but a second failure does. Empty results (gh missing, signed out, no
+  GitHub remote) and the first observation never fire, mirroring how the git
+  commit trigger treats its baseline. The digest text ("GitHub PRs open now",
+  "GitHub Actions failures" with ids and titles) becomes the workflow input, so
+  an If step can branch on it and an AI step can summarise it. The Workflows
+  panel lists both options and, like the file/git/run triggers, requires a
+  project before the trigger can watch anything. Tests for both digests and the
+  new trigger kinds were added to `tests/workflows.test.ts` (13 tests total);
+  both tsconfigs and the full vitest run are green.
+- 2026-11-27: W33. The main window now runs inside the Chromium sandbox
+  (`sandbox: true`), closing the last open item from the security review. The
+  gate was the preload: sandboxed renderers cannot use the ESM loader, so a
+  preload must be CommonJS. Our preload only ever touched `contextBridge` and
+  `ipcRenderer` (its other imports are TypeScript types, erased at build time),
+  so the electron-vite preload build was switched to emit `index.cjs`, and the
+  window's `webPreferences` point at the new file. `contextIsolation` stays on
+  and `nodeIntegration` stays off, so the narrow `window.ventriee` bridge is
+  unchanged for the renderer. The automation browser window was already
+  sandboxed with no preload. Checked with a full `npm run build` (the CJS
+  preload lands in `out/preload/`) and both tsconfigs plus the whole vitest run
+  are green; the only risk left is a packaged-installer smoke test, which needs
+  a Windows signing environment and is listed in the wrap-up.
+- 2026-11-27: W34. A phone can now address a desktop project by its cloud id.
+  Cloud sync already stored the cloud project id for every mirrored local
+  project in its `cloud_sync` table, so the fix needed no schema change:
+  `resolveRemoteProject` first tries the local id, then the linked cloud id
+  (joined in by the main process from that table), then a unique exact name, in
+  that order. A phone sending the cloud id of a linked project now reaches the
+  right desktop project even when several projects share a name; an ambiguous
+  link (two local projects joined to the same cloud row) is refused rather
+  than guessed, as is an unknown id. Unlinked projects keep working exactly as
+  before, so this is purely additive. Two new cases in `tests/remote.test.ts`
+  cover the cloud-id match and the ambiguity refusal; both tsconfigs and the
+  full vitest run are green.
+- 2026-11-27: W35. Local model profiles now come from Ollama itself instead of
+  the model name alone. When the model list is built, every Ollama model gets a
+  5-second `/api/show` probe; a failure or a server that does not answer is
+  ignored and the name-based guess stands. When the probe answers, the reported
+  parameter size and context length ride on `ModelOption.paramsB` /
+  `contextLength` and drive the capability profile: 70b and above counts as a
+  strong model, 8b and below as fast, and the real context window replaces the
+  guessed one. This fixes the audit finding that all local models tied because
+  Ollama names like `llama3.1:latest` carry no size hint. A reported size
+  always outranks the name, so a 70b model named without "70b" is no longer
+  treated as a 7b one. `tests/routing.test.ts` (+1) covers strong, fast,
+  mid-size and unreported sizes; both tsconfigs and the full vitest run are
+  green.
+- 2026-11-27: W36. Scoped device grants per project (FINAL_AUDIT #6). Until now
+  a device grant authorized the grantee against every project on the device.
+  Migration 0007 adds `device_grants.project_id`: null keeps the old whole-device
+  meaning (existing rows untouched), a uuid limits the grant to that cloud
+  project. `can_control_device` takes the target project and the commands_insert
+  policy passes `payload.projectId`; a missing or non-uuid project id fails
+  closed (only a whole-device grant or ownership authorizes it). Enforcement
+  stays in RLS, so every client (desktop, web, mobile) is covered by the same
+  rule. `CloudClient.grantDevice` accepts an optional `projectId`; the desktop
+  UI does not yet offer a project picker when granting. Proven on PGlite: the
+  granted project enqueues, another project and an unnamed target are refused.
+- 2026-11-27: W37. Stemmed lexical retrieval (FINAL_AUDIT #10). The engine was
+  BM25 over exact tokens, so inflected queries missed: "git commit staging"
+  ranked `plugins.ts` above `git.ts` because the code says "stage"/"commit".
+  The shared tokenizer now applies a light suffix stemmer (ing/ed/s/e and a
+  doubled final consonant, each above a length floor so short tokens survive)
+  identically to the index and query sides; INDEX_VERSION is bumped 1 -> 2 so
+  existing indexes rebuild once. Known limit: this fixes inflection, not
+  synonyms ("commit code changes" still will not find `git.ts`); that needs
+  embeddings, which stay out of scope for the dependency-free engine.
+- 2026-11-27: W38. Forgot-password on the web dashboard (FINAL_AUDIT #7, client
+  half). "Forgot password?" on the sign-in card switches to a reset mode: one
+  email field, a Supabase `resetPasswordForEmail` send with the app origin as
+  the redirect, and a confirmation state with a back link. Supabase delivers
+  the email and hosts the update form; no server code is involved, so this
+  works with the public key. Email invitations remain open: adding a user by
+  email needs an Edge Function holding the service key, which cannot ship from
+  the client. The reset flow was typechecked and built but not exercised with
+  a real inbox (needs a configured Supabase project).
+- 2026-11-27: Integration of PRs #54-#70 onto `integration/w20-w38` (merges
+  #54..#70, HEAD e553cd1) plus a per-PR bug review. Proof every PR's added
+  lines survive the merge: 17/17 OK. Gates: node+web tsc clean, vitest 525
+  passed/1 skipped, desktop + web builds green, mobile typecheck + 17 tests
+  green. Windows installer built (Ventriee-Studios-0.3.7-setup.exe + portable);
+  the packaged app launches, restores the session, and writes nothing to the
+  error log. Review fixes committed (7953aee): OrgPicker now re-reads the
+  workspace every 15 s and on focus with an unknown-workspace fallback;
+  URL-research blocks are explicitly framed as untrusted background, never
+  instructions (regression test added); accent validation rejects 5/7-digit
+  hex; `checkEventTriggers` is re-entrancy guarded so a hung `gh` call cannot
+  double-fire triggers; remote project resolution filters cloud_sync links by
+  the signed-in user; W30 drag handles align with the 220px narrow-layout
+  sidebar and `.shell` is a positioning context.
+- 2026-11-27: Review fixes continued (bf5698d, bca00c4). W35: ollamaShow now
+  calls the native `/api/show` root instead of the `/v1` compat layer (the old
+  URL 404ed and every model silently fell back to name guesses; regression
+  test pins the URL). W38 web: a recovery link now lands on a set-new-password
+  screen (ResetPassword.tsx, PASSWORD_RECOVERY event) instead of silently
+  signing the user in with the old password still valid. W26: manifest edge
+  ids append the branch/case so two edges between the same pair cannot collide
+  (deleting one branch no longer deletes both), oversized node/edge lists are
+  rejected instead of silently truncated, and provider manifests accept only
+  hosted engines (api-custom plus KEYED_API_ENGINES). W29: tab close splices
+  the tab out synchronously and destroys the window, so the next step cannot
+  hit a dying window. W27: canceling the export dialog no longer toasts
+  success, and exporting a fresh project no longer leaves a stray empty
+  session. W36: the CloudClient interface gained the projectId field the
+  implementation already had. Gates after all fixes: both tsc clean, vitest
+  526 passed/1 skipped, desktop + web builds green, web tests 2 passed.

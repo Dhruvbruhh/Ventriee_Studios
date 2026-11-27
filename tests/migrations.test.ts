@@ -95,6 +95,8 @@ describe('cloud migrations', () => {
       '0004_ownership_guard.sql',
       '0005_desktop_sync.sql',
       '0006_command_defaults.sql',
+      '0007_actor_defaults.sql',
+      '0007_per_project_grants.sql',
     ])
   })
 
@@ -227,6 +229,26 @@ describe('cloud migrations', () => {
       .rejects.toThrow(/row-level security/)
   })
 
+  it('scopes a grant to one project: other projects and unnamed targets fail closed', async () => {
+    const p2 = await as(U1, `insert into public.projects (org_id, owner_id, name) values ($1, $2, 'Other client') returning id`, [orgId, U1])
+    const project2 = (p2.rows[0] as { id: string }).id
+
+    // Swap U2's whole-device grant for a per-project one.
+    await as(U1, `delete from public.device_grants where device_id = $1 and user_id = $2`, [deviceId, U2])
+    await as(U1, `insert into public.device_grants (device_id, user_id, granted_by, project_id) values ($1, $2, $3, $4)`, [deviceId, U2, U1, u1Project])
+
+    const enqueue = (payload: string) =>
+      as(U2, `insert into public.commands (device_id, type, payload, requires_confirmation)
+              values ($1, 'run.start', $2::jsonb, true) returning id`, [deviceId, payload])
+    await enqueue(`{"projectId":"${u1Project}"}`) // the granted project goes through
+    await expect(enqueue(`{"projectId":"${project2}"}`)).rejects.toThrow(/row-level security/)
+    await expect(enqueue('{}')).rejects.toThrow(/row-level security/) // no parseable target: whole-device grant only
+
+    // Restore the whole-device grant; later tests enqueue without a project id.
+    await as(U1, `delete from public.device_grants where device_id = $1 and user_id = $2`, [deviceId, U2])
+    await as(U1, `insert into public.device_grants (device_id, user_id, granted_by) values ($1, $2, $3)`, [deviceId, U2, U1])
+  })
+
   it('cannot enqueue a command for a device in another org scope', async () => {
     await expect(
       as(U1, `insert into public.commands (device_id, org_id, type, requested_by, expires_at)
@@ -254,5 +276,18 @@ describe('cloud migrations', () => {
     ).rejects.toThrow(/at least one owner/)
     const res = await seed(`select role from public.memberships where org_id = $1 and user_id = $2`, [orgId, U1])
     expect(res.rows).toEqual([{ role: 'owner' }])
+  })
+  it('fills the acting user in when the desktop client omits it, and RLS still checks it', async () => {
+    // The desktop CloudClient only holds a token, so it never sends these columns.
+    const project = await as(U2, `insert into public.projects (name) values ('Desktop sync') returning owner_id, id`)
+    expect(project.rows[0]).toMatchObject({ owner_id: U2 })
+    const pid = (project.rows[0] as { id: string }).id
+    const task = await as(U2, `insert into public.tasks (project_id, title) values ($1, 'Synced task') returning created_by`, [pid])
+    expect(task.rows).toEqual([{ created_by: U2 }])
+    const device = await as(U2, `insert into public.devices (name) values ('Laptop') returning user_id`)
+    expect(device.rows).toEqual([{ user_id: U2 }])
+    const audit = await as(U2, `insert into public.audit_log (action) values ('sync.test') returning actor_id`)
+    expect(audit.rows).toEqual([{ actor_id: U2 }])
+    await expect(as(U2, `insert into public.projects (name, owner_id) values ('Forged', $1)`, [U1])).rejects.toThrow(/row-level security/)
   })
 })

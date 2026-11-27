@@ -35,6 +35,19 @@ describe('capability profiles', () => {
     const pick = routeModel({ role: 'backend', models, costPreference: 'quality', difficulty: 'high', profiles })!
     expect(pick.option.model).toBe('gemini-2.5-flash')
   })
+  it('ranks local models by their reported parameter size, not their name', () => {
+    const big = deriveProfile({ ...option('mistral-local'), paramsB: 70, contextLength: 32_768 })
+    const small = deriveProfile({ ...option('mistral-local'), paramsB: 7 })
+    const mid = deriveProfile({ ...option('mistral-local'), paramsB: 13 })
+    expect(big.reasoningScore).toBe(80)
+    expect(big.contextWindow).toBe(32_768)
+    expect(big.latencyTier).toBe('slow')
+    expect(small.reasoningScore).toBe(45)
+    expect(small.latencyTier).toBe('fast')
+    expect(mid.reasoningScore).toBe(60)
+    // a bogus size falls back to the name-derived profile
+    expect(deriveProfile({ ...option('mistral-local'), paramsB: 0 }).reasoningScore).toBe(60)
+  })
 })
 
 describe('fallback chain', () => {
@@ -57,6 +70,11 @@ describe('provider lists', () => {
     const { LOCAL_API_ENGINES, KEYED_API_ENGINES, ENGINE_ENDPOINTS } = await import('../src/shared/types')
     expect(LOCAL_API_ENGINES).toEqual(['api-ollama', 'api-lmstudio', 'api-vllm'])
     expect(KEYED_API_ENGINES.length + LOCAL_API_ENGINES.length).toBe(Object.keys(ENGINE_ENDPOINTS).length)
+    // xAI and Groq are registered hosted providers (OpenAI-compatible, keyed).
+    expect(KEYED_API_ENGINES).toContain('api-xai')
+    expect(KEYED_API_ENGINES).toContain('api-groq')
+    expect(ENGINE_ENDPOINTS['api-xai']).toBe('https://api.x.ai/v1')
+    expect(ENGINE_ENDPOINTS['api-groq']).toBe('https://api.groq.com/openai/v1')
   })
 })
 
@@ -69,6 +87,23 @@ describe('providerModel', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('https://example.test/v1/models')
     fetchMock.mockResolvedValue(new Response('', { status: 401 }))
     await expect(providerModel('api-openai', 'https://example.test/x', null)).rejects.toThrow(/Pick a model in Settings/)
+    fetchMock.mockRestore()
+  })
+})
+
+describe('ollamaShow', () => {
+  it('calls the native /api/show root (not the /v1 compat layer) and parses size and context', async () => {
+    const { vi } = await import('vitest')
+    const { ollamaShow } = await import('../src/main/planning')
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      details: { parameter_size: '7.6B' },
+      model_info: { 'llama3:8b.context_length': 8192 }
+    })))
+    const out = await ollamaShow('llama3:8b')
+    const url = String(fetchMock.mock.calls[0][0])
+    expect(url).toMatch(/\/api\/show$/)
+    expect(url).not.toContain('/v1/')
+    expect(out).toEqual({ paramsB: 7.6, contextLength: 8192 })
     fetchMock.mockRestore()
   })
 })
