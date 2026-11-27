@@ -37,6 +37,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W22 | Workspace switching in the desktop topbar (§4) | W14, W18 | Done | The switch itself existed (IPC `cloudWorkspace` → `auth.setWorkspace` → `cloudSync.setSession`), but was only reachable in the Memory panel. New topbar `OrgPicker` (hidden when signed out or org-less): Personal or any org of the account, drives cloud-sync target and which org new projects join; `src/renderer/src/components/OrgPicker.tsx` |
 | W26 | Workflow + provider manifests: export/import (§26) | - | Done | `src/shared/manifests.ts` (workflow + provider manifest validation, mirroring the agent manifest rules; provider manifests never carry keys); IPC `workflow:export/import`, `provider:export/import`; handlers in `src/main/index.ts` (2 MB cap, imports arrive switched off / keyless); Export + Import buttons in the Workflows panel and Settings › Engines; `tests/manifests.test.ts` (10 tests) |
 | W28 | xAI (Grok) + Groq providers (FEATURE_STATUS Phase 2) | - | Done | `api-xai` + `api-groq` registered in `ENGINE_ENDPOINTS`/`ENGINE_LABELS` with env keys `XAI_API_KEY`/`GROQ_API_KEY`; both stream through the existing OpenAI-compatible adapter; `tests/routing.test.ts` asserts registration |
+| W29 | Browser tabs (FEATURE_STATUS Phase 10) | - | Done | `browserAutomation.ts`: one sandboxed window per tab in the same session, only the active one visible; `tab new`/`tab <n>`/`tab close` steps in `browserSteps.ts` (1-12); new-tab links open a background tab without stealing focus; `tests/browser-steps.test.ts` (tab parsing) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -256,3 +257,14 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   no new code; they appear in Settings > Engines, model discovery, routing and
   the pickers automatically. Known limit: live calls were not run (needs real
   API keys); the adapter path is identical to DeepSeek/Mistral, which do run.
+- 2026-11-27: W29. The sandboxed browser is no longer one page per window.
+  Each tab is its own sandboxed BrowserWindow in the same session, with only
+  the active one visible. Steps gained `tab new`, `tab <n>` (1 to 12) and
+  `tab close` (the last tab refuses to close); goto/click/type/screenshot and
+  friends always act on the active tab. Links that open new windows
+  (target=_blank, window.open) now open a background tab in the same session
+  instead of navigating the current page away, and the running tab keeps focus.
+  Closing a tab re-points the active tab and re-shows it. Known limits: the
+  live watch window shows one tab at a time (switch with `tab <n>`); tab state
+  is per run, not persisted between runs; only the parsing is covered by tests
+  (driving real windows needs the app running).

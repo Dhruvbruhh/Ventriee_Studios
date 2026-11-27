@@ -20,6 +20,19 @@ describe('parseSteps', () => {
     expect(steps[6]).toMatchObject({ name: 'after-login' })
   })
 
+  it('parses tab steps and bounds the tab number', () => {
+    const { steps, errors } = parseSteps('tab new\ntab 2\ntab close\ntab 99\ntab two', '')
+    expect(steps).toMatchObject([
+      { action: 'tab', target: 'new' },
+      { action: 'tab', target: '2' },
+      { action: 'tab', target: 'close' }
+    ])
+    expect(errors).toEqual([
+      'Line 4: use: tab new, tab <n> (1-based, 1 to 12) or tab close',
+      'Line 5: use: tab new, tab <n> (1-based, 1 to 12) or tab close'
+    ])
+  })
+
   it('refuses non-web addresses and reports bad lines by number', () => {
     const { steps, errors } = parseSteps('goto file:///C:/secrets.txt\nclick\nwait 999999\nfly away')
     expect(steps).toEqual([])
