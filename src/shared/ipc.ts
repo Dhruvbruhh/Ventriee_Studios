@@ -6,6 +6,7 @@ import type {
   Assignment,
   Automation,
   ChatMessage,
+  ChatTemplate,
   CreateAgentInput,
   EngineKind,
   MemoryDoc,
@@ -115,6 +116,7 @@ export const IPC = {
   openExternal: 'shell:openExternal',
   revealFile: 'shell:reveal',
   chatSend: 'chat:send', chatSessionNew: 'chat:session-new', chatSessionSelect: 'chat:session-select',
+  chatTemplateSave: 'chat:template-save', chatTemplateDelete: 'chat:template-delete', chatExport: 'chat:export',
   promptCreate: 'prompt:create',
   promptEnhance: 'prompt:enhance',
   promptSave: 'prompt:save',
@@ -377,6 +379,11 @@ export interface VentrieeApi {
   chatSend(input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string; images?: string[]; replaceFrom?: string }): Promise<ChatMessage>
   chatSessionNew(projectId: string): Promise<void>
   chatSessionSelect(projectId: string, conversationId: string): Promise<void>
+  /** Save (create or update) a reusable chat template. */
+  chatTemplateSave(input: { id?: string; name: string; content: string }): Promise<ChatTemplate>
+  chatTemplateDelete(id: string): Promise<void>
+  /** Writes the session transcript to a Markdown file via a save dialog; null when canceled. */
+  chatExport(projectId: string, conversationId?: string): Promise<string | null>
   onChatChunk(cb: (payload: { projectId: string; messageId: string; chunk: string }) => void): () => void
   promptCreate(input: { projectId: string; engine: EngineKind; model: string; endpoint: string }): Promise<PromptDoc>
   promptEnhance(input: { projectId: string; promptId: string; engine: EngineKind; model: string; endpoint: string }): Promise<PromptDoc>

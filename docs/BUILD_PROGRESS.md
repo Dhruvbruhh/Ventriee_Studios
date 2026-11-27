@@ -31,6 +31,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
+| W27 | Chat templates + conversation export (FEATURE_STATUS Phase 3) | - | Done | `chat_templates` table (global, SQLite migration 17); `Store.saveChatTemplate`/`deleteChatTemplate`; Templates picker in the planning composer (insert anywhere, save draft as template); `shared/transcript.ts` + `chatExport` IPC saving a session as Markdown; `tests/chat-templates.test.ts` (2 tests) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -202,3 +203,16 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W27. Two Phase 3 gaps closed. Reusable templates: a global
+  `chat_templates` table (SQLite migration 17) with a Templates picker in the
+  planning composer; "Save current draft as template" names it from the draft's
+  first line, picking a template inserts its text into the composer, and the
+  trash icon deletes it. Templates are shared across projects on purpose (a
+  good brief opener follows you around). Conversation export: "Export transcript"
+  above the composer writes the active session to Markdown via a save dialog,
+  one `## You` / `## Assistant (model)` heading per turn, `## Session N` title
+  when the session has none; empty sessions refuse to export. Known limits: the
+  picker lists every template with no search (fine at personal scale), and
+  export saves only the active session (per-session export lives in the sidebar
+  later if wanted). The UI was typechecked and tested at the store/IPC level
+  but not clicked through (needs a signed-in session).

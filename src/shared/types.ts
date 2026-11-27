@@ -310,6 +310,14 @@ export interface Conversation {
   updatedAt: number
 }
 
+/** A reusable snippet the owner drops into the planning composer instead of retyping it. */
+export interface ChatTemplate {
+  id: string
+  name: string
+  content: string
+  createdAt: number
+}
+
 export type PromptSource = 'generated' | 'enhanced' | 'edited' | 'restored'
 
 /** Every prompt revision is a row. Nothing is overwritten in place. */
@@ -772,6 +780,7 @@ export interface Snapshot {
   conversations: Conversation[]
   sessionIndex: Array<{ id: string; projectId: string; title: string }>
   chat: ChatMessage[]
+  chatTemplates: ChatTemplate[]
   prompts: PromptDoc[]
   providerConfigs: ProviderConfig[]
   assignments: Assignment[]
