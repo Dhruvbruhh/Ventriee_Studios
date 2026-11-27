@@ -49,6 +49,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   requireDeployApproval: true,
   reducedMotion: true,
   plannerFallback: true,
+  companyPack: '',
   clarifyBrief: true,
   routingMode: 'automatic',
   costPreference: 'balanced',
@@ -648,8 +649,11 @@ export class Store {
     return departments
   }
 
-  importAgents(parsed: ParsedManifest) {
-    this.saveStoredCatalogue(applyImport(this.storedCatalogue(), parsed, this.agentCatalogue()))
+  /** enable=true switches the imported agents on (a trusted pack); a manual import leaves new ones off. */
+  importAgents(parsed: ParsedManifest, enable = false) {
+    const stored = applyImport(this.storedCatalogue(), parsed, this.agentCatalogue())
+    const roles = new Set(parsed.templates.map((t) => t.role))
+    this.saveStoredCatalogue(enable ? { ...stored, templates: stored.templates.map((t) => (roles.has(t.role) ? { ...t, enabled: true } : t)) } : stored)
   }
 
   // ---------- automations ----------

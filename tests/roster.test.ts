@@ -9,10 +9,11 @@ import { Credentials } from '../src/main/credentials'
 import { Orchestrator } from '../src/main/orchestrator'
 import type { Agent, Project } from '../src/shared/types'
 import type { Plan } from '../src/main/planner'
+import { withSquad } from './fixtures/squad'
 
 function setup() {
   const userData = mkdtempSync(join(tmpdir(), 'ventriee-roster-'))
-  const store = new Store(join(userData, 'ventriee.db'))
+  const store = withSquad(new Store(join(userData, 'ventriee.db')))
   store.saveSettings({ ...store.settings(), orchestratorEngine: 'api-anthropic', orchestratorModel: 'owner-chosen-model' })
   const project = store.createProject({ name: 'Roster', path: userData, description: '' })
   const orchestrator = new Orchestrator({

@@ -142,3 +142,11 @@ describe('website pipeline', () => {
     expect(roles).not.toContain('security')
   })
 })
+
+describe('role fallback with a small team', () => {
+  it('never hands an unknown role to the planner itself', async () => {
+    const { normalizeRole } = await import('../src/main/planner')
+    expect(normalizeRole('frontend', ['orchestrator', 'assistant'])).toBe('assistant')
+    expect(normalizeRole('qa engineer', ['orchestrator', 'assistant'])).toBe('assistant')
+  })
+})

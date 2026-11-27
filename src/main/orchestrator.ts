@@ -17,7 +17,7 @@ import { parseVerdict } from './review'
 import { roleByName, MANDATORY_SKILLS, WEBSITE_ROLES, type Phase } from './roles'
 import { scopeToRole, DELIVERABLE_BY_ROLE } from './brief'
 import { clarifyPrompt, foldClarifications, parseClarifyAnswer } from './clarify'
-import { heuristicPlan, orderTasks, parsePlanAnswer, pickSpecialists, type Plan } from './planner'
+import { heuristicPlan, normalizeRole, orderTasks, parsePlanAnswer, pickSpecialists, type Plan } from './planner'
 import { promotable } from './queue'
 import { routeModel, routeModels, type RouteChoice } from './routing'
 import { newId } from './store'
@@ -340,7 +340,8 @@ JSON shape:
     const validRoles = this.plannableRoles(roster, website)
     const fallback = this.deps.store.settings().plannerFallback
     const noPlan = (reason: string): Plan => {
-      if (fallback) return heuristicPlan(instruction, website)
+      // the fallback names the classic squad's roles; map each onto a role this studio actually has
+      if (fallback) { const plan = heuristicPlan(instruction, website); return { ...plan, tasks: plan.tasks.map((t) => ({ ...t, role: normalizeRole(t.role, validRoles) })) } }
       throw new Error(
         `${reason}. The fallback planner is switched off, so nothing was queued. Turn "Fallback planner" on in Settings to let the deterministic planner take over.`
       )

@@ -8,6 +8,7 @@ import { MemoryService } from '../src/main/memory'
 import { Credentials } from '../src/main/credentials'
 import { Orchestrator } from '../src/main/orchestrator'
 import type { Task } from '../src/shared/types'
+import { withSquad } from './fixtures/squad'
 
 /**
  * The evidence check must attribute only files inside the worker's claimed scope,
@@ -40,7 +41,7 @@ function makeTask(role: string): Task {
 
 function orchestrator(): Orchestrator {
   const userData = mkdtempSync(join(tmpdir(), 'ventriee-evidence-'))
-  const store = new Store(join(userData, 'ventriee.db'))
+  const store = withSquad(new Store(join(userData, 'ventriee.db')))
   return new Orchestrator({
     store,
     memory: new MemoryService(store, userData),

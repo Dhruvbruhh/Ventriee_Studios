@@ -34,7 +34,7 @@ Keys are stored in the OS credential store, never in project files.
 ## 4. Team workflow
 
 - Each person has their own local copy — collaborate by using git as usual (the agents already commit/respect git repos).
-- To share the same skills and conventions, copy the `resources/skills` folder from one install to another, or share the repo's bundled skills.
+- To get the team's agents and skills, paste the team pack's Git address in Settings → Workers → Team pack (ask for read access to the private repo first). It updates itself every time the app starts.
 
 ## Troubleshooting
 

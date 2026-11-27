@@ -1,6 +1,6 @@
 /**
- * Packaged-app check: the built exe must boot on a clean profile, seed the
- * bundled skills from resources/skills, and render with no console errors.
+ * Packaged-app check: the built exe must boot on a clean profile
+ * and render with no console errors. (Skills come from plugins now, so none are required.)
  *
  * Run after `npm run dist`:  node scripts/packaged-smoke.mjs
  */
@@ -29,11 +29,11 @@ const snapshot = await app.evaluate(`window.ventriee.snapshot()`)
 const brand = await app.evaluate(`document.querySelector('.brand')?.textContent?.trim() ?? ''`)
 
 console.log('brand:', brand)
-console.log('skills seeded from resources:', snapshot.skills.length, snapshot.skills.map((s) => s.name).join(', '))
+console.log('skills installed:', snapshot.skills.length)
 console.log('userData:', userData)
 console.log('console errors:', app.errors.length ? app.errors.slice(0, 5) : 'none')
 
 app.ws.close()
 spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true })
 await sleep(800)
-process.exit(brand.includes('VENTRIEE') && snapshot.skills.length > 0 && app.errors.length === 0 ? 0 : 1)
+process.exit(brand.includes('VENTRIEE') && app.errors.length === 0 ? 0 : 1)

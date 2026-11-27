@@ -191,7 +191,7 @@ export interface PluginInfo {
   themes: PluginTheme[]
   commands: PluginCommand[]
   /** What it added, so removal takes exactly that back. */
-  added: { skills: string[]; mcpServers: string[]; workflows: string[] }
+  added: { skills: string[]; mcpServers: string[]; workflows: string[]; agents?: string[] }
   errors: string[]
 }
 
@@ -630,6 +630,8 @@ export interface AppSettings {
   requireDeployApproval: boolean
   reducedMotion: boolean
   plannerFallback: boolean
+  /** https Git address of a private team pack (a plugin) kept installed and current; '' for none. */
+  companyPack: string
   /** Ask the owner clarifying questions before planning a vague brief. */
   clarifyBrief: boolean
   /** Who picks models: the owner, the orchestrator, or both. */

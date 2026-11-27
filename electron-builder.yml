@@ -10,10 +10,7 @@ files:
   - out/**
   - package.json
 
-# The bundled SKILL.md library is read from process.resourcesPath when packaged.
 extraResources:
-  - from: resources/skills
-    to: skills
   # Runs Jupyter kernels for notebooks (with the owner's Python and jupyter_client).
   - from: resources/kernel_bridge.py
     to: kernel_bridge.py

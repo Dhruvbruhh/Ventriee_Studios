@@ -32,8 +32,12 @@ studio. It does **not** replace your tools — it orchestrates them:
   Python scripts, images and documents preview live as files change.
 - **Memory.** Markdown + SQLite memory, shared across projects, workers and sessions, that
   survives restarts.
-- **Skills.** A 132-skill registry, categorized per worker, with every skill scanned on
-  import for malicious patterns (SkillSpector-style) before it is installed.
+- **Skills and agents.** Starts plain: a planner and one general agent, no skills. Add your
+  own skills and agent types, import them, or install a plugin. Every skill is scanned for
+  malicious patterns (SkillSpector-style) before it is installed.
+- **Team packs.** A team can keep its own agents and skills in a private Git repository
+  (a plugin with an agent catalogue). Paste its address in Settings → Workers → Team pack:
+  the app installs it and updates it on every start. Only people with read access get it.
 
 ## What you can build with it
 
