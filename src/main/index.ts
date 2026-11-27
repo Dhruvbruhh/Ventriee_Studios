@@ -192,7 +192,10 @@ async function syncRemoteDevice(session: { userId: string; activeOrgId: string |
 }
 /** Resolve the target project for a remote command; throws rather than guess. */
 function remoteProject(cmd: { payload: Record<string, unknown> }): Project {
-  return resolveRemoteProject(cmd.payload, store.projects())
+  // cloud sync links each local project to its cloud row; phones address that cloud id
+  const links = store.db.all<{ localId: string; cloudId: string }>(`SELECT localId, cloudId FROM cloud_sync WHERE kind = 'project' AND cloudId IS NOT NULL`)
+  const linkOf = new Map(links.map((l) => [l.localId, l.cloudId]))
+  return resolveRemoteProject(cmd.payload, store.projects().map((p) => ({ ...p, cloudId: linkOf.get(p.id) ?? null })))
 }
 protocol.registerSchemesAsPrivileged([{ scheme: RENDERER_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }])
 
