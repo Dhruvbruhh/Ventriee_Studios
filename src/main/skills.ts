@@ -118,19 +118,6 @@ export class SkillService {
     }
   }
 
-  /** Import the reusable skills shipped with the studio on first boot. */
-  seedBundled(bundledDir: string) {
-    if (!existsSync(bundledDir)) return
-    for (const entry of readdirSync(bundledDir)) {
-      const src = join(bundledDir, entry)
-      if (!statSync(src).isDirectory()) continue
-      const target = join(this.root, entry)
-      if (existsSync(target)) continue
-      // Recursive: most skills carry references/, scripts/ or assets/ that the
-      // SKILL.md links to, and a top-level-only copy leaves those links dangling.
-      cpSync(src, target, { recursive: true })
-    }
-  }
 }
 
 export function parseSkill(file: string, folder: string): SkillRecord {

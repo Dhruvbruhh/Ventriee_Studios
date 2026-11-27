@@ -103,3 +103,32 @@ describe('PluginService', () => {
     expect(() => plugins.remove('base')).toThrow(/Remove needy first/)
   })
 })
+
+describe('team pack', () => {
+  const PACK = { id: 'team-pack', name: 'Team pack', version: '1.0.0', minAppVersion: '0.1.0', contributes: { skills: ['skills/ponytail'], catalogue: 'agents.json' } }
+  const AGENTS = { format: 'ventriee-agents', version: 1, departments: [{ id: 'quality', name: 'Quality' }], agents: [
+    { role: 'reviewer', name: 'Vera', title: 'Reviewer', description: 'Reviews.', department: 'quality', color: '#123456', instructions: 'Review it.', engine: '', model: '', skills: ['ponytail'], mcpServers: [], writesCode: false, budgetUsd: 5, requiresApproval: false, enabled: true },
+    { role: 'orchestrator', name: 'Ada', title: 'Orchestrator', description: 'Plans.', department: 'quality', color: '#123456', instructions: 'Plan well.', engine: '', model: '', skills: [], mcpServers: [], writesCode: false, budgetUsd: 5, requiresApproval: false, enabled: true }
+  ] }
+  const FILES = { 'skills/ponytail/SKILL.md': '---\nname: ponytail\ndescription: Be lazy\n---\n\nSmallest change.\n', 'agents.json': JSON.stringify(AGENTS) }
+
+  it('adds its agents switched on, takes over a same-named bundled skill, and removing it puts the plain catalogue back', async () => {
+    const data = mkdtempSync(join(tmpdir(), 'vs-pack-'))
+    const store = new Store(join(data, 'ventriee.db'))
+    const skills = new SkillService(store, data)
+    // an older build seeded this skill directly
+    mkdirSync(join(data, 'skills', 'ponytail'), { recursive: true })
+    writeFileSync(join(data, 'skills', 'ponytail', 'SKILL.md'), '---\nname: ponytail\ndescription: old\n---\n')
+    const plugins = new PluginService(store, skills, data, '0.3.8')
+    const preview = await plugins.preview({ type: 'folder', value: makePlugin(PACK, FILES) })
+    expect(preview.permissions.join(' ')).toMatch(/agent catalogue/)
+    const info = plugins.install(preview.token, true)
+    expect(info.added).toMatchObject({ skills: ['ponytail'], agents: ['reviewer', 'orchestrator'] })
+    const cat = store.agentCatalogue().templates
+    expect(cat.find((t) => t.role === 'reviewer')).toMatchObject({ enabled: true, builtin: false })
+    expect(cat.find((t) => t.role === 'orchestrator')).toMatchObject({ name: 'Ada', builtin: true })
+    plugins.remove('team-pack')
+    expect(store.agentCatalogue().templates.map((t) => [t.role, t.name])).toEqual([['orchestrator', 'Planner'], ['assistant', 'Assistant']])
+    expect(existsSync(join(data, 'skills', 'ponytail'))).toBe(false)
+  })
+})

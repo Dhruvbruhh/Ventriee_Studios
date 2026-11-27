@@ -29,6 +29,7 @@ import { Credentials } from '../src/main/credentials'
 import { Orchestrator } from '../src/main/orchestrator'
 import { WorktreeService } from '../src/main/worktrees'
 import type { Agent, Job, Task } from '../src/shared/types'
+import { withSquad } from './fixtures/squad'
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' })
@@ -38,7 +39,7 @@ async function runTwo(files: [string, string], gitRepo = true) {
   const root = mkdtempSync(join(tmpdir(), 'ventriee-orchroot-'))
   writeFileSync(join(root, 'readme.txt'), 'hi\n')
   if (gitRepo) { git(root, 'init', '--quiet'); git(root, 'config', 'core.autocrlf', 'false'); git(root, 'add', '-A'); git(root, 'commit', '--quiet', '-m', 'init') }
-  const store = new Store(join(data, 'ventriee.db'))
+  const store = withSquad(new Store(join(data, 'ventriee.db')))
   const orchestrator = new Orchestrator({
     store, memory: new MemoryService(store, data), creds: new Credentials(store.db), emit: new EventEmitter(), notify: () => {},
     isProjectOpen: () => true, models: () => [], providerConfigs: () => [], worktrees: new WorktreeService(data)

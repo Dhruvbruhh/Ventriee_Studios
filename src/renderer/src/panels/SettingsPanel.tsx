@@ -275,6 +275,24 @@ function Engines() {
   )
 }
 
+/** A private Git repo of agents and skills (a plugin) that the app keeps installed; only people with access to the repo get it. */
+function TeamPack() {
+  const saved = useStore((s) => s.snapshot!.settings.companyPack)
+  const [url, setUrl] = useState(saved)
+  const [busy, setBusy] = useState(false)
+  return <form className="team-pack" onSubmit={(e) => {
+    e.preventDefault(); setBusy(true)
+    void guard(() => window.ventriee.saveSettings({ companyPack: url.trim() }), url.trim() ? 'Team pack installed' : 'Team pack address cleared').finally(() => setBusy(false))
+  }}>
+    <label className="field-label" htmlFor="team-pack">Team pack (private Git address)</label>
+    <div className="flex gap-8">
+      <input id="team-pack" className="input" placeholder="https://github.com/your-org/your-pack" value={url} onChange={(e) => setUrl(e.target.value)} disabled={busy} />
+      <button className="btn primary" disabled={busy || url.trim() === saved}>{busy ? 'Installing…' : 'Save'}</button>
+    </div>
+    <p className="hint">Your team's agents and skills. It updates itself each time the app starts. You need read access to the repository.</p>
+  </form>
+}
+
 function Workers() {
   const snapshot = useStore((s) => s.snapshot)!
   const [selected, setSelected] = useState<string | null>(snapshot.agents[0]?.id ?? null)
@@ -283,6 +301,7 @@ function Workers() {
 
   return (<>
     <PaneHead title="Workers">Who is on the team, which model each one runs, and how much it may do on its own.</PaneHead>
+    <TeamPack />
     <div className="agents-editor">
       <div className="agents-list">
         {snapshot.agents.map((a) => (

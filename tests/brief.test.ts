@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SECTIONS, ensureSections, scopeToRole, DELIVERABLE_BY_ROLE } from '../src/main/brief'
-import { ROLE_TEMPLATES } from '../src/main/roles'
+import { SQUAD } from './fixtures/squad'
 
 const headings = (body: string) => [...body.matchAll(/^##\s+(.+)$/gm)].map((m) => m[1].trim())
 
@@ -88,22 +88,13 @@ describe('naming the deliverable', () => {
   // 147k characters across three sessions without ever finishing. A named file is
   // what lets a worker know it is done.
   it('gives every role that writes code somewhere specific to put it', () => {
-    const missing = ROLE_TEMPLATES.filter((r) => r.writesCode && !DELIVERABLE_BY_ROLE[r.role])
-    expect(missing.map((r) => r.role)).toEqual([])
+    // the general assistant's deliverable is whatever its task names; specialists each get a file
+    const missing = SQUAD.filter(([role, , writesCode]) => writesCode && !DELIVERABLE_BY_ROLE[role])
+    expect(missing.map(([role]) => role)).toEqual([])
   })
 
   it('names the design system for the designer', () => {
     expect(DELIVERABLE_BY_ROLE.designer).toBe('docs/design-system.md')
   })
 
-  // Run #23: the designer was offered the artifact skills and shipped a 54k-character
-  // HTML showcase instead of the doc. The skill that names the deliverable has to be
-  // the one bound to the role.
-  it('binds the designer to the design-system skill, not the artifact ones', () => {
-    const skills = ROLE_TEMPLATES.find((r) => r.role === 'designer')!.skills
-    expect(skills).toContain('design-system')
-    expect(skills).not.toContain('canvas-design')
-    expect(skills).not.toContain('banner-design')
-    expect(skills).not.toContain('slides')
-  })
 })

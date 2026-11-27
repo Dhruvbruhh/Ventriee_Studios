@@ -1172,8 +1172,11 @@ function registerIpc() {
   handle(IPC.saveSettings, async (_e, patch: Partial<AppSettings>) => {
     if (patch && 'mcpServers' in patch) patch = { ...patch, mcpServers: validMcpServers(patch.mcpServers) }
     for (const key of ['dailyBudgetUsd', 'projectBudgetUsd'] as const) if (patch && key in patch) patch = { ...patch, [key]: Math.min(100_000, Math.max(0, Number(patch[key]) || 0)) }
+    const before = store.settings().companyPack
     const next = store.saveSettings(patch)
     debouncedNotify()
+    // a new pack address installs right away, so a wrong address or missing access shows up here
+    if (next.companyPack.trim() && next.companyPack !== before) { await plugins.syncPack(next.companyPack); skills.scan(); debouncedNotify() }
     return next
   })
 
@@ -1647,10 +1650,6 @@ function bootstrapData() {
     }
   )
 
-  const bundledSkills = isDev
-    ? join(app.getAppPath(), 'resources', 'skills')
-    : join(process.resourcesPath, 'skills')
-  skills.seedBundled(bundledSkills)
   skills.scan()
   memory.reindex()
 
@@ -1729,6 +1728,8 @@ app.whenReady().then(async () => {
   })
   await refreshProviders()
   createWindow()
+  // Team pack: install or update it in the background; offline or no access just keeps what is installed.
+  if (store.settings().companyPack.trim()) void plugins.syncPack(store.settings().companyPack).then(() => { skills.scan(); debouncedNotify() }).catch((error: Error) => errors?.record('company-pack', error.message))
   // Discover models in the background: without this the picker stayed empty until a manual Rescan.
   void refreshModels(store.activeProjectId()).catch((error: Error) => errors?.record('models', error.message, error.stack))
   updater.start()

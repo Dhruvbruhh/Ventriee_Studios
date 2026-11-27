@@ -2291,3 +2291,6 @@ body {
   .simple-stage.build { flex-direction: column; }
   .simple-preview { width: 100%; }
 }
+
+.team-pack { display: grid; gap: 6px; margin-bottom: var(--s-4); }
+.team-pack .input { flex: 1; }

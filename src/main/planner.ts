@@ -439,7 +439,8 @@ export function normalizeRole(raw: string, valid: string[]): string {
   const guess = ['database', 'security', 'frontend', 'backend', 'designer', 'qa', 'reviewer', 'researcher', 'fixer', 'integration', 'seo', 'aeo', 'deployment', 'monitoring', 'architect']
   const bySubstring = guess.find((role) => valid.includes(role) && key.includes(role))
   if (bySubstring) return bySubstring
-  return valid.includes('frontend') ? 'frontend' : valid[0]
+  // never hand a work task to the planner itself when any worker role exists
+  return valid.includes('frontend') ? 'frontend' : valid.find((role) => role !== 'orchestrator') ?? valid[0]
 }
 
 /** Parse a model's JSON plan defensively: models wrap it in prose or fences. */

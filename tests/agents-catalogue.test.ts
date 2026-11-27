@@ -11,10 +11,11 @@ import { ROLE_TEMPLATES } from '../src/main/roles'
 import { DEFAULT_DEPARTMENTS, parseManifest, toManifest } from '../src/shared/agents'
 import type { Agent, Project } from '../src/shared/types'
 import type { Plan } from '../src/main/planner'
+import { withSquad } from './fixtures/squad'
 
 function setup() {
   const dir = mkdtempSync(join(tmpdir(), 'ventriee-agents-'))
-  const store = new Store(join(dir, 'ventriee.db'))
+  const store = withSquad(new Store(join(dir, 'ventriee.db')))
   store.saveSettings({ ...store.settings(), orchestratorEngine: 'api-anthropic', orchestratorModel: 'studio-model' })
   const project = store.createProject({ name: 'Catalogue', path: dir, description: '' })
   const orchestrator = new Orchestrator({
@@ -42,9 +43,9 @@ describe('agent catalogue', () => {
     const { store, orchestrator } = setup()
     const cat = store.agentCatalogue()
     expect(cat.departments).toEqual(DEFAULT_DEPARTMENTS)
-    expect(cat.templates.map((t) => t.role)).toEqual(ROLE_TEMPLATES.map((t) => t.role))
+    expect(cat.templates.filter((t) => t.builtin).map((t) => t.role)).toEqual(ROLE_TEMPLATES.map((t) => t.role))
     const ids = new Set(cat.departments.map((d) => d.id))
-    expect(cat.templates.every((t) => t.builtin && t.enabled && ids.has(t.department))).toBe(true)
+    expect(cat.templates.every((t) => t.enabled && ids.has(t.department))).toBe(true)
     expect(plannable(orchestrator, [])).toEqual(expect.arrayContaining(['frontend', 'backend', 'qa', 'reviewer']))
   })
 
@@ -62,15 +63,15 @@ describe('agent catalogue', () => {
   it('disabling a template removes it from planning and hiring', () => {
     const { store, project, orchestrator } = setup()
     store.saveAgentTemplate({ ...a11y, enabled: false }, true)
-    const { builtin: _b, ...fe } = store.agentCatalogue().templates.find((t) => t.role === 'frontend')!
+    const { builtin: _b, ...fe } = store.agentCatalogue().templates.find((t) => t.role === 'assistant')!
     store.saveAgentTemplate({ ...fe, enabled: false })
     expect(plannable(orchestrator, [])).not.toContain('a11y')
-    expect(plannable(orchestrator, [])).not.toContain('frontend')
-    persist(orchestrator, project, ['a11y', 'frontend'], orchestrator.ensureRoster(project))
+    expect(plannable(orchestrator, [])).not.toContain('assistant')
+    persist(orchestrator, project, ['a11y', 'assistant'], orchestrator.ensureRoster(project))
     expect(store.agents(project.id).map((a) => a.role)).toEqual(['orchestrator'])
     // Reset restores the shipped built-in.
-    store.deleteAgentTemplate('frontend')
-    expect(store.agentCatalogue().templates.find((t) => t.role === 'frontend')).toMatchObject({ enabled: true, builtin: true })
+    store.deleteAgentTemplate('assistant')
+    expect(store.agentCatalogue().templates.find((t) => t.role === 'assistant')).toMatchObject({ enabled: true, builtin: true })
   })
 
   it('departments can be added, renamed and deleted only when empty', () => {
@@ -100,10 +101,10 @@ describe('agent catalogue', () => {
 
   it('importing an edited built-in keeps it enabled', () => {
     const { store } = setup()
-    const manifest = toManifest(store.agentCatalogue(), { role: 'reviewer' })
+    const manifest = toManifest(store.agentCatalogue(), { role: 'assistant' })
     manifest.agents[0].instructions = 'Stricter review.'
     store.importAgents(parseManifest(manifest, { skills: [], mcpServers: [] }))
-    expect(store.agentCatalogue().templates.find((t) => t.role === 'reviewer')).toMatchObject({ instructions: 'Stricter review.', enabled: true, builtin: true })
+    expect(store.agentCatalogue().templates.find((t) => t.role === 'assistant')).toMatchObject({ instructions: 'Stricter review.', enabled: true, builtin: true })
   })
 })
 

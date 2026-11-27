@@ -46,7 +46,7 @@ export const DEFAULT_DEPARTMENTS: Department[] = [
 
 /** Default department of each built-in role. */
 export const DEPARTMENT_OF: Record<string, string> = {
-  orchestrator: 'project-management', architect: 'project-management',
+  orchestrator: 'project-management', assistant: 'project-management', architect: 'project-management',
   designer: 'frontend', frontend: 'frontend', seo: 'frontend', aeo: 'frontend',
   backend: 'backend', integration: 'backend', database: 'backend',
   reviewer: 'quality', fixer: 'quality', qa: 'quality',

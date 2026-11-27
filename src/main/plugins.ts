@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { Store } from './store'
@@ -7,6 +7,7 @@ import type { SkillService } from './skills'
 import type { PluginInfo } from '../shared/types'
 import { compareVersions, permissionsOf, readManifest, type PluginManifest } from './pluginManifest'
 import { serverName } from './mcpRegistry'
+import { parseManifest } from '../shared/agents'
 
 type Source = PluginInfo['source']
 const KV = 'plugins'
@@ -57,7 +58,7 @@ export class PluginService {
   }
 
   /** Install (or update) a previewed plugin. */
-  install(token: string): PluginInfo {
+  install(token: string, adoptSkills = false): PluginInfo {
     const staged = this.staged.get(token)
     if (!staged) throw new Error('Preview the plugin again before installing')
     this.staged.delete(token)
@@ -68,9 +69,12 @@ export class PluginService {
       const previous = this.list().find((p) => p.id === manifest.id)
       const keepMcp = previous ? this.removeContributions(previous) : new Map()
 
-      const added: PluginInfo['added'] = { skills: [], mcpServers: [], workflows: [] }
+      const added: PluginInfo['added'] = { skills: [], mcpServers: [], workflows: [], agents: [] }
+      const owned = new Set(this.list().filter((p) => p.id !== manifest.id).flatMap((p) => p.added.skills))
       for (const dir of manifest.skills) {
         const name = basename(dir)
+        // adoptSkills: a trusted pack takes over same-named copies it shipped before (older builds bundled them), never another plugin's.
+        if (existsSync(join(this.skillsRoot, name)) && adoptSkills && !owned.has(name)) rmSync(join(this.skillsRoot, name), { recursive: true, force: true })
         if (existsSync(join(this.skillsRoot, name))) { errors.push(`Skill "${name}" already exists, so the plugin's copy was skipped`); continue }
         const r = this.skills.installFrom(dir)
         if (r.removed) errors.push(`Skill "${name}" was rejected by the security scan (${r.report.findings[0]?.title ?? 'serious findings'})`)
@@ -85,6 +89,13 @@ export class PluginService {
       }
       this.store.saveSettings({ mcpServers: servers })
       for (const w of manifest.workflows) added.workflows.push(this.store.saveWorkflow({ ...w, projectId: null, enabled: false }).id)
+      if (manifest.catalogue) {
+        try {
+          const parsed = parseManifest(JSON.parse(readFileSync(manifest.catalogue, 'utf8')), { skills: this.skills.scan().map((s) => s.id), mcpServers: servers.map((s) => s.name) })
+          this.store.importAgents(parsed, true)
+          added.agents = parsed.templates.map((t) => t.role)
+        } catch (e) { errors.push(`Agent catalogue skipped: ${(e as Error).message}`) }
+      }
 
       const target = join(this.root, manifest.id)
       rmSync(target, { recursive: true, force: true })
@@ -108,6 +119,7 @@ export class PluginService {
     this.store.saveSettings({ mcpServers: settings.mcpServers.filter((s) => !p.added.mcpServers.includes(s.name)) })
     for (const name of p.added.skills) rmSync(join(this.skillsRoot, name), { recursive: true, force: true })
     for (const id of p.added.workflows) this.store.deleteWorkflow(id)
+    for (const role of p.added.agents ?? []) this.store.deleteAgentTemplate(role)
     this.skills.scan()
     return kept
   }
@@ -121,6 +133,14 @@ export class PluginService {
     this.removeContributions(p)
     rmSync(join(this.root, id), { recursive: true, force: true })
     this.saveList(list.filter((x) => x.id !== id))
+  }
+
+  /** Keep a trusted team pack installed and current from its Git address. Only people who can clone the repo get it. */
+  async syncPack(url: string): Promise<string> {
+    const p = await this.preview({ type: 'git', value: url.trim() })
+    if (p.installed && compareVersions(p.installed, p.version) >= 0) { this.discard(p.token); return `${p.name} ${p.installed} is up to date` }
+    const info = this.install(p.token, true)
+    return `${info.name} ${info.version} installed`
   }
 
   discard(token: string) {
