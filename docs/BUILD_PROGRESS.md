@@ -388,3 +388,17 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   email needs an Edge Function holding the service key, which cannot ship from
   the client. The reset flow was typechecked and built but not exercised with
   a real inbox (needs a configured Supabase project).
+- 2026-11-27: Integration of PRs #54-#70 onto `integration/w20-w38` (merges
+  #54..#70, HEAD e553cd1) plus a per-PR bug review. Proof every PR's added
+  lines survive the merge: 17/17 OK. Gates: node+web tsc clean, vitest 525
+  passed/1 skipped, desktop + web builds green, mobile typecheck + 17 tests
+  green. Windows installer built (Ventriee-Studios-0.3.7-setup.exe + portable);
+  the packaged app launches, restores the session, and writes nothing to the
+  error log. Review fixes committed (7953aee): OrgPicker now re-reads the
+  workspace every 15 s and on focus with an unknown-workspace fallback;
+  URL-research blocks are explicitly framed as untrusted background, never
+  instructions (regression test added); accent validation rejects 5/7-digit
+  hex; `checkEventTriggers` is re-entrancy guarded so a hung `gh` call cannot
+  double-fire triggers; remote project resolution filters cloud_sync links by
+  the signed-in user; W30 drag handles align with the 220px narrow-layout
+  sidebar and `.shell` is a positioning context.
