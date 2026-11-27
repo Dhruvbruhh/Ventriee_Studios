@@ -31,6 +31,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
+| W30 | Resizable panels: app sidebar, code sidebar, bottom panel (FEATURE_STATUS Phase 1) | - | Done | new `src/renderer/src/components/Resize.tsx`: `useDragSize` (pointer drag + arrow-key nudge + double-click reset, persisted in localStorage, min/max clamped), `ResizeHandle` (role=separator, aria-labelled), `sizeVar`; handles wired in `App.tsx` shell and `CodeWorkspace.tsx` (code sidebar x, bottom panel y with dynamic ceiling); sizes applied as CSS custom properties overriding the grid defaults (unlayered rules at the end of `styles.css`); `tests/resize.test.ts` (3 tests) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -202,3 +203,19 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W30. The three main panels are drag-resizable: the app sidebar
+  (200 to 480 px), the code workspace sidebar (180 to 520 px) and the editor's
+  bottom panel (120 px up to the window minus 180 px, so it can never swallow
+  the editor). Drag the edge, or focus it and use the arrow keys; double-click
+  resets to the CSS default. New `src/renderer/src/components/Resize.tsx`
+  exposes `useDragSize` (pointer drag with body-wide capture, keyboard nudges
+  in 24 px steps, persisted per panel in localStorage under `ventriee.resize.*`
+  and re-clamped to the current bounds on load) and `ResizeHandle`, a
+  role=separator element labelled for screen readers. Sizes flow into the
+  existing grids as CSS custom properties (`--shell-side-w`, `--code-side-w`,
+  `--code-panel-h`), so every layout variant (three-column preview, narrow
+  window, no-sidebar shell) keeps working with its old fallback when a panel
+  was never resized. Handles are hidden when their panel is hidden (no-sidebar
+  shell, closed bottom panel). `tests/resize.test.ts` (3 tests) covers the
+  clamp, the CSS-variable helper and the handle markup; both tsconfigs and the
+  full vitest run are green.

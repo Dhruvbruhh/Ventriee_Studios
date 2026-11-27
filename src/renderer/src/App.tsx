@@ -31,6 +31,7 @@ import { HelpPanel } from './panels/HelpPanel'
 import { VoiceAssistant } from './components/VoiceAssistant'
 import { IconSidebar, IconSpark } from './icons'
 import { Sidebar } from './components/Sidebar'
+import { ResizeHandle, sizeVar, useDragSize } from './components/Resize'
 import { UpdateNotice } from './components/UpdateNotice'
 import { Toolchains } from './components/Toolchains'
 import { impact } from './fx'
@@ -67,6 +68,7 @@ export function App() {
     return () => window.removeEventListener('keydown', keys)
   }, [])
   const [codeOpened, setCodeOpened] = useState(false)
+  const [sideW, sideDown, sideDragging, sideNudge, sideReset] = useDragSize('.shell > .sidebar', 'app-sidebar', 'x', 200, 480)
   useEffect(() => { if (workspace === 'code') setCodeOpened(true) }, [workspace])
   const theme = snapshot?.settings.theme ?? 'dark'
   useEffect(() => {
@@ -150,8 +152,9 @@ export function App() {
   const sessionTitle = snapshot.conversation?.title || (sessionNumber ? `Session ${sessionNumber}` : 'Chat')
 
   return (
-    <div className={`shell${sidebar ? '' : ' no-sidebar'}`}>
+    <div className={`shell${sidebar ? '' : ' no-sidebar'}`} style={sizeVar('--shell-side-w', sidebar ? sideW : null)}>
     {sidebar ? <Sidebar onNewProject={() => setNewProject(true)} /> : null}
+    {sidebar ? <ResizeHandle axis="x" label="Resize the sidebar" size={sideW} dragging={sideDragging} onPointerDown={sideDown} onNudge={sideNudge} onReset={sideReset} /> : null}
     <div className="app">
       <header className="topbar">
         <button className="icon-btn" onClick={() => setSidebar((v) => !v)} aria-label={sidebar ? 'Hide sidebar' : 'Show sidebar'} aria-expanded={sidebar} title="Toggle sidebar (Ctrl+B)">

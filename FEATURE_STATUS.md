@@ -16,7 +16,7 @@ Last updated: 2026-11-26
 | Collapsible sidebar | ✅ | Ctrl+B toggle |
 | Command palette | ✅ | CommandBar.tsx |
 | Multi-workspace tabs (Home/Plan/Office/Code) | ✅ | ws-toggle in topbar |
-| Resizable panels | 🟡 | Fixed layout; no drag-resize |
+| Resizable panels | ✅ | Sidebar, code sidebar and bottom panel drag-resize; sizes persist |
 | Dark theme | ✅ | CSS variables in styles.css |
 | Light theme | ✅ | Settings → Appearance: Dark / Light / Match Windows (`settings.theme`) |
 | Monaco Editor | ✅ | monaco-editor 0.55.1 |
