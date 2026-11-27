@@ -26,6 +26,7 @@ test accounts before release.
 | 3 | P1 | Desktop ran a remote command on `projects()[0]` when the id did not match (always, since phones send cloud ids). | `resolveRemoteProject`: local id, then unique exact name, otherwise refuse. | `tests/remote.test.ts` |
 | 4 | P1 | Mobile wrote `done`/`approved`/`rejected`; the web board only knows `completed`/`in_review`/…, so tasks done on the phone never completed for the owner. | Mobile uses the board's statuses; approve → `completed`, reject → `in_progress`. | `mobile/__tests__/status.test.ts` |
 | 5 | P1 | (earlier this session, W4) Web build failed typecheck in `api.ts`, which would fail the Cloudflare build. | Cast fixed. | `web` build |
+| 6 | P0 | Same as #2 on every other table: the desktop client inserts organizations, projects, tasks, devices and audit rows without `owner_id` / `created_by` / `user_id` / `actor_id`. With no default, RLS saw NULL and rejected the row, so cloud sync could not create a project or task and Jarvis could not register a device. | `0007_actor_defaults.sql` (**not yet applied live**): those columns default to `auth.uid()`; insert policies still reject a forged user. | `tests/migrations.test.ts` (new case, fails without 0007) |
 
 ## Open issues
 
