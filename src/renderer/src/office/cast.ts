@@ -1,13 +1,12 @@
 import { Texture } from 'pixi.js'
 import { paintPortrait, sceneFrameBufs, SCENE_W, SCENE_H } from './portraitArt'
 
-// The office cast. Every Ventriee member is rendered from a procedural recipe
-// (see portraitArt.ts), so no sprite sheets and no external art licences are
-// involved for characters. Roles map onto recipes in ROLE_CHARACTER below.
+// The office cast: original anime-style characters, each drawn from a procedural
+// recipe (see portraitArt.ts), so no sprite sheets and no external art licences
+// are involved. Roles map onto characters in ROLE_CHARACTER below.
 export type OfficeCharacterName =
-  | 'michael' | 'jim' | 'pam' | 'dwight' | 'kevin' | 'angela'
-  | 'oscar' | 'stanley' | 'phyllis' | 'andy' | 'kelly' | 'ryan'
-  | 'toby' | 'creed' | 'meredith'
+  | 'sakura' | 'yuki' | 'hana' | 'rin' | 'mei' | 'aoi' | 'kaede'
+  | 'nami' | 'suzu' | 'akane' | 'hikari' | 'tsubaki' | 'mio' | 'ran' | 'koharu'
 
 export interface CastMember {
   name: OfficeCharacterName
@@ -17,45 +16,48 @@ export interface CastMember {
 }
 
 export const OFFICE_CAST: CastMember[] = [
-  { name: 'michael', displayName: 'Michael', shirt: '#5a6b8c', blurb: 'Runs the floor' },
-  { name: 'jim', displayName: 'Jim', shirt: '#6fa8dc', blurb: 'Ships the work' },
-  { name: 'pam', displayName: 'Pam', shirt: '#9caf88', blurb: 'Designs the work' },
-  { name: 'dwight', displayName: 'Dwight', shirt: '#b89b3e', blurb: 'Guards the standards' },
-  { name: 'kevin', displayName: 'Kevin', shirt: '#4a7ab5', blurb: 'Keeps the books' },
-  { name: 'angela', displayName: 'Angela', shirt: '#8a86a6', blurb: 'Checks the books' },
-  { name: 'oscar', displayName: 'Oscar', shirt: '#7a4b6b', blurb: 'Reads the docs' },
-  { name: 'stanley', displayName: 'Stanley', shirt: '#8c5a4b', blurb: 'On the wire' },
-  { name: 'phyllis', displayName: 'Phyllis', shirt: '#b08bbf', blurb: 'Finds the words' },
-  { name: 'andy', displayName: 'Andy', shirt: '#6fae6f', blurb: 'Deploys it' },
-  { name: 'kelly', displayName: 'Kelly', shirt: '#d16ba5', blurb: 'Talks to the market' },
-  { name: 'ryan', displayName: 'Ryan', shirt: '#3a3a44', blurb: 'The new hire' },
-  { name: 'toby', displayName: 'Toby', shirt: '#9a8c5a', blurb: 'Writes it down' },
-  { name: 'creed', displayName: 'Creed', shirt: '#6b7a4b', blurb: 'Tests it' },
-  { name: 'meredith', displayName: 'Meredith', shirt: '#b5544a', blurb: 'Keeps it running' }
+  { name: 'sakura', displayName: 'Sakura', shirt: '#464e5c', blurb: 'Runs the floor' },
+  { name: 'yuki', displayName: 'Yuki', shirt: '#b4c8ec', blurb: 'Reads everything' },
+  { name: 'hana', displayName: 'Hana', shirt: '#ffecc8', blurb: 'Designs the work' },
+  { name: 'rin', displayName: 'Rin', shirt: '#282834', blurb: 'Guards the standards' },
+  { name: 'mei', displayName: 'Mei', shirt: '#ffc8dc', blurb: 'Plans the structure' },
+  { name: 'aoi', displayName: 'Aoi', shirt: '#ecf2ff', blurb: 'Ships the work' },
+  { name: 'kaede', displayName: 'Kaede', shirt: '#ffbe78', blurb: 'Deploys it' },
+  { name: 'nami', displayName: 'Nami', shirt: '#c8f0e6', blurb: 'Wires it together' },
+  { name: 'suzu', displayName: 'Suzu', shirt: '#fad296', blurb: 'Tests it' },
+  { name: 'akane', displayName: 'Akane', shirt: '#602430', blurb: 'Builds the backend' },
+  { name: 'hikari', displayName: 'Hikari', shirt: '#ffffff', blurb: 'Finds the words' },
+  { name: 'tsubaki', displayName: 'Tsubaki', shirt: '#8c2846', blurb: 'Keeps it safe' },
+  { name: 'mio', displayName: 'Mio', shirt: '#5a64a0', blurb: 'Keeps the data' },
+  { name: 'ran', displayName: 'Ran', shirt: '#78d2a0', blurb: 'Fixes it' },
+  { name: 'koharu', displayName: 'Koharu', shirt: '#c8b4fa', blurb: 'Keeps it running' }
 ]
 
 export const CAST_BY_NAME: Record<OfficeCharacterName, CastMember> = Object.fromEntries(
   OFFICE_CAST.map((c) => [c.name, c])
 ) as Record<OfficeCharacterName, CastMember>
 
-export const DEFAULT_CHARACTER: OfficeCharacterName = 'jim'
+export const DEFAULT_CHARACTER: OfficeCharacterName = 'aoi'
 
-/** Ventriee worker role → cast member. The orchestrator sits in the corner office. */
+/** Ventriee worker role → character. The orchestrator sits in the corner office. */
 export const ROLE_CHARACTER: Record<string, OfficeCharacterName> = {
-  orchestrator: 'michael',
-  researcher: 'oscar',
-  architect: 'toby',
-  designer: 'pam',
-  frontend: 'jim',
-  integration: 'stanley',
-  backend: 'dwight',
-  reviewer: 'angela',
-  fixer: 'creed',
-  qa: 'kevin',
-  seo: 'phyllis',
-  aeo: 'kelly',
-  deployment: 'andy',
-  monitoring: 'meredith'
+  orchestrator: 'sakura',
+  assistant: 'aoi',
+  researcher: 'yuki',
+  architect: 'mei',
+  designer: 'hana',
+  frontend: 'aoi',
+  integration: 'nami',
+  backend: 'akane',
+  database: 'mio',
+  security: 'tsubaki',
+  reviewer: 'rin',
+  fixer: 'ran',
+  qa: 'suzu',
+  seo: 'hikari',
+  aeo: 'hikari',
+  deployment: 'kaede',
+  monitoring: 'koharu'
 }
 
 export function characterForRole(role: string): OfficeCharacterName {

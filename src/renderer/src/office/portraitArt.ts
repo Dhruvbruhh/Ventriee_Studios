@@ -1,11 +1,8 @@
-// Procedural portraits for The Office cast.
+// Procedural anime-style characters for the office floor and the roster.
 //
-// These are fully custom-drawn busts (NOT recolored LimeZu sprites): each
-// character is an explicit recipe layering skin → clothing → face → facial hair
-// → hairstyle → glasses on an 18×28 canvas. This gives real control over each
-// person's hairstyle shape, garment cut/color, and facial hair so they read as
-// the specific show character. The in-scene walking sprites still use the LimeZu
-// recolor in cast.ts; this module only powers the static portraits in the UI.
+// Original characters, drawn from recipes: skin → clothing → face → hair →
+// accessories on an 18×28 bust (portrait) or an 18×32 standing sprite. No image
+// files and no third-party art.
 
 import type { OfficeCharacterName } from './cast';
 
@@ -107,6 +104,47 @@ function drawFace(buf: Buf, skin: string, brow: Brow, mouth: Mouth, blush: boole
   };
   for (const [x, y] of mouths[mouth]) set(buf, x, y, mc);
   if (blush) for (const x of [5, 12]) set(buf, x, 12, [235, 150, 140], 140);
+}
+
+/** Big anime eyes: lash line, a tall coloured iris with a glint, and soft blush. */
+function drawAnimeEyes(buf: Buf, skin: string, iris: RGB): void {
+  const s = SKIN[skin];
+  const [hi, base, sh] = shades(iris, 1.35, 0.6);
+  const lash: RGB = [46, 34, 52], glint: RGB = [255, 255, 255];
+  // clear the plain face below the bangs, then draw tall 2×3 irises under a winged lash line
+  for (let x = 5; x <= 12; x++) for (let y = 8; y <= 15; y++) set(buf, x, y, s.base);
+  for (const [a, b] of [[4, 7], [10, 13]] as const) for (let x = a; x <= b; x++) set(buf, x, 8, lash);
+  set(buf, 4, 9, lash); set(buf, 13, 9, lash);
+  for (const x0 of [5, 10]) {
+    set(buf, x0, 9, glint); set(buf, x0 + 1, 9, base);
+    set(buf, x0, 10, base); set(buf, x0 + 1, 10, sh);
+    set(buf, x0, 11, hi); set(buf, x0 + 1, 11, base);
+  }
+  set(buf, 9, 12, s.sh); // a single-pixel nose
+  for (const x of [4, 13]) set(buf, x, 12, [240, 150, 160], 150);
+  for (const x of [5, 12]) set(buf, x, 12, [240, 150, 160], 110);
+}
+
+/** Small anime mouths, drawn after the eyes clear the lower face. */
+function drawAnimeMouth(buf: Buf, mouth: Mouth): void {
+  const lip: RGB = [196, 92, 104], inner: RGB = [150, 52, 70], tongue: RGB = [240, 130, 140];
+  if (mouth === 'grin') { set(buf, 8, 14, inner); set(buf, 9, 14, inner); set(buf, 8, 15, tongue); set(buf, 9, 15, tongue); return; }
+  if (mouth === 'smile') { set(buf, 7, 13, lip); set(buf, 8, 14, lip); set(buf, 9, 14, lip); set(buf, 10, 13, lip); return; }
+  if (mouth === 'frown') { set(buf, 8, 14, lip); set(buf, 9, 14, lip); set(buf, 7, 15, lip); set(buf, 10, 15, lip); return; }
+  set(buf, 8, 14, lip); set(buf, 9, 14, lip);
+}
+
+/** A bow on top of the head. */
+function drawRibbon(buf: Buf, c: RGB): void {
+  const [hi, base, sh] = shades(c);
+  for (const [x, y] of [[11, 0], [12, 0], [11, 1], [12, 1], [15, 0], [16, 0], [15, 1], [16, 1]] as const) set(buf, x, y, base);
+  set(buf, 13, 1, sh); set(buf, 14, 1, sh); set(buf, 13, 0, hi);
+}
+
+/** The single stray strand anime heroines are known for. */
+function drawAhoge(buf: Buf, c: RGB): void {
+  const [, base] = shades(c);
+  set(buf, 8, 1, base); set(buf, 9, 0, base); set(buf, 10, 0, base);
 }
 
 // ─── hairstyles ──────────────────────────────────────────────────────────────
@@ -243,7 +281,60 @@ const styleBald: HairFn = (buf, color, skinBase, a) => {
   for (let y = top; y <= 10; y++) { set(buf, HX0 - 1, y, sh); set(buf, HX1 + 1, y, sh); }
 };
 
-const HAIR_FNS = { styleShort, styleFloppy, styleFrame, styleBun, styleCurly, styleMessy, styleRecede, styleSpiky, styleBald };
+/** Full bangs across the forehead with side locks: the base of the anime styles. */
+function bangs(buf: Buf, base: RGB, hi: RGB, sh: RGB, sideTo: number): void {
+  rect(buf, HX0 - 1, 2, HX1 + 1, 5, base);
+  for (let x = HX0; x <= HX1; x++) set(buf, x, 6, base);
+  for (const x of [5, 7, 9, 11, 13]) set(buf, x, 7, base);
+  for (let y = 6; y <= sideTo; y++) { set(buf, HX0 - 1, y, base); set(buf, HX0, y, base); set(buf, HX1, y, base); set(buf, HX1 + 1, y, base); }
+  for (const x of [6, 8, 10, 12]) set(buf, x, 6, sh);
+  for (let x = HX0; x < 10; x++) set(buf, x, 3, hi);
+  set(buf, 6, 2, hi); set(buf, 7, 2, hi);
+}
+
+const styleLong: HairFn = (buf, color, _skin, a) => {
+  const [hi, base, sh] = shades(color);
+  const length = a.length ?? 23;
+  bangs(buf, base, hi, sh, length);
+  for (let y = 8; y <= length; y++) { set(buf, HX0 - 2, y, base); set(buf, HX1 + 2, y, sh); }
+  for (let y = 8; y <= length; y += 3) set(buf, HX0 - 1, y, hi);
+};
+
+const styleTwin: HairFn = (buf, color) => {
+  const [hi, base, sh] = shades(color);
+  bangs(buf, base, hi, sh, 12);
+  // a tail tied high on each side, falling past the shoulders
+  for (let y = 3; y <= 24; y++) {
+    const sway = y > 14 ? 1 : 0;
+    set(buf, 1 + sway, y, base); set(buf, 2 + sway, y, base);
+    set(buf, 15 - sway, y, sh); set(buf, 16 - sway, y, sh);
+  }
+  for (const x of [2, 15]) { set(buf, x, 4, [255, 143, 181]); set(buf, x, 5, [255, 143, 181]); }
+};
+
+const stylePony: HairFn = (buf, color) => {
+  const [hi, base, sh] = shades(color);
+  bangs(buf, base, hi, sh, 10);
+  // high ponytail sweeping out to one side
+  for (let y = 2; y <= 20; y++) { set(buf, 15, y, base); set(buf, 16, y, y > 6 ? sh : base); }
+  set(buf, 14, 3, [255, 211, 110]);
+};
+
+const styleBob: HairFn = (buf, color) => {
+  const [hi, base, sh] = shades(color);
+  bangs(buf, base, hi, sh, 14);
+  for (const x of [HX0 - 1, HX0, HX1, HX1 + 1]) set(buf, x, 15, sh);
+};
+
+const styleHime: HairFn = (buf, color) => {
+  const [hi, base, sh] = shades(color);
+  bangs(buf, base, hi, sh, 24);
+  for (let x = HX0; x <= HX1; x++) set(buf, x, 7, base);  // straight-cut bangs
+  set(buf, 8, 7, sh); set(buf, 9, 7, sh);
+  for (let y = 11; y <= 24; y++) { set(buf, HX0 - 2, y, base); set(buf, HX1 + 2, y, sh); }
+};
+
+const HAIR_FNS = { styleShort, styleFloppy, styleFrame, styleBun, styleCurly, styleMessy, styleRecede, styleSpiky, styleBald, styleLong, styleTwin, stylePony, styleBob, styleHime };
 type HairStyle = keyof typeof HAIR_FNS;
 
 // ─── facial hair ─────────────────────────────────────────────────────────────
@@ -408,8 +499,14 @@ function drawHeadBack(buf: Buf, r: Recipe): void {
   for (const [y, a, b] of rows) rect(buf, a, y, b, y, base);
   // long styles drape down the sides past the head
   const len = r.hair === 'styleFrame' ? (r.hairargs?.length ?? 17)
-            : r.hair === 'styleMessy' ? (r.hairargs?.length ?? 9) : 0;
+            : r.hair === 'styleMessy' ? (r.hairargs?.length ?? 9)
+            : r.hair === 'styleLong' ? (r.hairargs?.length ?? 23)
+            : r.hair === 'styleHime' ? 24 : r.hair === 'styleBob' ? 14 : 0;
   for (let y = 11; y <= len; y++) { set(buf, HX0 - 1, y, base); set(buf, HX0, y, base); set(buf, HX1, y, base); set(buf, HX1 + 1, y, base); }
+  // long hair covers the whole back, not just the sides
+  if (len > 16) for (let y = 15; y <= len; y++) rect(buf, HX0, y, HX1, y, y % 3 ? base : sh);
+  if (r.hair === 'stylePony') for (let y = 13; y <= 22; y++) { set(buf, 8, y, base); set(buf, 9, y, sh); }
+  if (r.hair === 'styleTwin') for (let y = 3; y <= 24; y++) { set(buf, 2, y, base); set(buf, 3, y, base); set(buf, 14, y, sh); set(buf, 15, y, sh); }
   // roundness: darken the side edges and the nape
   for (let y = 4; y <= 12; y++) { set(buf, 4, y, sh); set(buf, 13, y, sh); }
   for (const [x, y] of [[5, 3], [12, 3], [5, 13], [12, 13], [6, 14], [11, 14]] as const) set(buf, x, y, sh);
@@ -417,7 +514,8 @@ function drawHeadBack(buf: Buf, r: Recipe): void {
   for (const [x, y] of [[7, 2], [8, 2], [9, 2], [10, 2], [7, 3], [8, 3], [9, 3]] as const) set(buf, x, y, hi);
   for (let y = 4; y <= 11; y++) set(buf, 9, y, hi);   // sheen down the crown
   for (let y = 4; y <= 12; y++) set(buf, 8, y, sh);   // part line
-  // nape + neck (skin)
+  // nape + neck (skin), unless long hair or a tail hides it
+  if (len > 16 || r.hair === 'stylePony' || r.hair === 'styleTwin') return;
   rect(buf, 7, 14, 10, 14, sh);
   rect(buf, 7, 15, 10, 17, s.sh);
   rect(buf, 7, 15, 9, 15, s.base);
@@ -444,9 +542,21 @@ function drawHeadBackBald(buf: Buf, r: Recipe): void {
   rect(buf, 7, 15, 9, 15, s.base);
 }
 
+/** Pleated skirt over tights, for the characters who wear one. */
+function drawSkirt(buf: Buf, skirt: RGB, tights: RGB, phase: number): void {
+  const [hi, base, sh] = shades(skirt);
+  rect(buf, 4, 24, 13, 24, base); rect(buf, 3, 25, 14, 26, base); rect(buf, 3, 27, 14, 27, sh);
+  for (const x of [5, 8, 11]) for (const y of [25, 26]) set(buf, x, y, hi);
+  for (const [lx0, lx1] of [[6, 7], [10, 11]] as const) rect(buf, lx0, 28, lx1, 30, tights);
+  const leftLow = phase !== 1, rightLow = phase !== 2;
+  rect(buf, 5, leftLow ? 31 : 30, 7, leftLow ? 31 : 30, SHOE);
+  rect(buf, 10, rightLow ? 31 : 30, 12, rightLow ? 31 : 30, SHOE);
+}
+
 function drawSceneBody(buf: Buf, r: Recipe, phase: number, back: boolean): void {
   drawSceneTorso(buf, r, back);
-  drawSceneLegs(buf, defaultPants(r), phase);
+  if (r.skirt) drawSkirt(buf, r.skirt, r.tights ?? [61, 48, 80], phase);
+  else drawSceneLegs(buf, defaultPants(r), phase);
 }
 
 // ─── outline pass ────────────────────────────────────────────────────────────
@@ -472,6 +582,9 @@ interface Recipe {
   lashes?: boolean;
   /** Heavier build: chubby cheeks, a double chin, and a wider torso. */
   heavy?: boolean;
+  /** Anime eyes in this iris colour. */
+  eyes?: RGB;
+  ribbon?: RGB; ahoge?: boolean; skirt?: RGB; tights?: RGB;
 }
 
 // Puff the lower face into round cheeks + a double chin so a character reads as
@@ -491,21 +604,21 @@ function drawHeavyFace(buf: Buf, skin: string): void {
 }
 
 const RECIPES: Record<OfficeCharacterName, Recipe> = {
-  michael:  { skin: 'light', hairc: [58, 42, 28],   hair: 'styleShort',  hairargs: { part: 'L' }, cloth: 'suit', c1: [58, 63, 74], tie: [170, 58, 58], brow: 'flat', mouth: 'smile' },
-  jim:      { skin: 'light', hairc: [92, 60, 34],   hair: 'styleFloppy', cloth: 'dressshirt', c1: [172, 196, 224], tie: [120, 130, 150], brow: 'flat', mouth: 'smile' },
-  pam:      { skin: 'light', hairc: [120, 76, 42],  hair: 'styleFrame',  hairargs: { length: 18, vol: 2 }, cloth: 'cardigan', c1: [236, 174, 192], c2: [244, 242, 238], brow: 'soft', mouth: 'smile', blush: true, lashes: true },
-  dwight:   { skin: 'light', hairc: [64, 48, 28],   hair: 'styleShort',  hairargs: { part: 'L', recede: 1 }, cloth: 'dressshirt', c1: [184, 155, 62], tie: [120, 82, 46], glasses: true, brow: 'angry', mouth: 'neutral' },
-  kevin:    { skin: 'light', hairc: [58, 44, 30],   hair: 'styleBald',   cloth: 'polo', c1: [110, 140, 180], c2: [90, 120, 160], brow: 'flat', mouth: 'neutral', heavy: true },
-  angela:   { skin: 'light', hairc: [186, 154, 90], hair: 'styleBun',    cloth: 'cardigan', c1: [150, 146, 170], c2: [235, 233, 226], brow: 'angry', mouth: 'frown', lashes: true },
-  oscar:    { skin: 'tan',   hairc: [28, 22, 18],   hair: 'styleShort',  hairargs: { part: 'L' }, cloth: 'sweater', c1: [122, 60, 74], brow: 'flat', mouth: 'smile' },
-  stanley:  { skin: 'dark',  hairc: [60, 54, 48],   hair: 'styleRecede', cloth: 'dressshirt', c1: [150, 120, 86], tie: [120, 78, 52], glasses: true, facial: 'mustache', brow: 'flat', mouth: 'neutral', heavy: true },
-  phyllis:  { skin: 'light', hairc: [196, 162, 110], hair: 'styleCurly', cloth: 'blouse', c1: [202, 160, 192], glasses: true, brow: 'soft', mouth: 'smile', lashes: true, heavy: true },
-  andy:     { skin: 'light', hairc: [74, 51, 32],   hair: 'styleShort',  hairargs: { part: 'R' }, cloth: 'polo', c1: [176, 65, 58], c2: [150, 50, 46], brow: 'raised', mouth: 'smile' },
-  kelly:    { skin: 'tan',   hairc: [24, 18, 22],   hair: 'styleFrame',  hairargs: { length: 20, vol: 1 }, cloth: 'blouse', c1: [212, 90, 158], brow: 'soft', mouth: 'smile', blush: true, lashes: true },
-  ryan:     { skin: 'light', hairc: [42, 32, 24],   hair: 'styleSpiky',  cloth: 'suit', c1: [58, 58, 68], tie: [40, 40, 50], brow: 'flat', mouth: 'neutral' },
-  toby:     { skin: 'light', hairc: [106, 90, 66],  hair: 'styleShort',  hairargs: { part: 'L', recede: 1 }, cloth: 'dressshirt', c1: [150, 150, 120], facial: 'mustacheSm', brow: 'soft', mouth: 'frown' },
-  creed:    { skin: 'light', hairc: [170, 166, 156], hair: 'styleBald',   cloth: 'dressshirt', c1: [126, 130, 96], facial: 'stubble', brow: 'flat', mouth: 'neutral' },
-  meredith: { skin: 'light', hairc: [154, 82, 46],  hair: 'styleMessy',  hairargs: { length: 15 }, cloth: 'blouse', c1: [176, 86, 74], brow: 'raised', mouth: 'smile', lashes: true },
+  sakura:  { skin: 'light', hairc: [246, 160, 190], hair: 'styleLong',  eyes: [214, 84, 140],  cloth: 'suit',     c1: [70, 62, 92],    tie: [232, 86, 120], skirt: [70, 62, 92],  ribbon: [255, 255, 255], mouth: 'smile', brow: 'soft', ahoge: true },
+  yuki:    { skin: 'light', hairc: [222, 226, 240], hair: 'styleHime',  eyes: [96, 150, 232],  cloth: 'cardigan', c1: [180, 200, 236], c2: [250, 250, 255], skirt: [92, 104, 150], mouth: 'neutral', brow: 'soft' },
+  hana:    { skin: 'light', hairc: [250, 214, 120], hair: 'styleTwin',  eyes: [104, 176, 96],  cloth: 'blouse',   c1: [255, 236, 200], skirt: [232, 120, 120], ribbon: [255, 143, 181], mouth: 'grin', brow: 'raised' },
+  rin:     { skin: 'light', hairc: [40, 36, 56],    hair: 'stylePony',  eyes: [200, 60, 72],   cloth: 'suit',     c1: [40, 40, 52],    tie: [200, 60, 72],  mouth: 'neutral', brow: 'angry' },
+  mei:     { skin: 'tan',   hairc: [150, 110, 220], hair: 'styleBob',   eyes: [170, 120, 240], cloth: 'sweater',  c1: [255, 200, 220], skirt: [120, 96, 168], glasses: true, mouth: 'smile', brow: 'soft' },
+  aoi:     { skin: 'light', hairc: [72, 120, 210],  hair: 'styleLong',  hairargs: { length: 20 }, eyes: [60, 110, 210], cloth: 'dressshirt', c1: [236, 242, 255], tie: [72, 120, 210], skirt: [52, 70, 120], mouth: 'smile', brow: 'flat' },
+  kaede:   { skin: 'light', hairc: [212, 96, 52],   hair: 'stylePony',  eyes: [230, 140, 50],  cloth: 'polo',     c1: [255, 190, 120], c2: [230, 150, 80], mouth: 'grin', brow: 'raised', ahoge: true },
+  nami:    { skin: 'brown', hairc: [120, 214, 196], hair: 'styleBob',   eyes: [60, 180, 160],  cloth: 'blouse',   c1: [200, 240, 230], skirt: [60, 140, 130], mouth: 'smile', brow: 'soft' },
+  suzu:    { skin: 'light', hairc: [120, 78, 52],   hair: 'styleTwin',  eyes: [150, 100, 60],  cloth: 'cardigan', c1: [250, 210, 150], c2: [255, 250, 240], skirt: [150, 90, 70], ribbon: [255, 211, 110], mouth: 'smile', brow: 'soft' },
+  akane:   { skin: 'light', hairc: [200, 40, 64],   hair: 'styleHime',  eyes: [240, 180, 60],  cloth: 'suit',     c1: [96, 36, 48],    tie: [255, 211, 110], skirt: [96, 36, 48], mouth: 'smile', brow: 'angry' },
+  hikari:  { skin: 'light', hairc: [255, 236, 170], hair: 'styleLong',  eyes: [250, 170, 80],  cloth: 'blouse',   c1: [255, 255, 255], skirt: [140, 196, 255], ribbon: [140, 196, 255], mouth: 'grin', brow: 'raised' },
+  tsubaki: { skin: 'dark',  hairc: [30, 26, 40],    hair: 'styleHime',  eyes: [220, 70, 110],  cloth: 'sweater',  c1: [140, 40, 70],   skirt: [40, 36, 52], mouth: 'neutral', brow: 'flat' },
+  mio:     { skin: 'light', hairc: [62, 58, 110],   hair: 'styleLong',  eyes: [130, 130, 230], cloth: 'cardigan', c1: [90, 100, 160],  c2: [240, 240, 250], skirt: [70, 70, 110], glasses: true, mouth: 'neutral', brow: 'soft' },
+  ran:     { skin: 'tan',   hairc: [255, 150, 70],  hair: 'styleBob',   eyes: [80, 200, 120],  cloth: 'polo',     c1: [120, 210, 160], c2: [80, 170, 120], mouth: 'grin', brow: 'raised', ahoge: true },
+  koharu:  { skin: 'light', hairc: [255, 196, 214], hair: 'styleTwin',  eyes: [150, 110, 230], cloth: 'sweater',  c1: [200, 180, 250], skirt: [255, 190, 210], ribbon: [255, 255, 255], mouth: 'smile', brow: 'soft' },
 };
 
 /** The face/hair group (head → face → facial hair → hair → glasses), no clothing. */
@@ -514,9 +627,12 @@ function drawHeadGroup(buf: Buf, r: Recipe): void {
   drawHead(buf, r.skin);
   if (r.heavy) drawHeavyFace(buf, r.skin);
   drawFace(buf, r.skin, r.brow ?? 'flat', r.mouth ?? 'neutral', r.blush ?? false, r.lashes ?? false);
+  if (r.eyes) { drawAnimeEyes(buf, r.skin, r.eyes); drawAnimeMouth(buf, r.mouth ?? 'neutral'); }
   if (r.facial) drawFacial(buf, r.facial, r.hairc);
   HAIR_FNS[r.hair](buf, r.hairc, skinBase, r.hairargs ?? {});
   if (r.glasses) drawGlasses(buf);
+  if (r.ribbon) drawRibbon(buf, r.ribbon);
+  if (r.ahoge) drawAhoge(buf, r.hairc);
 }
 
 function defaultPants(r: Recipe): RGB {
@@ -553,7 +669,7 @@ const sceneCache = new Map<OfficeCharacterName, SceneFrames>();
 function getBuf(name: OfficeCharacterName): Buf {
   let buf = bufCache.get(name);
   if (!buf) {
-    buf = compose(RECIPES[name] ?? RECIPES.jim);
+    buf = compose(RECIPES[name] ?? RECIPES.sakura);
     bufCache.set(name, buf);
   }
   return buf;
@@ -565,7 +681,7 @@ export interface SceneFrames { front: Buf[]; back: Buf[]; }
 export function sceneFrameBufs(name: OfficeCharacterName): SceneFrames {
   let frames = sceneCache.get(name);
   if (!frames) {
-    const r = RECIPES[name] ?? RECIPES.jim;
+    const r = RECIPES[name] ?? RECIPES.sakura;
     frames = {
       front: [composeScene(r, 0, false), composeScene(r, 1, false), composeScene(r, 2, false)],
       back: [composeScene(r, 0, true), composeScene(r, 1, true), composeScene(r, 2, true)],
