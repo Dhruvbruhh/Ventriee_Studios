@@ -1,16 +1,13 @@
 // Office theme contract for the Ventriee floor.
 //
-// Vendored from munder-difflin (MIT). The map, tilesets and monitor overlay are
-// unchanged from that project; seats are mapped to Ventriee worker roles by
-// officeScene.ts instead of the show's named cast.
+// Layout vendored from munder-difflin (MIT). The tile art is our own, drawn in
+// code by animeTiles.ts, and seats are mapped to Ventriee worker roles.
 
 import type { Texture } from 'pixi.js'
 import { colors } from './tokens'
 import { CAST_BY_NAME, getCastFrames, DEFAULT_CHARACTER, type CastMember, type OfficeCharacterName } from './cast'
 
-import officeTilesetUrl from './assets/office-tileset.png?url'
-import a5FloorsWallsUrl from './assets/a5-office-floors-walls.png?url'
-import interiorsUrl from './assets/interiors.png?url'
+import { animeTilesetUrls } from './animeTiles'
 import officeMapRaw from './assets/office.tmj?raw'
 
 export interface Tile {
@@ -73,14 +70,18 @@ export interface ThemeConfig {
   cast: ThemeCast
 }
 
+// Painted on first use (needs a DOM canvas), then reused.
+let painted: string[] | null = null
+const sheets = () => (painted ??= animeTilesetUrls())
+
 export const OFFICE_THEME: ThemeConfig = {
   id: 'office',
   mapRaw: officeMapRaw,
   tilesets: [
-    // office-tileset.png is embedded in the map (firstgid 1); keep the map's copy.
-    { url: officeTilesetUrl, embedded: true },
+    // sheet 0 is described by the map itself (firstgid 1); keep the map's copy of its metadata.
+    { get url() { return sheets()[0] }, embedded: true },
     {
-      url: a5FloorsWallsUrl,
+      get url() { return sheets()[1] },
       firstgid: 513,
       image: 'a5',
       imagewidth: 256,
@@ -91,7 +92,7 @@ export const OFFICE_THEME: ThemeConfig = {
       tilecount: 512
     },
     {
-      url: interiorsUrl,
+      get url() { return sheets()[2] },
       firstgid: 1025,
       image: 'interiors',
       imagewidth: 256,

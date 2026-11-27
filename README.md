@@ -171,8 +171,7 @@ Installed copies update from this repository's GitHub Releases.
 
 - The pixel office engine under `src/renderer/src/office/` — MIT, from
   [munder-difflin](https://github.com/HarnessMD/munder-difflin)
-- Character sprites — procedural, MIT
-- Tilesets/map art — LimeZu "Modern Interiors" (license in `office/assets/`)
+- Office tile art and anime characters — drawn in code, MIT
 - Everything else — MIT
 
 ## License

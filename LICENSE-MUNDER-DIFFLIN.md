@@ -40,13 +40,9 @@ SOFTWARE.
 - Unused modules (theme-specific config, speech-act wiring for the original
   app) were dropped.
 
-## Tilesets and map art: LimeZu, not MIT
+## Tile art and characters: our own, MIT
 
-The pixel art under `src/renderer/src/office/assets/` (the three PNG tilesets
-and the Tiled map that is built from them) is "Modern Interiors - RPG Tileset
-[16X16]" by LimeZu, under the LimeZu Complete Version license. That license
-permits use and modification in commercial and non-commercial projects and
-requires credit to LimeZu (https://limezu.itch.io/).
-
-The character sprites are not LimeZu art. They are drawn procedurally in
-`src/renderer/src/office/portraitArt.ts` and fall under the MIT license above.
+The office layout (`src/renderer/src/office/assets/office.tmj`) comes from munder-difflin. Its tile art is drawn in code by
+`src/renderer/src/office/animeTiles.ts` and the characters by `src/renderer/src/office/portraitArt.ts`; no third-party
+image files are used. Both fall under the MIT license above. (Earlier versions shipped LimeZu's "Modern Interiors" PNGs;
+they were removed because their license does not allow redistribution.)
