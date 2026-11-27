@@ -132,3 +132,19 @@ describe('team pack', () => {
     expect(existsSync(join(data, 'skills', 'ponytail'))).toBe(false)
   })
 })
+
+describe('pack face sheets', () => {
+  it('keeps valid face sheets by role and serves them as data URLs', async () => {
+    const data = mkdtempSync(join(tmpdir(), 'vs-faces-'))
+    const store = new Store(join(data, 'ventriee.db'))
+    const plugins = new PluginService(store, new SkillService(store, data), data, '0.3.8')
+    const dir = makePlugin({ id: 'faces-pack', name: 'Faces', version: '1.0.0', contributes: { faces: { reviewer: 'faces/reviewer.png', qa: 'faces/missing.png', '../bad': 'faces/reviewer.png' } } },
+      { 'faces/reviewer.png': 'not really a png' })
+    const { manifest, errors } = readManifest(dir, '0.3.8')
+    expect(manifest.faces).toEqual({ reviewer: join('faces', 'reviewer.png') })
+    expect(errors.filter((e) => e.startsWith('Face sheet'))).toHaveLength(2)
+    const preview = await plugins.preview({ type: 'folder', value: dir })
+    plugins.install(preview.token)
+    expect(plugins.faceSheets().reviewer).toMatch(/^data:image\/png;base64,/)
+  })
+})

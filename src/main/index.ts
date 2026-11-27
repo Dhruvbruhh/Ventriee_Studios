@@ -518,6 +518,7 @@ function registerIpc() {
   handle(IPC.remoteCleanup, (_e, id: string) => remoteJobs.cleanup(String(id)))
   handle(IPC.remoteForget, (_e, id: string) => remoteJobs.forget(String(id)))
   handle(IPC.pluginList, () => plugins.list())
+  handle(IPC.agentFaces, () => plugins.faceSheets())
   handle(IPC.pluginPreview, (_e, source: { type: 'folder' | 'git'; value: string }) => {
     if (!source || (source.type !== 'folder' && source.type !== 'git') || typeof source.value !== 'string') throw new Error('Pick a folder or paste a Git address')
     return plugins.preview({ type: source.type, value: source.value.trim() })

@@ -8,6 +8,7 @@ import { MessageEnvelope, type MessageAct } from '../office/MessageEnvelope'
 import { TiledMapRenderer } from '../office/TiledMapRenderer'
 import { characterForRole, type OfficeCharacterName } from '../office/cast'
 import type { Mood } from '../office/portraitArt'
+import { faceCell, faceSheets, moodFor } from '../office/faces'
 import { OFFICE_THEME, type Tile } from '../office/themeRegistry'
 import { resolveThemeMap, themeTilesetUrls } from '../office/themeLoader'
 import { hexNum } from '../office/tokens'
@@ -26,15 +27,6 @@ interface Runtime {
   face?: string
 }
 
-/** The face an agent wears for its state; undefined is the character's own resting face. */
-export function moodFor(status: Agent['status'], selected: boolean): Mood | undefined {
-  if (status === 'error') return 'cry'
-  if (status === 'paused') return 'angry'
-  if (selected) return 'blush'
-  if (status === 'working') return 'smile'
-  if (status === 'waiting' || status === 'offline') return 'tired'
-  return undefined
-}
 
 const ACT: Record<Message['type'], MessageAct> = {
   note: 'inform',
@@ -87,6 +79,8 @@ export function OfficeFloor({ onSelect }: { onSelect: (id: string) => void }) {
 
     const boot = async () => {
       const theme = OFFICE_THEME
+      // packs may give roles real face pictures; without one this is empty and the pixel faces stay
+      const faces = await faceSheets()
       await app.init({
         background: theme.palette.background,
         antialias: false,
@@ -252,6 +246,8 @@ export function OfficeFloor({ onSelect }: { onSelect: (id: string) => void }) {
         if (face === runtime.face) return
         runtime.face = face
         runtime.character.sprite.setFrames(theme.cast.getFrames(runtime.name, mood))
+        const sheet = faces.get(agent.role)
+        runtime.character.setFace(sheet ? Texture.from(faceCell(sheet, agent.role, mood ?? 'smile', 64)) : null)
       }
 
       const addCharacter = async (agent: Agent) => {

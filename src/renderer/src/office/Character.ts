@@ -1,4 +1,4 @@
-﻿import { Container, Graphics, Text, Texture } from 'pixi.js';
+﻿import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { CharacterSprite, type Direction, type AnimState } from './CharacterSprite';
 import { findPath } from './pathfinding';
 import type { TiledMapRenderer } from './TiledMapRenderer';
@@ -60,6 +60,8 @@ const DESK_REST_SECONDS = 30;
 // at once should read as labels under the sprites, not compete with the action
 // bubbles above their heads.
 const NAME_TAG_FONT_SIZE = 6;
+/** World-pixel size of a pack's face picture above the name tag. */
+const FACE_SIZE = 14;
 const NAME_TAG_STROKE_WIDTH = 1;
 const NAME_TAG_OFFSET_Y = -4;
 const NAME_TAG_PAD_X = 2;
@@ -131,6 +133,7 @@ export class Character {
   private nameTag: Container;
   private nameTagText: Text;
   private nameTagPlate: Graphics;
+  private face: Sprite | null = null;
   private workGlow: Graphics;
   private workGlowElapsed = 0;
   private glowOn = false;
@@ -435,6 +438,29 @@ export class Character {
     this.drawNameTagPlate();
   }
 
+  /** A pack's face picture for the current mood, in a round frame left of the name tag; null removes it. */
+  setFace(texture: Texture | null): void {
+    if (!texture) { this.face?.parent?.destroy({ children: true }); this.face = null; return; }
+    if (this.face) { this.face.texture = texture; return; }
+    const box = new Container();
+    box.addChild(new Graphics().circle(0, 0, FACE_SIZE / 2 + 0.75).fill({ color: 0xffffff }));
+    this.face = new Sprite(texture);
+    this.face.anchor.set(0.5);
+    this.face.width = this.face.height = FACE_SIZE;
+    const mask = new Graphics().circle(0, 0, FACE_SIZE / 2).fill({ color: 0xffffff });
+    box.addChild(this.face, mask);
+    this.face.mask = mask;
+    this.nameTag.addChild(box);
+    this.placeFace();
+  }
+
+  private placeFace(): void {
+    const box = this.face?.parent;
+    if (!box) return;
+    box.x = -(this.nameTagText.width / 2 + NAME_TAG_PAD_X) - FACE_SIZE / 2 - 1;
+    box.y = this.nameTagText.height / 2;
+  }
+
   /** Repaint the backing plate to the text's measured width. Sized here rather
    *  than at a fixed width because names run from "QA" to "Architect". */
   private drawNameTagPlate(): void {
@@ -444,6 +470,7 @@ export class Character {
       .clear()
       .roundRect(-w / 2, -NAME_TAG_PAD_Y, w, h, NAME_TAG_RADIUS)
       .fill({ color: colors.ink[900], alpha: NAME_TAG_PLATE_ALPHA });
+    this.placeFace();
   }
 
   setStatusGlyph(glyph: StatusGlyph): void {

@@ -157,6 +157,7 @@ export const IPC = {
   mcpInstall: 'mcp:install',
   githubAuth: 'github:auth',
   pluginList: 'plugin:list',
+  agentFaces: 'agent:faces',
   pluginPreview: 'plugin:preview',
   pluginInstall: 'plugin:install',
   pluginDiscard: 'plugin:discard',
@@ -448,6 +449,8 @@ export interface VentrieeApi {
   /** GitHub CLI status: installed, signed in, account. */
   githubAuth(): Promise<{ installed: boolean; signedIn: boolean; account: string; detail: string }>
   pluginList(): Promise<PluginInfo[]>
+  /** Agent role → face sheet data URL, from installed packs. */
+  agentFaces(): Promise<Record<string, string>>
   /** Fetch and check a plugin without installing it; install with the returned token. */
   pluginPreview(source: { type: 'folder' | 'git'; value: string }): Promise<{ token: string; id: string; name: string; version: string; description: string; installed: string | null; permissions: string[]; errors: string[] }>
   pluginInstall(token: string): Promise<PluginInfo>

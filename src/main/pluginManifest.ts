@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { McpServer, PluginAgentTemplate, PluginCommand, PluginTheme, WorkflowEdge, WorkflowNode, WorkflowNodeKind } from '../shared/types'
 import { validMcpServers } from './mcp'
@@ -21,6 +21,8 @@ export interface PluginManifest {
   commands: PluginCommand[]
   /** A ventriee-agents manifest inside the plugin whose agents join the catalogue (absolute path), or ''. */
   catalogue: string
+  /** Agent role → face sheet (2×4 grid of the eight moods), as paths relative to the plugin folder. */
+  faces: Record<string, string>
 }
 
 const SEMVER = /^(\d{1,4})\.(\d{1,4})\.(\d{1,6})$/
@@ -117,11 +119,18 @@ export function readManifest(root: string, appVersion: string): { manifest: Plug
   const catalogue = c.catalogue === undefined ? '' : insidePlugin(root, c.catalogue) ?? ''
   if (c.catalogue !== undefined && !(catalogue && existsSync(catalogue))) errors.push('The agent catalogue file is missing or outside the plugin folder')
 
+  const faces: Record<string, string> = {}
+  for (const [role, rel] of Object.entries(typeof c.faces === 'object' && c.faces ? c.faces : {})) {
+    const full = insidePlugin(root, rel)
+    if (!/^[a-z0-9-]{1,40}$/.test(role) || !full || !/\.(webp|png|jpe?g)$/i.test(full) || !existsSync(full) || statSync(full).size > 4_000_000) { errors.push(`Face sheet for "${role}" is missing, too big, or not a webp/png/jpg inside the plugin`); continue }
+    faces[role] = relative(resolve(root), full)
+  }
+
   const commands: PluginCommand[] = list(c.commands).filter((x: any) => /^[a-z0-9-]{1,40}$/.test(str(x?.id, 40)) && str(x?.title, 80) && str(x?.prompt, 8000))
     .map((x: any) => ({ id: str(x.id, 40), title: str(x.title, 80), prompt: str(x.prompt, 8000) }))
 
   return {
-    manifest: { id, name: str(raw.name, 80) || id, version, description: str(raw.description, 1000), author: str(raw.author, 120), minAppVersion, dependencies, skills, mcpServers, workflows, agents, themes, commands, catalogue: catalogue && existsSync(catalogue) ? catalogue : '' },
+    manifest: { id, name: str(raw.name, 80) || id, version, description: str(raw.description, 1000), author: str(raw.author, 120), minAppVersion, dependencies, skills, mcpServers, workflows, agents, themes, commands, catalogue: catalogue && existsSync(catalogue) ? catalogue : '', faces },
     errors
   }
 }
@@ -134,6 +143,7 @@ export function permissionsOf(m: PluginManifest): string[] {
   if (m.workflows.length) out.push(`Adds ${m.workflows.length} workflow(s), switched off until you enable them`)
   if (m.agents.length) out.push(`Offers ${m.agents.length} agent template(s)`)
   if (m.catalogue) out.push('Adds agent types to your agent catalogue, switched on')
+  if (Object.keys(m.faces).length) out.push(`Gives ${Object.keys(m.faces).length} agent role(s) their own face pictures`)
   if (m.themes.length) out.push(`Offers ${m.themes.length} colour theme(s)`)
   if (m.commands.length) out.push(`Adds ${m.commands.length} prompt shortcut(s)`)
   if (!out.length) out.push('Nothing: this plugin contributes no features')

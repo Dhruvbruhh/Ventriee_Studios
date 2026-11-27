@@ -4,6 +4,7 @@ import {
   IconClose, IconEdit, IconExternal, IconPause, IconPlay, IconSend, IconStop, IconTerminal
 } from '../icons'
 import type { Agent, McpToolCall } from '../../../shared/types'
+import { moodFor, useFace } from '../office/faces'
 
 type Tab = 'live' | 'task' | 'messages' | 'mcp' | 'config'
 
@@ -12,6 +13,13 @@ function Screens({ projectId, since }: { projectId: string; since: number }) {
   const [shots, setShots] = useState<Array<{ name: string; time: number; url: string }>>([])
   useEffect(() => { void window.ventriee.screenshots(projectId).then((all) => setShots(all.filter((s) => s.time >= since)), () => setShots([])) }, [projectId, since])
   return shots.length ? <div className="kv"><dt>Screenshots</dt><dd className="attach-strip">{shots.map((s) => <a key={s.name} href={s.url} target="_blank" rel="noreferrer" title={s.name}><img src={s.url} alt={`Screenshot ${s.name}`} /></a>)}</dd></div> : null
+}
+
+function AgentAvatar({ agent }: { agent: Agent }) {
+  const face = useFace(agent.role, moodFor(agent.status, false) ?? 'smile')
+  return face
+    ? <div className="avatar avatar-face"><img src={face} alt="" /><span className={`status-pip ${agent.status}`} /></div>
+    : <div className="avatar" style={{ ['--who' as string]: agent.color }}>{agent.name.slice(0, 2).toUpperCase()}<span className={`status-pip ${agent.status}`} /></div>
 }
 
 export function Inspector({ agentId }: { agentId: string }) {
@@ -59,10 +67,7 @@ export function Inspector({ agentId }: { agentId: string }) {
     <aside className="drawer" aria-label={`${agent.name} inspector`}>
       <div className="drawer-head">
         <div className="drawer-id">
-          <div className="avatar" style={{ ['--who' as string]: agent.color }}>
-            {agent.name.slice(0, 2).toUpperCase()}
-            <span className={`status-pip ${agent.status}`} />
-          </div>
+          <AgentAvatar agent={agent} />
           <div className="min-w-0">
             <div className="drawer-name">
               {agent.name}

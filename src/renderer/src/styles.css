@@ -2294,3 +2294,6 @@ body {
 
 .team-pack { display: grid; gap: 6px; margin-bottom: var(--s-4); }
 .team-pack .input { flex: 1; }
+
+.avatar.avatar-face { padding: 0; overflow: visible; background: none; }
+.avatar.avatar-face img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; }
