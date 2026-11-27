@@ -29,6 +29,12 @@ export async function resetPassword(email: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+/** Set a new password after following a recovery link (requires the recovery session). */
+export async function updatePassword(password: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password })
+  if (error) throw new Error(error.message)
+}
+
 // --- Workspaces -----------------------------------------------------------
 
 /** Personal workspace plus every org the user belongs to, with their role. */

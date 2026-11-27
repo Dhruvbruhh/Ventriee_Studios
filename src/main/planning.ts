@@ -512,9 +512,9 @@ export class PlanningService {
 }
 
 /** Ask Ollama what a listed model really is (parameter size, context length); null when it will not say. */
-async function ollamaShow(model: string): Promise<{ paramsB?: number; contextLength?: number } | null> {
+export async function ollamaShow(model: string): Promise<{ paramsB?: number; contextLength?: number } | null> {
   try {
-    const base = defaultEndpoint('api-ollama').replace(/\/$/, '')
+    const base = defaultEndpoint('api-ollama').replace(/\/v1\/?$/, '').replace(/\/$/, '')
     const res = await fetch(`${base}/api/show`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

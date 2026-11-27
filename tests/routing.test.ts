@@ -90,3 +90,20 @@ describe('providerModel', () => {
     fetchMock.mockRestore()
   })
 })
+
+describe('ollamaShow', () => {
+  it('calls the native /api/show root (not the /v1 compat layer) and parses size and context', async () => {
+    const { vi } = await import('vitest')
+    const { ollamaShow } = await import('../src/main/planning')
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      details: { parameter_size: '7.6B' },
+      model_info: { 'llama3:8b.context_length': 8192 }
+    })))
+    const out = await ollamaShow('llama3:8b')
+    const url = String(fetchMock.mock.calls[0][0])
+    expect(url).toMatch(/\/api\/show$/)
+    expect(url).not.toContain('/v1/')
+    expect(out).toEqual({ paramsB: 7.6, contextLength: 8192 })
+    fetchMock.mockRestore()
+  })
+})
