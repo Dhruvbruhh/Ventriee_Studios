@@ -31,6 +31,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
+| W37 | Stemmed lexical retrieval (FINAL_AUDIT #10) | - | Done | Light suffix stemmer in the intelligence tokenizer (`src/main/intelligence/index.ts`): ing/ed/s/e/doubled-consonant stripping above a length floor, applied identically to index and query sides; `INDEX_VERSION` 1→2 so stale indexes rebuild; `tests/intelligence.test.ts` (the audit's "git commit staging" query now ranks `git.ts` first) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -202,3 +203,12 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W37. Stemmed lexical retrieval (FINAL_AUDIT #10). The engine was
+  BM25 over exact tokens, so inflected queries missed: "git commit staging"
+  ranked `plugins.ts` above `git.ts` because the code says "stage"/"commit".
+  The shared tokenizer now applies a light suffix stemmer (ing/ed/s/e and a
+  doubled final consonant, each above a length floor so short tokens survive)
+  identically to the index and query sides; INDEX_VERSION is bumped 1 -> 2 so
+  existing indexes rebuild once. Known limit: this fixes inflection, not
+  synonyms ("commit code changes" still will not find `git.ts`); that needs
+  embeddings, which stay out of scope for the dependency-free engine.
