@@ -193,6 +193,7 @@ Last updated: 2026-11-26
 | Shell selection | ✅ | terminalShell setting |
 | Process management | ✅ | |
 | Environment variables | ✅ | Per-project env vars in Project settings (`projects.envVars`); applied to new terminal sessions for that project (`TerminalService.open` extraEnv). Values that look like secrets are masked in the UI with a show/hide toggle |
+| Push notifications (mobile) | ✅ | `push_tokens` table (migration 0008, own-tokens-only RLS); mobile registers its Expo push token on sign-in when an EAS projectId is configured (mobile/src/notifications.ts + cloud.ts); `notify` Edge Function sends via Expo's push API — deploy steps in docs/cloud-setup.md |
 
 ## Phase 15 — Usage Analytics
 | Feature | Status | Notes |

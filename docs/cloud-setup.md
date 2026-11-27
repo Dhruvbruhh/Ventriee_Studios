@@ -133,6 +133,29 @@ curl -X POST "https://your-project.supabase.co/functions/v1/invite-member" \
 The Team page's "Invite member" button calls this automatically once deployed;
 before deployment it surfaces the function's 404 as an error message.
 
+### notify
+
+Sends an Expo push notification to all devices a user has registered. Callers
+must be signed in, or hold the service key (for server-side jobs).
+
+```bash
+supabase functions deploy notify
+```
+
+Requires the push-tokens schema (migration `0008_push_tokens.sql`, applied by
+`supabase db push`) and a mobile build registered with EAS so devices can get
+push tokens (see `mobile/src/notifications.ts` — set `extra.eas.projectId` in
+`mobile/app.json` and configure APNs/FCM in EAS). Test it:
+
+```bash
+curl -X POST "https://your-project.supabase.co/functions/v1/notify" \
+  -H "Authorization: Bearer <a signed-in user's access token>" \
+  -H "Content-Type: application/json" \
+  -d '{"userId": "<user uuid>", "title": "Task done", "body": "Build hero finished"}'
+# expect {"ok":true,"sent":1} — 0 when that user has no registered device
+```
+
+
 ## Notes
 
 - **No destructive migrations here.** This migration only creates objects; it does
