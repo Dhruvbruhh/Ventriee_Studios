@@ -681,7 +681,8 @@ function registerIpc() {
   handle(IPC.termOpen, (event, id: string, cols: number, rows: number, shell?: string) => {
     const sender = event.sender
     const send = (channel: string, payload: unknown) => { if (!sender.isDestroyed()) sender.send(channel, payload) }
-    return terminals.open(sender.id, projectRoot(event, id), cols, rows, (term, data) => send(IPC.termData, { id: term, data }), (term, code) => send(IPC.termExit, { id: term, code }), typeof shell === 'string' ? shell : undefined)
+    const project = store.project(id)
+    return terminals.open(sender.id, projectRoot(event, id), cols, rows, (term, data) => send(IPC.termData, { id: term, data }), (term, code) => send(IPC.termExit, { id: term, code }), typeof shell === 'string' ? shell : undefined, project?.envVars)
   })
   handle(IPC.termWrite, (event, id: string, data: string) => terminals.write(event.sender.id, id, data))
   handle(IPC.termResize, (event, id: string, cols: number, rows: number) => terminals.resize(event.sender.id, id, cols, rows))

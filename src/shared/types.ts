@@ -451,6 +451,8 @@ export interface Project {
   clientId: string | null
   /** Cloud org the project was created in; null for the personal workspace. Picks which org memory it sees. */
   orgId?: string | null
+  /** Environment variables applied to new terminal sessions for this project. */
+  envVars?: Record<string, string>
   createdAt: number
   updatedAt: number
 }

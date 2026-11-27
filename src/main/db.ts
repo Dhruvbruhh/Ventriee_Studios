@@ -220,6 +220,10 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE conversations ADD COLUMN branchedFrom TEXT;
   ALTER TABLE conversations ADD COLUMN branchedFromMessageId TEXT;
+  `,
+  // Per-project environment variables for new terminal sessions.
+  `
+  ALTER TABLE projects ADD COLUMN envVars TEXT NOT NULL DEFAULT '{}';
   `
 ]
 

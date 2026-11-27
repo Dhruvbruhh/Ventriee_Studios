@@ -192,7 +192,7 @@ Last updated: 2026-11-26
 | Multiple terminal sessions | ✅ | |
 | Shell selection | ✅ | terminalShell setting |
 | Process management | ✅ | |
-| Environment variables | 🟡 | Via project context |
+| Environment variables | ✅ | Per-project env vars in Project settings (`projects.envVars`); applied to new terminal sessions for that project (`TerminalService.open` extraEnv). Values that look like secrets are masked in the UI with a show/hide toggle |
 
 ## Phase 15 — Usage Analytics
 | Feature | Status | Notes |
