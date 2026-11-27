@@ -12,11 +12,12 @@ export type BrowserStep =
   | { action: 'viewport'; width: number; height: number }
   | { action: 'expect'; selector: string; text: string }
   | { action: 'inspect' }
+  | { action: 'tab'; target: string }
 
 export const STEP_HELP = [
   'goto <url>', 'click <css selector>', 'type <css selector> => <text>', 'press <key, e.g. Enter>', 'wait <milliseconds>',
   'waitfor <css selector>', 'scroll top|bottom|<pixels>', 'screenshot [name]', 'text [css selector]',
-  'viewport <width>x<height>', 'expect <css selector> contains <text>', 'inspect'
+  'viewport <width>x<height>', 'expect <css selector> contains <text>', 'inspect', 'tab new|<n>|close'
 ]
 
 const KEYS = new Set(['Enter', 'Tab', 'Escape', 'Backspace', 'Delete', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', 'Space'])
@@ -75,6 +76,11 @@ export function parseSteps(script: string, input = ''): { steps: Array<BrowserSt
         return
       }
       case 'inspect': return void steps.push({ action: 'inspect', line })
+      case 'tab': {
+        if (rest === 'new' || rest === 'close') return void steps.push({ action: 'tab', target: rest, line })
+        const n = Number(rest)
+        return Number.isInteger(n) && n >= 1 && n <= 12 ? void steps.push({ action: 'tab', target: rest, line }) : fail('use: tab new, tab <n> (1-based, 1 to 12) or tab close')
+      }
       default: fail(`unknown step "${word}". Steps: ${STEP_HELP.map((h) => h.split(' ')[0]).join(', ')}`)
     }
   })

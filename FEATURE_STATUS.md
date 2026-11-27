@@ -150,7 +150,7 @@ Last updated: 2026-11-26
 | Console / network / downloads | ✅ | Console and network logs per session; downloads saved to Downloads/Ventriee browser |
 | Approval for sensitive actions | ✅ | Clicking, typing or pressing keys on a non-local site asks first (once per site per run) |
 | Agents | 🟡 | Workflows' Browser step; Claude Code workers can also use the pre-seeded Playwright MCP server (off by default) |
-| Tabs | ❌ | One page per window; new-tab links open in the same window |
+| Tabs | ✅ | `tab new` / `tab <n>` / `tab close` steps; target=_blank links open a new tab in the same window instead of navigating in place |
 
 ## Phase 11 — Cloud Agents
 | Feature | Status | Notes |
