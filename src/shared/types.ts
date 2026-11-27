@@ -190,6 +190,8 @@ export interface PluginInfo {
   agents: PluginAgentTemplate[]
   themes: PluginTheme[]
   commands: PluginCommand[]
+  /** Agent role → face sheet path inside the installed plugin folder. */
+  faces?: Record<string, string>
   /** What it added, so removal takes exactly that back. */
   added: { skills: string[]; mcpServers: string[]; workflows: string[]; agents?: string[] }
   errors: string[]

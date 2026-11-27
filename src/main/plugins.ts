@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { Store } from './store'
 import type { SkillService } from './skills'
@@ -103,7 +103,7 @@ export class PluginService {
       const info: PluginInfo = {
         id: manifest.id, name: manifest.name, version: manifest.version, description: manifest.description, author: manifest.author,
         source: staged.source, installedAt: Date.now(), dependencies: manifest.dependencies, permissions: permissionsOf(manifest),
-        agents: manifest.agents, themes: manifest.themes, commands: manifest.commands, added, errors
+        agents: manifest.agents, themes: manifest.themes, commands: manifest.commands, faces: manifest.faces, added, errors
       }
       this.saveList([...this.list().filter((p) => p.id !== info.id), info])
       return info
@@ -141,6 +141,18 @@ export class PluginService {
     if (p.installed && compareVersions(p.installed, p.version) >= 0) { this.discard(p.token); return `${p.name} ${p.installed} is up to date` }
     const info = this.install(p.token, true)
     return `${info.name} ${info.version} installed`
+  }
+
+  /** Face sheets from installed plugins as data URLs, by agent role; a later plugin overrides an earlier one. */
+  faceSheets(): Record<string, string> {
+    const out: Record<string, string> = {}
+    for (const p of this.list()) for (const [role, rel] of Object.entries(p.faces ?? {})) {
+      const file = join(this.root, p.id, rel)
+      if (!existsSync(file)) continue
+      const ext = extname(file).slice(1).toLowerCase()
+      out[role] = `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${readFileSync(file).toString('base64')}`
+    }
+    return out
   }
 
   discard(token: string) {

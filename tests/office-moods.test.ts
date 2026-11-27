@@ -7,7 +7,7 @@ describe('agent moods', () => {
   })
 
   it('maps each agent state to a face, with errors and pauses winning over selection', async () => {
-    const { moodFor } = await import('../src/renderer/src/components/OfficeFloor')
+    const { moodFor } = await import('../src/renderer/src/office/faces')
     expect(moodFor('working', false)).toBe('smile')
     expect(moodFor('waiting', false)).toBe('tired')
     expect(moodFor('error', true)).toBe('cry')

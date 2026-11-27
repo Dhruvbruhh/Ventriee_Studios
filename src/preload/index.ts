@@ -242,6 +242,7 @@ const api: VentrieeApi = {
   browserClose: () => ipcRenderer.invoke(IPC.browserClose),
   githubAuth: () => ipcRenderer.invoke(IPC.githubAuth),
   pluginList: () => ipcRenderer.invoke(IPC.pluginList),
+  agentFaces: () => ipcRenderer.invoke(IPC.agentFaces),
   pluginPreview: (source) => ipcRenderer.invoke(IPC.pluginPreview, source),
   pluginInstall: (token) => ipcRenderer.invoke(IPC.pluginInstall, token),
   pluginDiscard: (token) => ipcRenderer.invoke(IPC.pluginDiscard, token),
