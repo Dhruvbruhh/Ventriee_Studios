@@ -71,6 +71,19 @@ describe('intelligence retrieval', () => {
     const root = workspace({ 'src/a.ts': 'const a = 1' })
     expect(new IntelligenceEngine().retrieve(root, 'anything')).toEqual([])
   })
+
+  it('matches inflected forms through the stemmer', () => {
+    const root = workspace({
+      'src/git.ts': 'export function stageFiles(paths: string[]) { /* staging area for the commit */ }',
+      'src/theme.ts': 'export const palette = { bg: "graphite" }'
+    })
+    const intel = new IntelligenceEngine()
+    intel.sync(root)
+
+    // The audit's miss: "staging"/"commits" in the query vs "stage"/"commit" in the code.
+    const hits = intel.retrieve(root, 'git commit staging', 3)
+    expect(hits[0]?.path).toBe('src/git.ts')
+  })
 })
 
 describe('intelligence compiler', () => {

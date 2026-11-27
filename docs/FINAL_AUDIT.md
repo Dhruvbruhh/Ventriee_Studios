@@ -41,7 +41,7 @@ test accounts before release.
 | 7 | P2 | Web has no email invitations (adds existing users by id), and no forgot-password on web sign-in. | Supabase Edge Function with the service key. |
 | 8 | P2 | Mobile: 3 moderate npm advisories (minimatch/glob in Expo/Jest tooling; not in the shipped bundle). The suggested fix is a downgrade. | Track upstream. |
 | 9 | P3 | ~~Electron main window `sandbox: false` (contextIsolation on, nodeIntegration off, CSP set).~~ | Fixed (W33): `sandbox: true` with a CJS preload; the preload only uses contextBridge + ipcRenderer, so it ships as `out/preload/index.cjs` (electron-vite emits CJS for the sandboxed preload). |
-| 10 | P3 | Intelligence is lexical (BM25). Synonym queries rank weaker (e.g. "git commit staging" put `plugins.ts` above `git.ts`). | Embeddings later. |
+| 10 | ~~P3~~ | ~~Intelligence is lexical (BM25). Synonym queries rank weaker (e.g. "git commit staging" put `plugins.ts` above `git.ts`).~~ Fixed (W37): light suffix stemming in the shared tokenizer ("staging" and "stage" both index as "stag", "commits" as "commit"; index version bumped so stale indexes rebuild). Inflected queries now hit; true synonym ranking still needs embeddings. | `tests/intelligence.test.ts` |
 | 11 | P3 | ~~`web/src/lib/supabase.ts` used `??`, so an empty `VITE_SUPABASE_PUBLISHABLE_KEY=` blocked the ANON fallback.~~ | Fixed (`||`). |
 
 ## Areas inspected and judged sound (static + tests)

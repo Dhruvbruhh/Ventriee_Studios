@@ -45,6 +45,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W34 | Remote commands target projects by their linked cloud id (FINAL_AUDIT #4, P2) | - | Done | cloud sync already stores the cloud project id per local project in the `cloud_sync` table, so no schema change was needed: `resolveRemoteProject` (src/main/remote.ts) now matches a phone's `projectId` against that link before falling back to the local id and a unique exact name; an ambiguous link (two local projects joined to one cloud row) throws instead of guessing; the main-process call site joins the link ids onto the project list it passes in; `tests/remote.test.ts` (+2 cases) |
 | W35 | Ollama model profiles from `/api/show` (FINAL_AUDIT #5 P2) | - | Done | `cliModels` asks Ollama's `/api/show` for every listed local model (5 s timeout, failures ignored); the reported parameter size (`details.parameter_size`) and context length (`context_length` or `model_info.*.context_length`) ride on `ModelOption.paramsB`/`contextLength`; `deriveProfile` ranks by the real size (>=70b strong, <=8b fast) and uses the real context window, name regexes stay the fallback; `tests/routing.test.ts` (+1) |
 | W36 | Per-project device grants (FINAL_AUDIT #6) | - | Done | Migration `0007_per_project_grants.sql`: `device_grants.project_id` (null = whole device, unchanged behavior); `can_control_device(device, project)` and the `commands_insert` policy pass `payload.projectId`, failing closed when absent or not a uuid; `CloudClient.grantDevice` accepts `projectId`; `tests/migrations.test.ts` (scoped-grant case: granted project enqueues, other project and unnamed target rejected) |
+| W37 | Stemmed lexical retrieval (FINAL_AUDIT #10) | - | Done | Light suffix stemmer in the intelligence tokenizer (`src/main/intelligence/index.ts`): ing/ed/s/e/doubled-consonant stripping above a length floor, applied identically to index and query sides; `INDEX_VERSION` 1→2 so stale indexes rebuild; `tests/intelligence.test.ts` (the audit's "git commit staging" query now ranks `git.ts` first) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -368,3 +369,12 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   rule. `CloudClient.grantDevice` accepts an optional `projectId`; the desktop
   UI does not yet offer a project picker when granting. Proven on PGlite: the
   granted project enqueues, another project and an unnamed target are refused.
+- 2026-11-27: W37. Stemmed lexical retrieval (FINAL_AUDIT #10). The engine was
+  BM25 over exact tokens, so inflected queries missed: "git commit staging"
+  ranked `plugins.ts` above `git.ts` because the code says "stage"/"commit".
+  The shared tokenizer now applies a light suffix stemmer (ing/ed/s/e and a
+  doubled final consonant, each above a length floor so short tokens survive)
+  identically to the index and query sides; INDEX_VERSION is bumped 1 -> 2 so
+  existing indexes rebuild once. Known limit: this fixes inflection, not
+  synonyms ("commit code changes" still will not find `git.ts`); that needs
+  embeddings, which stay out of scope for the dependency-free engine.
