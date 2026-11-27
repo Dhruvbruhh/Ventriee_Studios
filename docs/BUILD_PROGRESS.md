@@ -40,6 +40,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W29 | Browser tabs (FEATURE_STATUS Phase 10) | - | Done | `browserAutomation.ts`: one sandboxed window per tab in the same session, only the active one visible; `tab new`/`tab <n>`/`tab close` steps in `browserSteps.ts` (1-12); new-tab links open a background tab without stealing focus; `tests/browser-steps.test.ts` (tab parsing) |
 | W30 | Resizable panels: app sidebar, code sidebar, bottom panel (FEATURE_STATUS Phase 1) | - | Done | new `src/renderer/src/components/Resize.tsx`: `useDragSize` (pointer drag + arrow-key nudge + double-click reset, persisted in localStorage, min/max clamped), `ResizeHandle` (role=separator, aria-labelled), `sizeVar`; handles wired in `App.tsx` shell and `CodeWorkspace.tsx` (code sidebar x, bottom panel y with dynamic ceiling); sizes applied as CSS custom properties overriding the grid defaults (unlayered rules at the end of `styles.css`); `tests/resize.test.ts` (3 tests) |
 | W31 | Accent picker (FEATURE_STATUS Phase 16) | - | Done | `settings.accent` (hex string, '' keeps the theme accent); validated in the saveSettings IPC handler by `normaliseAccent` (src/shared/accent.ts, hex-only, also exports 8 `ACCENT_PRESETS`); App.tsx applies it as `--accent` on `document.documentElement` on top of built-in and plugin themes (re-applied after plugin colours load, removed on cleanup); Settings → Appearance gains preset swatches, a custom colour input and Reset; `tests/accent.test.ts` (3 tests) |
+| W32 | GitHub-event workflow triggers: PR list changes, CI failures (FEATURE_STATUS Phase 8) | - | Done | two new Start-step trigger kinds, `github_pr` (the project's PR list changes) and `github_ci` (a CI run fails), polled every 30 s on the existing scheduler tick via the owner's `gh` login (one `gh pr list` / `gh run list` call per tick); `prDigest` / `ciDigest` in `src/main/workflows.ts` turn the JSON into a change signature (PRs by number+updatedAt; CI by failed run ids only, so a run that stays red fires once) plus a readable trigger input; an empty payload (no gh, signed out, no repo) never fires, and the first observation only records the baseline; Workflows panel lists both options and demands a project like the other event triggers; `tests/workflows.test.ts` (+5 cases) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -297,3 +298,20 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   colour picker and a Reset chip cover the UI. `tests/accent.test.ts` (3 tests)
   covers validation and the preset list; both tsconfigs and the full vitest run
   are green.
+- 2026-11-27: W32. Workflows can now start from GitHub events. A Start step
+  gains two trigger kinds: `github_pr` fires when the project's open-PR list
+  changes (new, closed or updated PR), `github_ci` fires when a GitHub Actions
+  run fails. Both are polled on the existing 30-second scheduler tick through
+  the owner's own `gh` CLI login, one `gh pr list` / `gh run list` call per
+  interested project, so no extra credentials and no webhooks. The payload is
+  reduced to a change signature: PRs by number and updatedAt, CI by the ids of
+  failed runs only, which means a run that stays red does not re-fire on every
+  tick, but a second failure does. Empty results (gh missing, signed out, no
+  GitHub remote) and the first observation never fire, mirroring how the git
+  commit trigger treats its baseline. The digest text ("GitHub PRs open now",
+  "GitHub Actions failures" with ids and titles) becomes the workflow input, so
+  an If step can branch on it and an AI step can summarise it. The Workflows
+  panel lists both options and, like the file/git/run triggers, requires a
+  project before the trigger can watch anything. Tests for both digests and the
+  new trigger kinds were added to `tests/workflows.test.ts` (13 tests total);
+  both tsconfigs and the full vitest run are green.

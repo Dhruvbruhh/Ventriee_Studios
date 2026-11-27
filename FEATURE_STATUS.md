@@ -125,7 +125,7 @@ Last updated: 2026-11-26
 | Trigger types | ✅ | Through Workflows: manual, schedule, webhook, file change, git commit, agent run finished / failed |
 | Actions (run agent, command, etc.) | ✅ | Through Workflows: agent run, command, AI, HTTP, browser steps, notify, run another workflow |
 | Retry policy | ✅ | Per step, up to 3 retries with backoff |
-| GitHub PR / issue triggers, build/test-failure triggers | 🟡 | No GitHub event trigger; a failing test command fails its step, and an If step can branch on output |
+| GitHub PR / issue triggers, build/test-failure triggers | ✅ | Workflows: github_pr (PR list changes) and github_ci (a CI run fails) triggers, polled every 30 s via gh; fires on change only |
 | Execution logs | ✅ | events table |
 | Enable / disable | ✅ | enabled flag |
 
@@ -247,6 +247,5 @@ Last updated: 2026-11-26
 ---
 
 ## Still open
-- GitHub-event workflow triggers (PR open, CI failure)
 - Plugin code (UI extensions, editor enhancements) — kept out on purpose for safety
 - Voice: not yet measured with a real microphone
