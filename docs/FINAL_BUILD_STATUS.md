@@ -58,4 +58,4 @@ external requirement · [ ] not done / not implemented
 ## Security
 - [x] No secrets in tracked files (only test fixtures); `.env` files ignored
 - [x] npm audit: desktop 0, web 0, mobile 3 moderate (Expo/Jest build tooling only)
-- [~] Electron main window `sandbox: false` (P3)
+- [x] Electron main window runs `sandbox: true` with a CJS preload (fixed in W33)

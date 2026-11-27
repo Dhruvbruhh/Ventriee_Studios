@@ -28,7 +28,9 @@ export default defineConfig(({ mode }) => {
     preload: {
       define,
       plugins: [externalizeDepsPlugin()],
-      build: { rollupOptions: { input: resolve('src/preload/index.ts') } }
+      // Sandboxed preloads must be CommonJS: with sandbox: true the ESM
+      // loader is unavailable, so the preload ships as index.cjs.
+      build: { rollupOptions: { input: resolve('src/preload/index.ts'), output: { format: 'cjs', entryFileNames: '[name].cjs' } } }
     },
     renderer: {
       define,

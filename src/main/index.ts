@@ -320,8 +320,10 @@ function createWindow(projectId?: string) {
     icon: windowIcon,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
-      sandbox: false,
+      preload: join(__dirname, '../preload/index.cjs'),
+      // The preload only touches electron APIs (contextBridge + ipcRenderer), so the
+      // renderer can run fully sandboxed; contextIsolation keeps the bridge narrow.
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }

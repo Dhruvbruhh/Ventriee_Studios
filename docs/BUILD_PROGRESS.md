@@ -41,6 +41,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W30 | Resizable panels: app sidebar, code sidebar, bottom panel (FEATURE_STATUS Phase 1) | - | Done | new `src/renderer/src/components/Resize.tsx`: `useDragSize` (pointer drag + arrow-key nudge + double-click reset, persisted in localStorage, min/max clamped), `ResizeHandle` (role=separator, aria-labelled), `sizeVar`; handles wired in `App.tsx` shell and `CodeWorkspace.tsx` (code sidebar x, bottom panel y with dynamic ceiling); sizes applied as CSS custom properties overriding the grid defaults (unlayered rules at the end of `styles.css`); `tests/resize.test.ts` (3 tests) |
 | W31 | Accent picker (FEATURE_STATUS Phase 16) | - | Done | `settings.accent` (hex string, '' keeps the theme accent); validated in the saveSettings IPC handler by `normaliseAccent` (src/shared/accent.ts, hex-only, also exports 8 `ACCENT_PRESETS`); App.tsx applies it as `--accent` on `document.documentElement` on top of built-in and plugin themes (re-applied after plugin colours load, removed on cleanup); Settings → Appearance gains preset swatches, a custom colour input and Reset; `tests/accent.test.ts` (3 tests) |
 | W32 | GitHub-event workflow triggers: PR list changes, CI failures (FEATURE_STATUS Phase 8) | - | Done | two new Start-step trigger kinds, `github_pr` (the project's PR list changes) and `github_ci` (a CI run fails), polled every 30 s on the existing scheduler tick via the owner's `gh` login (one `gh pr list` / `gh run list` call per tick); `prDigest` / `ciDigest` in `src/main/workflows.ts` turn the JSON into a change signature (PRs by number+updatedAt; CI by failed run ids only, so a run that stays red fires once) plus a readable trigger input; an empty payload (no gh, signed out, no repo) never fires, and the first observation only records the baseline; Workflows panel lists both options and demands a project like the other event triggers; `tests/workflows.test.ts` (+5 cases) |
+| W33 | Main window `sandbox: true` (FINAL_AUDIT #9, P3) | - | Done | the preload only uses `contextBridge` + `ipcRenderer` (everything else is type-only imports), so it qualifies for the Chromium sandbox; electron-vite now emits the preload as CommonJS (`out/preload/index.cjs`, required for sandboxed preloads since the ESM loader is unavailable there) and the main window runs with `sandbox: true` while keeping `contextIsolation: true` and `nodeIntegration: false`; the automation browser window was already sandboxed with no preload; verified with a full `npm run build` and the whole vitest run |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -315,3 +316,16 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   project before the trigger can watch anything. Tests for both digests and the
   new trigger kinds were added to `tests/workflows.test.ts` (13 tests total);
   both tsconfigs and the full vitest run are green.
+- 2026-11-27: W33. The main window now runs inside the Chromium sandbox
+  (`sandbox: true`), closing the last open item from the security review. The
+  gate was the preload: sandboxed renderers cannot use the ESM loader, so a
+  preload must be CommonJS. Our preload only ever touched `contextBridge` and
+  `ipcRenderer` (its other imports are TypeScript types, erased at build time),
+  so the electron-vite preload build was switched to emit `index.cjs`, and the
+  window's `webPreferences` point at the new file. `contextIsolation` stays on
+  and `nodeIntegration` stays off, so the narrow `window.ventriee` bridge is
+  unchanged for the renderer. The automation browser window was already
+  sandboxed with no preload. Checked with a full `npm run build` (the CJS
+  preload lands in `out/preload/`) and both tsconfigs plus the whole vitest run
+  are green; the only risk left is a packaged-installer smoke test, which needs
+  a Windows signing environment and is listed in the wrap-up.
