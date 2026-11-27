@@ -22,6 +22,7 @@ import { Orchestrator } from './orchestrator'
 import { foldClarifications } from './clarify'
 import { PlanningService } from './planning'
 import { isInside } from './paths'
+import { chatTranscriptMarkdown } from '../shared/transcript'
 import { detectProviders, testEngine, defaultEndpoint, runEngine } from './engines'
 import { IPC } from '../shared/ipc'
 import { TerminalService, shells } from './terminal'
@@ -1301,6 +1302,28 @@ function registerIpc() {
   handle(IPC.chatSessionSelect, (_e, projectId: string, conversationId: string) => {
     store.setActiveConversation(projectId, conversationId)
     debouncedNotify()
+  })
+  handle(IPC.chatTemplateSave, (_e, input: { id?: string; name: string; content: string }) => {
+    const saved = store.saveChatTemplate(input)
+    debouncedNotify()
+    return saved
+  })
+  handle(IPC.chatTemplateDelete, (_e, id: string) => {
+    store.deleteChatTemplate(String(id))
+    debouncedNotify()
+  })
+  handle(IPC.chatExport, async (event, projectId: string, conversationId?: string) => {
+    if (!store.project(projectId)) throw new Error('Project not found')
+    const { title, messages } = store.exportConversation(projectId, typeof conversationId === 'string' ? conversationId : undefined)
+    if (!messages.length) throw new Error('This session has no messages to export yet')
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showSaveDialog(parent ?? undefined!, {
+      defaultPath: `${title.replace(/[^\w-]+/g, '-') || 'session'}.md`,
+      filters: [{ name: 'Markdown transcript', extensions: ['md'] }]
+    })
+    if (result.canceled || !result.filePath) return null
+    writeFileSync(result.filePath, chatTranscriptMarkdown(title, messages))
+    return result.filePath
   })
   handle(IPC.chatSend, async (_e, input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string; images?: string[]; replaceFrom?: string }) => {
     const project = store.project(input.projectId)

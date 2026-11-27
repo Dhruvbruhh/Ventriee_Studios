@@ -59,9 +59,9 @@ Last updated: 2026-11-26
 | Prompt creation from chat | ✅ | promptCreate IPC |
 | Prompt enhancement via optimizer model | ✅ | promptEnhance IPC, Ollama supported |
 | Prompt history | ✅ | PromptPanel with version list |
-| Reusable templates | ❌ | Not implemented |
+| Reusable templates | ✅ | Templates picker in the chat composer: save the current draft as a named snippet, insert it in any project, delete it (`chat_templates` table, `chatTemplateSave`/`Delete` IPC) |
 | Message editing / regeneration | ✅ | Planning chat: edit any of your messages or regenerate the last reply; later turns are replaced (`Store.rewindChat`). Attached images are not resent |
-| Conversation export | ❌ | Not implemented |
+| Conversation export | ✅ | "Export transcript" saves the active session as Markdown (`## You` / `## Assistant (model)` turns); `chatExport` IPC + `shared/transcript.ts`. Empty sessions refuse to export |
 | Branching | ❌ | Not implemented |
 
 ## Phase 4 — Agent Management

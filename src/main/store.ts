@@ -8,6 +8,7 @@ import type {
   Assignment,
   Automation,
   ChatMessage,
+  ChatTemplate,
   Conversation,
   EngineKind,
   Job,
@@ -814,6 +815,40 @@ export class Store {
     return doc
   }
 
+  // ---------- chat templates ----------
+  chatTemplates(): ChatTemplate[] {
+    return this.db.all<ChatTemplate>('SELECT * FROM chat_templates ORDER BY createdAt ASC')
+  }
+
+  saveChatTemplate(input: { id?: string; name: string; content: string }): ChatTemplate {
+    const name = input.name.trim()
+    const content = input.content
+    if (!name) throw new Error('A template needs a name')
+    if (!content.trim()) throw new Error('A template cannot be empty')
+    if (input.id) {
+      const cur = this.db.get<ChatTemplate>('SELECT * FROM chat_templates WHERE id = ?', input.id)
+      if (!cur) throw new Error('Template not found')
+      this.db.run('UPDATE chat_templates SET name=?, content=? WHERE id=?', name, content, cur.id)
+      return { ...cur, name, content }
+    }
+    const row: ChatTemplate = { id: newId('tpl'), name, content, createdAt: Date.now() }
+    this.db.run('INSERT INTO chat_templates(id,name,content,createdAt) VALUES(?,?,?,?)', row.id, row.name, row.content, row.createdAt)
+    return row
+  }
+
+  deleteChatTemplate(id: string) {
+    this.db.run('DELETE FROM chat_templates WHERE id = ?', id)
+  }
+
+  /** One session's messages for export, oldest first. */
+  exportConversation(projectId: string, conversationId?: string): { title: string; messages: ChatMessage[] } {
+    const all = this.conversations(projectId)
+    const convo = conversationId ? all.find((c) => c.id === conversationId) : this.conversation(projectId)
+    if (!convo) throw new Error('Session not found in this project')
+    const n = all.findIndex((c) => c.id === convo.id) + 1
+    return { title: convo.title || `Session ${n}`, messages: this.chatMessages(projectId, 400, convo.id) }
+  }
+
   // ---------- providers ----------
   providers(): ProviderConfig[] {
     return this.db.all<Record<string, unknown>>(
@@ -1119,6 +1154,7 @@ export class Store {
       // Every project's sessions, for the sidebar; titles only, no messages.
       sessionIndex: this.db.all<{ id: string; projectId: string; title: string }>('SELECT id, projectId, title FROM conversations ORDER BY createdAt ASC, rowid ASC'),
       chat: projectId ? this.chatMessages(projectId) : [],
+      chatTemplates: this.chatTemplates(),
       prompts: projectId ? this.prompts(projectId) : [],
       providerConfigs: this.providers(),
       assignments: projectId ? this.assignments(projectId) : [],

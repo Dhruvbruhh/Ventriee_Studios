@@ -183,6 +183,9 @@ const api: VentrieeApi = {
   chatSend: (input) => ipcRenderer.invoke(IPC.chatSend, input),
   chatSessionNew: (projectId) => ipcRenderer.invoke(IPC.chatSessionNew, projectId),
   chatSessionSelect: (projectId, conversationId) => ipcRenderer.invoke(IPC.chatSessionSelect, projectId, conversationId),
+  chatTemplateSave: (input) => ipcRenderer.invoke(IPC.chatTemplateSave, input),
+  chatTemplateDelete: (id) => ipcRenderer.invoke(IPC.chatTemplateDelete, id),
+  chatExport: (projectId, conversationId) => ipcRenderer.invoke(IPC.chatExport, projectId, conversationId),
   onChatChunk: (cb) => {
     const listener = (_e: unknown, payload: { projectId: string; messageId: string; chunk: string }) => cb(payload)
     ipcRenderer.on(IPC.chatChunk, listener)
