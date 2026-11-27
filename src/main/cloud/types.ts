@@ -27,8 +27,9 @@ export interface RemoteCommand {
   status: CommandStatus; requires_confirmation: boolean; result: Record<string, unknown>; error: string
   requested_by: string; created_at: string; claimed_at: string | null; finished_at: string | null; expires_at: string
 }
-/** Explicit per-device control grant; org membership alone never grants control. */
-export interface DeviceGrant { id: string; device_id: string; user_id: string; granted_by: string; expires_at: string | null; created_at: string }
+/** Explicit per-device control grant; org membership alone never grants control.
+ *  project_id null scopes the grant to the whole device; a uuid scopes it to that one cloud project. */
+export interface DeviceGrant { id: string; device_id: string; user_id: string; granted_by: string; project_id: string | null; expires_at: string | null; created_at: string }
 
 /**
  * Typed data-access to the cloud layer, built on the signed-in user's Supabase

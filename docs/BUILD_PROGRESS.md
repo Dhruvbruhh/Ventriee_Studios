@@ -31,6 +31,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 | W18 | Org memory layer, memory version history, measured model routing (§12/§13) | W1, W2 | Done | branch `claude/w18-intel-upgrades-a5183a`; `tests/memory-layers.test.ts` (8 tests) |
 | W14 | Desktop↔cloud sync for projects, tasks and run status (§19) | W3, W4 | Done (PR open) | `src/main/cloud/sync.ts` mirrors projects/tasks (metadata only) into the active workspace via a local `cloud_sync` outbox with per-row backoff; compare-and-set on `updated_at` records conflicts instead of overwriting; new cloud tasks arrive as owner inbox messages; Settings toggle + header status dot; migration `0005_desktop_sync.sql` (updated_at, run_status/model/agent, fix for recursive `tasks_update` RLS); `tests/cloud-sync.test.ts` (7 tests) |
 | W19 | Planning chat: edit a message / regenerate the last reply (FEATURE_STATUS Phase 3) | - | Done | `Store.rewindChat` + `replaceFrom` on `chatSend`; Edit / Regenerate controls in `Workspace.tsx`; `tests/sessions.test.ts` (rewind case) |
+| W36 | Per-project device grants (FINAL_AUDIT #6) | - | Done | Migration `0007_per_project_grants.sql`: `device_grants.project_id` (null = whole device, unchanged behavior); `can_control_device(device, project)` and the `commands_insert` policy pass `payload.projectId`, failing closed when absent or not a uuid; `CloudClient.grantDevice` accepts `projectId`; `tests/migrations.test.ts` (scoped-grant case: granted project enqueues, other project and unnamed target rejected) |
 
 ## Verification baseline (master, after W19)
 - typecheck: clean (node + web tsconfigs); mobile `tsc --noEmit` clean
@@ -202,3 +203,14 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   Regenerate resends the last owner turn. Known limits: old turns are discarded,
   not branched; images attached to the original message are not resent. The UI
   was typechecked and built but not clicked through (needs a signed-in session).
+- 2026-11-27: W36. Scoped device grants per project (FINAL_AUDIT #6). Until now
+  a device grant authorized the grantee against every project on the device.
+  Migration 0007 adds `device_grants.project_id`: null keeps the old whole-device
+  meaning (existing rows untouched), a uuid limits the grant to that cloud
+  project. `can_control_device` takes the target project and the commands_insert
+  policy passes `payload.projectId`; a missing or non-uuid project id fails
+  closed (only a whole-device grant or ownership authorizes it). Enforcement
+  stays in RLS, so every client (desktop, web, mobile) is covered by the same
+  rule. `CloudClient.grantDevice` accepts an optional `projectId`; the desktop
+  UI does not yet offer a project picker when granting. Proven on PGlite: the
+  granted project enqueues, another project and an unnamed target are refused.
