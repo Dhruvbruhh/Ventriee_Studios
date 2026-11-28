@@ -16,6 +16,9 @@ describe('chat intent (W46)', () => {
     expect(guessIntent('The save button crashes when the file is empty')).toBe('fix')
     expect(guessIntent('Build me an MVP for a hotel management tool')).toBe('prototype')
     expect(guessIntent('Add a dark mode toggle to settings')).toBe('feature')
+    // A question that merely mentions "build" is still a question (regression:
+    // the prototype pattern used to match the bare word and swallow it).
+    expect(guessIntent('Why is the build slow?')).toBe('question')
   })
 
   it('asks the model first and uses its word', async () => {

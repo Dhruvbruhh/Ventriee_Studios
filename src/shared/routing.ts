@@ -161,9 +161,12 @@ export function routeModels(input: RouteInput): RouteChoice[] {
   const wantsStrength = input.difficulty === 'high' || (!input.difficulty && DEEP_ROLES.has(input.role))
   const wantsSpeed = input.difficulty === 'low' || (!input.difficulty && FAST_ROLES.has(input.role))
   // Hard floor: on demanding work, tiny models lose to any bigger or unknown-size option.
+  // A vision-first family with no parseable size (moondream2) is not "unknown, assume strong":
+  // it counts as sub-floor so it can never win code work.
   const strongEnough = candidates.filter((c) => {
     const params = c.option.paramsB ?? paramsFromName(c.option.model) ?? undefined
-    return params == null || params >= CODING_FLOOR_B
+    if (params == null) return !VISION_ONLY.test(c.option.model)
+    return params >= CODING_FLOOR_B
   })
   const pool = hard && strongEnough.length ? strongEnough : candidates
   const scored = pool

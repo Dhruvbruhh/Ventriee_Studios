@@ -21,6 +21,8 @@ export function outcomeReport(input: OutcomeInput): string {
   const lines: string[] = []
   if (input.failed.length) {
     lines.push(`Run finished with ${input.failed.length} unfinished task${input.failed.length === 1 ? '' : 's'}: ${input.failed.map((t) => t.title).join('; ')}`)
+  } else if (input.ended === 'stopped') {
+    lines.push('Run stopped before every task was done.')
   } else if (input.ended === 'paused') {
     lines.push('Run paused: every remaining task belongs to a paused worker.')
   } else {

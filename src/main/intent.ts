@@ -1,5 +1,3 @@
-import type { EngineKind } from '../shared/types'
-
 /** What the owner's message is asking for, decided by the chat model with a heuristic fallback. */
 export type ChatIntent = 'prototype' | 'feature' | 'fix' | 'question'
 
@@ -54,9 +52,10 @@ export function parseIntent(reply: string): ChatIntent {
 
 /** Cheap local fallback when the model call fails or the setting is off. */
 export function guessIntent(text: string): ChatIntent {
-  if (/^\s*(how|what|why|when|which|can you explain|is it possible|does )/i.test(text.trim()) || text.trim().endsWith('?')) return 'question'
+  // Commissioning beats asking: "Can you build me an app?" is a prototype ask.
   if (/\b(broken|fail\w*|error\w*|crash\w*|bug|wrong|doesn'?t work|not working|fix)\b/i.test(text)) return 'fix'
-  if (/\b(build|create|make|new app|prototype|mvp|from scratch)\b/i.test(text)) return 'prototype'
+  if (/\b(new app|prototype|mvp|from scratch)\b/i.test(text) || /\b(build|create|make)\s+(me\s+|us\s+)?(a|an|the|my|our|new)\b/i.test(text)) return 'prototype'
+  if (/^\s*(how|what|why|when|which|can you explain|is it possible|does )/i.test(text.trim()) || text.trim().endsWith('?')) return 'question'
   return 'feature'
 }
 
@@ -79,4 +78,3 @@ export async function classifyIntent(
   }
 }
 
-export type { EngineKind }

@@ -147,6 +147,14 @@ describe('model-size floor (W45)', () => {
     expect(() => routeModels({ role: 'frontend', models: tiny, costPreference: 'balanced', difficulty: 'high' })).toThrow(NO_MODEL_ERROR)
   })
 
+  it('treats an unknown-size vision-only model as NOT strong enough (regression: moondream2 escaped the floor)', () => {
+    // moondream2 carries no size token, so it used to count as "unknown size = strong".
+    const pool = [{ provider: 'cli-ollama', providerLabel: 'Ollama', model: 'moondream2', free: true, configured: true } as ModelOption]
+    expect(() => routeModels({ role: 'frontend', models: pool, costPreference: 'balanced', difficulty: 'high' })).toThrow(NO_MODEL_ERROR)
+    // A big vision model is still fine.
+    expect(routeModel({ role: 'frontend', models: [option('qwen-vl-72b')], costPreference: 'balanced', difficulty: 'high' })!.option.model).toBe('qwen-vl-72b')
+  })
+
   it('keeps CLI engines routable on their default model', () => {
     const cli: ModelOption = { provider: 'cli-opencode', providerLabel: 'OpenCode', model: '', free: true, configured: true }
     const pick = routeModel({ role: 'backend', models: [cli], costPreference: 'balanced', difficulty: 'high' })

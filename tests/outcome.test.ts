@@ -44,4 +44,10 @@ describe('outcome report (W49)', () => {
     expect(text).toContain('Run paused: every remaining task belongs to a paused worker.')
     expect(text).toContain('Skipped: OAuth (no credentials)')
   })
+
+  it('does not call a stopped run complete (regression: owner-presses-stop)', () => {
+    const text = outcomeReport({ ended: 'stopped', failed: [], done: [t('Setup')], skipped: [], where: '' })
+    expect(text).toContain('Run stopped before every task was done.')
+    expect(text).not.toContain('Run complete')
+  })
 })

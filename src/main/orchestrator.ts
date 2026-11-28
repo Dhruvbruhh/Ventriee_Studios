@@ -772,8 +772,11 @@ JSON shape:
         chain = routeModels({ role: task.role, models: this.deps.models(), costPreference: settings.costPreference, difficulty: task.attempts >= 2 ? 'high' : task.difficulty, profiles: settings.modelProfiles, outcomes: this.deps.store.modelOutcomeStats() })
       } catch (err) {
         // Fail fast: burning three retries on a model that cannot code helps nobody.
+        // 'failed' (not 'blocked'): promotable would re-promote a dependency-free
+        // blocked task and spin the queue forever.
         const message = err instanceof Error ? err.message : 'Routing failed'
-        this.deps.store.updateTask(task.id, { status: 'blocked' })
+        this.runners.delete(agent.id)
+        this.deps.store.updateTask(task.id, { status: 'failed', review: message })
         this.deps.store.updateAgent(agent.id, { status: 'idle', currentTaskId: null, lastError: message })
         this.log(project.id, agent.id, task.id, 'error', message)
         this.deps.notify()
@@ -1070,7 +1073,8 @@ JSON shape:
         : 'Reply with the deliverable as === FILE: … === blocks and nothing else outside them.'
       // The planner reads the failed attempt and writes a specific instruction,
       // so the retry fixes what was wrong instead of repeating the brief.
-      const followUp = await this.plannerFollowUp(project, task, evidence, text)
+      // At the last attempt no retry happens; don't make the owner wait on a review.
+      const followUp = task.attempts < 3 ? await this.plannerFollowUp(project, task, evidence, text) : null
       this.deps.store.updateTask(task.id, { status: 'rework', review: followUp ? `Planner follow-up: ${followUp}\n\nEvidence: ${evidence.summary}` : `Evidence check failed: ${evidence.summary}` })
       this.deps.store.recordModelOutcome(task.id, agent.id, 'rework')
       this.deps.store.addMessage({
@@ -1119,7 +1123,8 @@ JSON shape:
           if (!visual.ok) {
             const detail = visual.problems.slice(0, 4).join(' | ')
             // The planner turns the visual problems into a concrete fix list for the retry.
-            const followUp = await this.plannerFollowUp(project, task, { summary: `Visual QA failed: ${detail}. ${evidence.summary}`, changed: evidence.changed }, text)
+            // At the last attempt no retry happens; don't make the owner wait on a review.
+            const followUp = task.attempts < 3 ? await this.plannerFollowUp(project, task, { summary: `Visual QA failed: ${detail}. ${evidence.summary}`, changed: evidence.changed }, text) : null
             this.deps.store.updateTask(task.id, { status: 'rework', review: followUp ? `Planner follow-up: ${followUp}\n\nVisual QA failed: ${detail}. ${evidence.summary}` : `Visual QA failed: ${detail}. ${evidence.summary}` })
             this.deps.store.recordModelOutcome(task.id, agent.id, 'rework')
             this.deps.store.addMessage({
@@ -1904,24 +1909,30 @@ Answer with a JSON object only: {"verdict":"pass"|"fail","reasoning":"...","bloc
     if (mode === 'manual' || (mode === 'hybrid' && agent.model.trim())) {
       return { engine: agent.engine, model: agent.model, endpoint: agent.endpoint, routedBy: mode }
     }
-    const choice = routeModel({
-      role: agent.role,
-      models: this.deps.models(),
-      costPreference: this.deps.store.settings().costPreference,
-      inUse,
-      profiles: this.deps.store.settings().modelProfiles,
-      outcomes: this.deps.store.modelOutcomeStats()
-    })
-    if (!choice) {
-      // No discovered models: keep the worker's own config rather than guessing.
+    try {
+      const choice = routeModel({
+        role: agent.role,
+        models: this.deps.models(),
+        costPreference: this.deps.store.settings().costPreference,
+        inUse,
+        profiles: this.deps.store.settings().modelProfiles,
+        outcomes: this.deps.store.modelOutcomeStats()
+      })
+      if (!choice) {
+        // No discovered models: keep the worker's own config rather than guessing.
+        return { engine: agent.engine, model: agent.model, endpoint: agent.endpoint, routedBy: 'manual' }
+      }
+      const config = this.deps.providerConfigs().find((p) => p.id === choice.option.provider)
+      return {
+        engine: (config?.engine ?? choice.option.provider) as EngineKind,
+        model: choice.option.model,
+        endpoint: config?.baseUrl ?? '',
+        routedBy: mode
+      }
+    } catch {
+      // Tiny-only pool for this role: keep the worker's own config instead of
+      // aborting the whole assignment; the per-task fail-fast still applies at run time.
       return { engine: agent.engine, model: agent.model, endpoint: agent.endpoint, routedBy: 'manual' }
-    }
-    const config = this.deps.providerConfigs().find((p) => p.id === choice.option.provider)
-    return {
-      engine: (config?.engine ?? choice.option.provider) as EngineKind,
-      model: choice.option.model,
-      endpoint: config?.baseUrl ?? '',
-      routedBy: mode
     }
   }
 
