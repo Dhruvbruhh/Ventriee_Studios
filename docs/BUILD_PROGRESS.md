@@ -427,6 +427,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 
 
 
+
 ## 2026-11-28 — W45 router fix (branch w45-router-fix)
 - Context: a high-difficulty task was routed to granite3.2-vision:2b (a 2B
   vision model) and burned three retries with no files written.
@@ -477,3 +478,21 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 - Gates: node + web tsc clean, vitest 545 passed / 1 skipped, desktop and web
   builds green.
  w47-stack-picker
+
+## 2026-11-28 — W48 planner review of failed attempts (branch w48-planner-review)
+- `src/main/plannerReview.ts`: when a task is reworked or a QA/evidence check
+  fails, the planner model reviews the acceptance criteria against the
+  evidence and writes specific fixer notes ("Planner follow-up: ...") that
+  lead the next attempt. REVIEW_SYSTEM forbids approving; notes only exist
+  for rework (`reviewNotes`); any planner error returns null so the loop
+  never blocks on the reviewer.
+- `orchestrator.ts`: difficulty escalates to `high` from the third attempt
+  (routing floor applies), `plannerFollowUp` runs before the task prompt on
+  evidence-failure and visual-QA rework paths, and the worker prompt carries
+  the notes so the retry is specific, not a blind rerun.
+- Tests: `tests/plannerReview.test.ts` covers the review ask, follow-up
+  parsing (fences, minimum length, cap), notes gating, and a fail-then-succeed
+  worker simulation.
+- Gates: node + web tsc clean, vitest 547 passed / 1 skipped, desktop and web
+  builds green.
+ w48-planner-review
