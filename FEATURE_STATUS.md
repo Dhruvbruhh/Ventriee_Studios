@@ -65,6 +65,7 @@ Last updated: 2026-11-26
 | Conversation export | ✅ | "Export transcript" saves the active session as Markdown (`## You` / `## Assistant (model)` turns); `chatExport` IPC + `shared/transcript.ts`. Empty sessions refuse to export |
 | Branching | ✅ | "Branch from here" on any message creates a new session holding the turns up to it; the original is untouched. Sidebar shows "(from Session N)". `chatBranch` IPC + `Store.branchConversation` |
 | Intent-aware replies | ✅ | Planning chat classifies each owner message (prototype / feature / fix / question, `src/main/intent.ts`) with one cheap model call and a local heuristic fallback, then steers the reply: 3–5 focused questions with defaults in one message when the idea is open, a "Here's what I'll do" card (goal / scope / out of scope / done means) before any build talk, reproduction-first for fixes, plain answers for questions. Gated on the `clarifyBrief` setting |
+| Technology-stack pick | ✅ | Simple mode: a "Build it with" card between the plan and "Approve & build" offers three presets (Next.js app; React + Express API; static website) with every field editable (`src/shared/stacks.ts`). The pick rides into the brief as a clarification answer on assign; nothing builds until the owner approves |
 
 ## Phase 4 — Agent Management
 | Feature | Status | Notes |

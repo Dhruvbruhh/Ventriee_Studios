@@ -426,6 +426,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   526 passed/1 skipped, desktop + web builds green, web tests 2 passed.
 
 
+
 ## 2026-11-28 — W45 router fix (branch w45-router-fix)
 - Context: a high-difficulty task was routed to granite3.2-vision:2b (a 2B
   vision model) and burned three retries with no files written.
@@ -461,3 +462,18 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 - Gates: node + web tsc clean, vitest 547 passed / 1 skipped, desktop and web
   builds green.
  w46-intent-clarify
+
+## 2026-11-28 — W47 stack picker (branch w47-stack-picker)
+- `src/shared/stacks.ts`: three presets (Next.js app; React + Express API
+  server; simple static website), each with frontend / backend / database /
+  styling / tests, all fields editable; `normalizeStack` fills gaps and clamps
+  input, `stackToAnswer` serializes the pick.
+- Simple mode shows a "Build it with" card between the plan and "Approve &
+  build": preset buttons plus an editable details panel. The pick rides into
+  the brief as a clarification answer on assign, so nothing builds until the
+  owner presses Approve & build. No IPC or schema changes.
+- Tests: `tests/stacks.test.ts` (preset completeness, normalize/clamp,
+  answer serialization).
+- Gates: node + web tsc clean, vitest 545 passed / 1 skipped, desktop and web
+  builds green.
+ w47-stack-picker
