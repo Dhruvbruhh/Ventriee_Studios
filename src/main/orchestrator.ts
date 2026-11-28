@@ -19,6 +19,7 @@ import { scopeToRole, DELIVERABLE_BY_ROLE } from './brief'
 import { clarifyPrompt, foldClarifications, parseClarifyAnswer } from './clarify'
 import { researchBriefUrls } from './urlResearch'
 import { estimatePlanCost } from './costEstimate'
+import { outcomeReport } from './outcome'
 import { heuristicPlan, normalizeRole, orderTasks, parsePlanAnswer, pickSpecialists, type Plan } from './planner'
 import { promotable } from './queue'
 import { approvalTransition } from './approval'
@@ -467,7 +468,8 @@ JSON shape:
         status: 'read'
       })
       const ended = await this.runQueue(job, project)
-      const failed = this.deps.store.tasks(project.id).filter((t) => t.status === 'failed' || t.status === 'rework')
+      const allTasks = this.deps.store.tasks(project.id)
+      const failed = allTasks.filter((t) => t.status === 'failed' || t.status === 'rework')
       this.deps.store.updateJob(job.id, {
         status: this.stopping.has(project.id)
           ? 'stopped'
@@ -479,17 +481,20 @@ JSON shape:
         error: failed.length ? `${failed.length} task(s) need attention` : ended === 'paused' ? 'Remaining tasks belong to paused workers' : null
       })
       if (!failed.length && ended !== 'paused' && this.deps.store.settings().autoExtractLessons) this.extractLessons(project)
+      const preview = this.deps.previewUrl?.(project.id) ?? null
       this.deps.store.addMessage({
         projectId: project.id,
         taskId: null,
         sender: 'orchestrator',
         recipient: 'owner',
         type: 'note',
-        content: failed.length
-          ? `Run finished with ${failed.length} unfinished task(s): ${failed.map((t) => t.title).join('; ')}`
-          : ended === 'paused'
-            ? 'Run paused: every remaining task belongs to a paused worker.'
-            : 'Run complete. Every task passed its evidence check.',
+        content: outcomeReport({
+          ended: this.stopping.has(project.id) ? 'stopped' : ended,
+          failed,
+          done: allTasks.filter((t) => t.status === 'done'),
+          skipped: plan.skipped,
+          where: preview ? `open ${preview}` : 'the result is in the project folder'
+        }),
         status: 'read'
       })
     } catch (error) {

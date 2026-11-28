@@ -424,3 +424,16 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   session. W36: the CloudClient interface gained the projectId field the
   implementation already had. Gates after all fixes: both tsc clean, vitest
   526 passed/1 skipped, desktop + web builds green, web tests 2 passed.
+
+## 2026-11-28 — W49 outcome report (branch w49-outcome-report)
+- `src/main/outcome.ts`: `outcomeReport` builds the owner-facing end-of-run
+  message: the run verdict (complete / failed with titles / paused), what was
+  built (done task titles, capped at 6 with a "+N more"), where to see it
+  (preview URL when one is live, otherwise the project folder), and skipped
+  items.
+- `executeJob` now sends that report instead of three hardcoded one-liners;
+  the stopped state is reported distinctly. Paused wording unchanged.
+- Tests: `tests/outcome.test.ts` (clean run, failures first, cap + no-preview
+  omission, paused + skipped).
+- Gates: node + web tsc clean, vitest 546 passed / 1 skipped, desktop and web
+  builds green.
