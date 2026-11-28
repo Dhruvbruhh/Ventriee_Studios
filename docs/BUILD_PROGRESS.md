@@ -511,3 +511,19 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 - Gates: node + web tsc clean, vitest 546 passed / 1 skipped, desktop and web
   builds green.
  w49-outcome-report
+
+## 2026-11-28 — W45-W49 integration review fixes (integration/w45-w49, 0b9c500)
+- Self-review of the integration diff found and fixed: a routing failure in
+  runTask leaked the runner entry (queue then skipped the agent forever) and
+  parked the task as `blocked`, which dependency promotion would re-run
+  futilely; it now cleans up and marks the task `failed` with the reason.
+- A stopped run reported "Run complete"; it now says it stopped early.
+- A routing failure in assignPrompt aborted the whole assignment; it now
+  falls back to the agent's own config.
+- Unknown-size vision-only models (moondream2) escaped the 7B floor; unknown
+  size now counts as strong only for non-vision models.
+- The planner follow-up no longer runs at attempts >= 3.
+- guessIntent: question detection wins over the tightened prototype pattern
+  ("Why is the build slow?" is a question, not a build order).
+- Regression tests added for stopped-run wording, the moondream floor, and
+  the intent reorder. Gates: tsc clean, vitest 567/1, builds green, CI green.
