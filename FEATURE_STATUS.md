@@ -44,6 +44,7 @@ Last updated: 2026-11-26
 | Token / cost tracking | ✅ | sessions table, RunSummary |
 | Fallback models | ✅ | Agent runs: routed fallback chain; a failed task escalates to the next model (`routeModels` in `shared/routing.ts`, orchestrator). Planning chat uses the picked model only |
 | Intelligent model routing | ✅ | Capability profiles per model + task shape + costPreference (`shared/routing.ts`); profiles are derived from model names, owner overrides in Settings |
+| Model-size floor for hard tasks | ✅ | Hard or code tasks drop models under 7B (name-parsed size, e.g. `2b`, `500M`) when a bigger or unknown-size option exists; non-chat models (guard/embed/audio/image) are never routed; small vision-only models (<=4B) are marked non-coders; CLI engines keep a strong default profile; with only tiny models left, routing fails fast and parks the task as `blocked` instead of burning retries (`CODING_FLOOR_B` in `shared/routing.ts`) |
 
 ## Phase 3 — AI Chat & Prompt Studio
 | Feature | Status | Notes |

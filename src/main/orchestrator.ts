@@ -761,7 +761,17 @@ JSON shape:
     }
     let chain: RouteChoice[] = []
     if (settings.routingMode === 'automatic' || (settings.routingMode === 'hybrid' && !agent.model.trim())) {
-      chain = routeModels({ role: task.role, models: this.deps.models(), costPreference: settings.costPreference, difficulty: task.difficulty, profiles: settings.modelProfiles, outcomes: this.deps.store.modelOutcomeStats() })
+      try {
+        chain = routeModels({ role: task.role, models: this.deps.models(), costPreference: settings.costPreference, difficulty: task.difficulty, profiles: settings.modelProfiles, outcomes: this.deps.store.modelOutcomeStats() })
+      } catch (err) {
+        // Fail fast: burning three retries on a model that cannot code helps nobody.
+        const message = err instanceof Error ? err.message : 'Routing failed'
+        this.deps.store.updateTask(task.id, { status: 'blocked' })
+        this.deps.store.updateAgent(agent.id, { status: 'idle', currentTaskId: null, lastError: message })
+        this.log(project.id, agent.id, task.id, 'error', message)
+        this.deps.notify()
+        return
+      }
       if (chain[0]) {
         Object.assign(run, runFromChoice(chain[0]))
         this.deps.store.updateTask(task.id, { ...run, routedBy: settings.routingMode })
