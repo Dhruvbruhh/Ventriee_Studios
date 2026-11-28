@@ -56,12 +56,12 @@ export class TerminalService {
   private sessions = new Map<string, Session>()
   private next = 0
 
-  open(owner: number, cwd: string, cols: number, rows: number, onData: (id: string, data: string) => void, onExit: (id: string, code: number) => void, shellId?: string): string {
+  open(owner: number, cwd: string, cols: number, rows: number, onData: (id: string, data: string) => void, onExit: (id: string, code: number) => void, shellId?: string, extraEnv?: Record<string, string>): string {
     if (!existsSync(cwd)) throw new Error(`Project folder does not exist: ${cwd}`)
     if ([...this.sessions.values()].filter((s) => s.owner === owner).length >= MAX_PER_OWNER) throw new Error(`Close a terminal first (limit ${MAX_PER_OWNER} per window)`)
     // Only a shell from the detected list can be started, never a path the renderer sends.
     const shell = shells().find((s) => s.id === shellId) ?? defaultShell()
-    const pty = spawn(shell.file, shell.args, { name: 'xterm-256color', cwd, cols: clamp(cols, 20, 500), rows: clamp(rows, 5, 200), env: process.env as Record<string, string> })
+    const pty = spawn(shell.file, shell.args, { name: 'xterm-256color', cwd, cols: clamp(cols, 20, 500), rows: clamp(rows, 5, 200), env: { ...(process.env as Record<string, string>), ...(extraEnv ?? {}) } })
     const id = `term_${++this.next}`
     this.sessions.set(id, { pty, owner })
     pty.onData((data) => onData(id, data))

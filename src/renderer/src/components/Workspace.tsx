@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { guard, useStore } from '../store'
-import { IconCheck, IconChevron, IconCopy, IconEdit, IconRefresh, IconSend, IconSpark, IconTrash } from '../icons'
+import { IconCheck, IconChevron, IconCopy, IconEdit, IconFlow, IconRefresh, IconSend, IconSpark, IconTrash } from '../icons'
 import { ModelPicker, resolveModel, type ResolvedModel } from './ModelPicker'
 import { AddProviderDialog } from './AddProviderDialog'
 import { AssignDialog, RecentAssignments } from './AssignDialog'
@@ -97,6 +97,12 @@ export function Workspace() {
   const lastOwner = [...chat].reverse().find((m) => m.role === 'owner')
   const regenerate = () => { if (lastOwner) void send(lastOwner.content, [], lastOwner.id) }
 
+  const branch = async (m: ChatMessage) => {
+    if (!project) return
+    const branched = await guard(() => window.ventriee.chatBranch(project.id, m.id))
+    if (branched) useStore.getState().notify('Branched into a new session')
+  }
+
   const createPrompt = async () => {
     if (!project || creating) return
     setCreating(true)
@@ -146,7 +152,7 @@ export function Workspace() {
             Export transcript
           </button>
         </div>
-        <ChatThread chat={chat} stream={chatStream} busy={sending} editingId={editingId} onEdit={startEdit} onRegenerate={regenerate} />
+        <ChatThread chat={chat} stream={chatStream} busy={sending} editingId={editingId} onEdit={startEdit} onRegenerate={regenerate} onBranch={(m) => void branch(m)} />
         <ChatComposer
           editing={Boolean(editingId)}
           onCancelEdit={cancelEdit}
@@ -224,13 +230,14 @@ function StageStrip({ stage, onGoOffice, onGoReview }: { stage: Stage; onGoOffic
   )
 }
 
-function ChatThread({ chat, stream, busy, editingId, onEdit, onRegenerate }: {
+function ChatThread({ chat, stream, busy, editingId, onEdit, onRegenerate, onBranch }: {
   chat: ChatMessage[]
   stream: Record<string, string>
   busy: boolean
   editingId: string | null
   onEdit: (m: ChatMessage) => void
   onRegenerate: () => void
+  onBranch: (m: ChatMessage) => void
 }) {
   const end = useRef<HTMLDivElement>(null)
   const last = chat[chat.length - 1]
@@ -271,6 +278,9 @@ function ChatThread({ chat, stream, busy, editingId, onEdit, onRegenerate }: {
                 ) : null}
                 {idle && m.role === 'assistant' && m === last ? (
                   <button className="icon-btn" onClick={onRegenerate} title="Ask again for a new reply" aria-label="Regenerate reply"><IconRefresh width={12} height={12} /></button>
+                ) : null}
+                {idle && m.status === 'done' ? (
+                  <button className="icon-btn" onClick={() => onBranch(m)} title="Start a new session with the conversation up to this message" aria-label="Branch from here"><IconFlow width={12} height={12} /></button>
                 ) : null}
               </div>
               {text ? (

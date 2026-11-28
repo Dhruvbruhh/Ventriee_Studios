@@ -313,6 +313,9 @@ export interface Conversation {
   projectId: string
   /** Empty shows as "Session N" by creation order. */
   title: string
+  /** Set when this session was branched from a message in another session. */
+  branchedFrom?: string
+  branchedFromMessageId?: string
   createdAt: number
   updatedAt: number
 }
@@ -448,6 +451,8 @@ export interface Project {
   clientId: string | null
   /** Cloud org the project was created in; null for the personal workspace. Picks which org memory it sees. */
   orgId?: string | null
+  /** Environment variables applied to new terminal sessions for this project. */
+  envVars?: Record<string, string>
   createdAt: number
   updatedAt: number
 }
@@ -787,13 +792,15 @@ export interface Snapshot {
   automations: Automation[]
   providers: ProviderStatus[]
   settings: AppSettings
+  /** MCP env/header values stay in plain text because secure storage is unavailable. */
+  mcpPlaintext: boolean
   jobs: Job[]
   preview: PreviewState
   running: boolean
   /** Planning state for the active project. */
   conversation: Conversation | null
   conversations: Conversation[]
-  sessionIndex: Array<{ id: string; projectId: string; title: string }>
+  sessionIndex: Array<{ id: string; projectId: string; title: string; branchedFrom?: string }>
   chat: ChatMessage[]
   chatTemplates: ChatTemplate[]
   prompts: PromptDoc[]

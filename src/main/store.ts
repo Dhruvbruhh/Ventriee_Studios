@@ -197,6 +197,7 @@ export class Store {
       description: input.description,
       clientId: input.clientId ?? null,
       orgId: input.orgId ?? null,
+      envVars: {},
       createdAt: now,
       updatedAt: now
     }
@@ -213,9 +214,10 @@ export class Store {
     if (!cur) return
     const clientId = 'clientId' in patch ? patch.clientId : cur.clientId
     const orgId = 'orgId' in patch ? patch.orgId : cur.orgId
+    const envVars = 'envVars' in patch ? validEnvVars(patch.envVars) : cur.envVars ?? {}
     this.db.run(
-      'UPDATE projects SET name=?, path=?, description=?, client_id=?, org_id=?, updatedAt=? WHERE id=?',
-      patch.name ?? cur.name, patch.path ?? cur.path, patch.description ?? cur.description, clientId ?? null, orgId ?? null, Date.now(), id
+      'UPDATE projects SET name=?, path=?, description=?, client_id=?, org_id=?, envVars=?, updatedAt=? WHERE id=?',
+      patch.name ?? cur.name, patch.path ?? cur.path, patch.description ?? cur.description, clientId ?? null, orgId ?? null, JSON.stringify(envVars), Date.now(), id
     )
     this.onChange?.('project', id)
   }
@@ -727,14 +729,45 @@ export class Store {
     this.db.kvSet(`activeConversation:${projectId}`, id)
   }
 
+  /**
+   * Branch from a message: a new session holding the turns up to (and including)
+   * that message; the original session keeps everything and stays active.
+   */
+  branchConversation(projectId: string, messageId: string): Conversation {
+    // rowid tie-breaks same-millisecond messages: on a fast clock several turns
+    // can share createdAt, so the cut point must be positional, not timestamp.
+    const msg = this.db.get<ChatMessage & { rowid: number }>('SELECT rowid, * FROM chat_messages WHERE id = ? AND projectId = ?', messageId, projectId)
+    if (!msg) throw new Error('Message not found in this project')
+    const now = Date.now()
+    const row: Conversation = {
+      id: newId('cnv'), projectId, title: '', createdAt: now, updatedAt: now,
+      branchedFrom: msg.conversationId, branchedFromMessageId: messageId
+    }
+    this.db.run(
+      'INSERT INTO conversations(id,projectId,title,branchedFrom,branchedFromMessageId,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?)',
+      row.id, row.projectId, row.title, row.branchedFrom, row.branchedFromMessageId, row.createdAt, row.updatedAt
+    )
+    for (const m of this.db.all<ChatMessage>(
+      'SELECT * FROM chat_messages WHERE conversationId = ? AND (createdAt < ? OR (createdAt = ? AND rowid <= ?)) ORDER BY createdAt ASC, rowid ASC',
+      msg.conversationId, msg.createdAt, msg.createdAt, msg.rowid
+    )) {
+      this.db.run(
+        'INSERT INTO chat_messages(id,projectId,conversationId,role,content,model,status,createdAt) VALUES(?,?,?,?,?,?,?,?)',
+        newId('cht'), m.projectId, row.id, m.role, m.content, m.model, m.status, m.createdAt
+      )
+    }
+    return row
+  }
+
   touchConversation(id: string) {
     this.db.run('UPDATE conversations SET updatedAt = ? WHERE id = ?', Date.now(), id)
   }
 
   /** Messages of one session (the active one when not given), oldest first, newest `limit` kept. */
   chatMessages(projectId: string, limit = 400, conversationId = this.conversation(projectId).id): ChatMessage[] {
+    // rowid breaks ties: messages written in the same millisecond must keep insertion order.
     return this.db.all<ChatMessage>(
-      'SELECT * FROM (SELECT * FROM chat_messages WHERE projectId = ? AND conversationId = ? ORDER BY createdAt DESC LIMIT ?) ORDER BY createdAt ASC',
+      'SELECT * FROM (SELECT *, rowid AS rid FROM chat_messages WHERE projectId = ? AND conversationId = ? ORDER BY createdAt DESC, rowid DESC LIMIT ?) ORDER BY createdAt ASC, rid ASC',
       projectId, conversationId, limit
     )
   }
@@ -1133,6 +1166,9 @@ export class Store {
       automations: projectId ? this.automations(projectId) : [],
       providers,
       settings: this.settings(),
+      // Set by the main process after the startup migration; default false keeps
+      // the field honest for direct store users (tests).
+      mcpPlaintext: false,
       jobs: projectId ? this.jobs(projectId) : [],
       preview: preview ?? {
         projectId,
@@ -1154,7 +1190,7 @@ export class Store {
       conversation: projectId ? this.conversation(projectId) : null,
       conversations: projectId ? this.conversations(projectId) : [],
       // Every project's sessions, for the sidebar; titles only, no messages.
-      sessionIndex: this.db.all<{ id: string; projectId: string; title: string }>('SELECT id, projectId, title FROM conversations ORDER BY createdAt ASC, rowid ASC'),
+      sessionIndex: this.db.all<{ id: string; projectId: string; title: string; branchedFrom?: string }>('SELECT id, projectId, title, branchedFrom FROM conversations ORDER BY createdAt ASC, rowid ASC'),
       chat: projectId ? this.chatMessages(projectId) : [],
       chatTemplates: this.chatTemplates(),
       prompts: projectId ? this.prompts(projectId) : [],
@@ -1175,10 +1211,20 @@ function safeJson<T>(raw: string, fallback: T): T {
   }
 }
 
-type ProjectRow = Omit<Project, 'clientId' | 'orgId'> & { client_id?: string | null; org_id?: string | null }
+type ProjectRow = Omit<Project, 'clientId' | 'orgId'> & { client_id?: string | null; org_id?: string | null; envVars?: string }
 
-function mapProject({ client_id, org_id, ...rest }: ProjectRow): Project {
-  return { ...rest, clientId: client_id ?? null, orgId: org_id ?? null }
+function mapProject({ client_id, org_id, envVars, ...rest }: ProjectRow): Project {
+  return { ...rest, clientId: client_id ?? null, orgId: org_id ?? null, envVars: safeJson<Record<string, string>>(envVars as string, {}) }
+}
+
+/** Terminal env vars: sane names, bounded size. Values are kept as typed. */
+function validEnvVars(vars: unknown): Record<string, string> {
+  if (!vars || typeof vars !== 'object' || Array.isArray(vars)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(vars as Record<string, unknown>).slice(0, 50)) {
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(k) && typeof v === 'string' && v.length <= 4000) out[k] = v
+  }
+  return out
 }
 
 function mapMemory(r: Record<string, unknown>): MemoryDoc {

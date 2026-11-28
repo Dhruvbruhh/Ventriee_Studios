@@ -7,6 +7,7 @@ import type {
   Automation,
   ChatMessage,
   ChatTemplate,
+  Conversation,
   CreateAgentInput,
   EngineKind,
   MemoryDoc,
@@ -116,6 +117,7 @@ export const IPC = {
   openExternal: 'shell:openExternal',
   revealFile: 'shell:reveal',
   chatSend: 'chat:send', chatSessionNew: 'chat:session-new', chatSessionSelect: 'chat:session-select',
+  chatBranch: 'chat:branch',
   chatTemplateSave: 'chat:template-save', chatTemplateDelete: 'chat:template-delete', chatExport: 'chat:export',
   promptCreate: 'prompt:create',
   promptEnhance: 'prompt:enhance',
@@ -383,6 +385,8 @@ export interface VentrieeApi {
   chatSend(input: { projectId: string; text: string; engine: EngineKind; model: string; endpoint: string; images?: string[]; replaceFrom?: string }): Promise<ChatMessage>
   chatSessionNew(projectId: string): Promise<void>
   chatSessionSelect(projectId: string, conversationId: string): Promise<void>
+  /** Branch a new session from a message: it holds the turns up to that message; the original is untouched. */
+  chatBranch(projectId: string, messageId: string): Promise<Conversation>
   /** Save (create or update) a reusable chat template. */
   chatTemplateSave(input: { id?: string; name: string; content: string }): Promise<ChatTemplate>
   chatTemplateDelete(id: string): Promise<void>

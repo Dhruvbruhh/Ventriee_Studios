@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSession } from '../state/session'
 import { useAsync } from '../lib/useAsync'
-import { addMember, getProfiles, listMembers, removeMember, updateMemberRole } from '../lib/api'
+import { getProfiles, inviteMember, listMembers, removeMember, updateMemberRole } from '../lib/api'
 import type { MembershipRole } from '../lib/types'
 import { Badge, Button, EmptyState, ErrorState, Field, Modal, Spinner } from '../components/ui'
 import { ASSIGNABLE_ROLES, ROLE_LABELS, canManageMembers } from '../lib/roles'
@@ -34,7 +34,7 @@ export function Team() {
           <h1 className="page-title">Team</h1>
           <p className="page-sub" style={{ marginBottom: 0 }}>{members.length} member{members.length === 1 ? '' : 's'} in {workspace.name}</p>
         </div>
-        {canManage && <Button variant="primary" onClick={() => setAdding(true)}>+ Add member</Button>}
+        {canManage && <Button variant="primary" onClick={() => setAdding(true)}>+ Invite member</Button>}
       </div>
 
       <div className="card" style={{ overflow: 'hidden' }}>
@@ -68,32 +68,34 @@ export function Team() {
         </table>
       </div>
 
-      {adding && <AddMemberModal onClose={() => setAdding(false)} onAdd={async (uid, role) => { await addMember(orgId, uid, role); setAdding(false); state.reload() }} />}
+      {adding && <InviteMemberModal orgId={orgId} orgName={workspace.name} onClose={() => setAdding(false)} onInvited={() => { setAdding(false); state.reload() }} />}
     </div>
   )
 }
 
-function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (userId: string, role: MembershipRole) => Promise<void> }) {
-  const [userId, setUserId] = useState('')
+function InviteMemberModal({ orgId, orgName, onClose, onInvited }: { orgId: string; orgName: string; onClose: () => void; onInvited: () => void }) {
+  const [email, setEmail] = useState('')
   const [role, setRole] = useState<MembershipRole>('employee')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function submit() {
-    if (!userId.trim()) return
+    if (!email.trim()) return
     setBusy(true); setError(null)
-    try { await onAdd(userId.trim(), role) }
-    catch (e) { setError(e instanceof Error ? e.message : 'Failed to add member'); setBusy(false) }
+    try {
+      await inviteMember(orgId, email, role)
+      onInvited()
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to send invite'); setBusy(false) }
   }
 
   return (
-    <Modal title="Add member" onClose={onClose}
-      footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={busy || !userId.trim()} onClick={() => void submit()}>{busy ? 'Adding…' : 'Add member'}</Button></>}>
+    <Modal title="Invite member" onClose={onClose}
+      footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={busy || !email.trim()} onClick={() => void submit()}>{busy ? 'Sending…' : 'Send invite'}</Button></>}>
       {error && <div className="form-error">{error}</div>}
       <p className="muted" style={{ marginTop: 0 }}>
-        Add an existing Ventriee user by their user ID. Email-based invites need a server-side function (see README) and aren't available with the public key.
+        They get an email with a link to set up their account and join {orgName}. If someone is already a member, their current role is kept.
       </p>
-      <Field label="User ID"><input value={userId} autoFocus onChange={(e) => setUserId(e.target.value)} placeholder="auth user UUID" /></Field>
+      <Field label="Email"><input type="email" value={email} autoFocus onChange={(e) => setEmail(e.target.value)} placeholder="name@studio.com" /></Field>
       <Field label="Role"><select value={role} onChange={(e) => setRole(e.target.value as MembershipRole)}>{ASSIGNABLE_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select></Field>
     </Modal>
   )

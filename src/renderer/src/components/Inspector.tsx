@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { guard, useStore } from '../store'
 import {
-  IconClose, IconEdit, IconExternal, IconPause, IconPlay, IconSend, IconStop, IconTerminal
+  IconCheck, IconClose, IconEdit, IconExternal, IconPause, IconPlay, IconSend, IconStop, IconTerminal
 } from '../icons'
 import type { Agent, McpToolCall } from '../../../shared/types'
 import { moodFor, useFace } from '../office/faces'
@@ -148,6 +148,22 @@ export function Inspector({ agentId }: { agentId: string }) {
                 <span className="task-phase">{task.phase}</span>
                 <span className={`task-status ${task.status}`}>{task.status}</span>
                 <span className="faint">attempt {task.attempts}</span>
+                {task.status === 'approval' ? (
+                  <span className="ml-auto task-actions">
+                    <button className="btn tiny primary" onClick={() => void guard(() => window.ventriee.approveTask(task.id), 'Approved')}>
+                      <IconCheck /> Approve
+                    </button>
+                    <button
+                      className="btn tiny"
+                      onClick={() => {
+                        const reason = window.prompt('Why is this rejected?') ?? ''
+                        if (reason.trim()) void guard(() => window.ventriee.rejectTask(task.id, reason.trim()), 'Sent back for rework')
+                      }}
+                    >
+                      Reject
+                    </button>
+                  </span>
+                ) : null}
                 {['failed', 'rework', 'blocked'].includes(task.status) ? (
                   <button
                     className="btn tiny ml-auto"

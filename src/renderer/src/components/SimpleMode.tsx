@@ -99,7 +99,7 @@ export function SimpleMode() {
           </div>
         </div>
       ) : phase === 'building' || phase === 'done' ? (
-        <BuildView tasks={snapshot.tasks} running={snapshot.running} done={phase === 'done'} requireApproval={settings.requireDeployApproval} onStartOver={startOver} />
+        <BuildView tasks={snapshot.tasks} running={snapshot.running} done={phase === 'done'} onStartOver={startOver} />
       ) : (
         <div className="simple-stage">
           <ChatThread chat={snapshot.chat} />
@@ -226,8 +226,8 @@ function Composer({ busy, canPlan, hasPlan, onPlan, noEngine }: {
   )
 }
 
-function BuildView({ tasks, running, done, requireApproval, onStartOver }: {
-  tasks: Task[]; running: boolean; done: boolean; requireApproval: boolean; onStartOver: () => void
+function BuildView({ tasks, running, done, onStartOver }: {
+  tasks: Task[]; running: boolean; done: boolean; onStartOver: () => void
 }) {
   const total = tasks.length
   const doneCount = tasks.filter((t) => t.status === 'done').length
@@ -256,7 +256,7 @@ function BuildView({ tasks, running, done, requireApproval, onStartOver }: {
 
         {approvals.length ? (
           <div className="simple-approvals">
-            <div className="section-label">Waiting for your OK{requireApproval ? '' : ''}</div>
+            <div className="section-label">Waiting for your OK</div>
             {approvals.map((t) => (
               <div key={t.id} className="simple-approval">
                 <div className="simple-approval-main">

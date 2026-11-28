@@ -37,3 +37,40 @@ describe('session rows', () => {
     s.db.close()
   })
 })
+
+describe('chat branching', () => {
+  it('copies turns up to the message into a new session and leaves the original untouched', () => {
+    const s = store()
+    const p = s.createProject({ name: 'B', path: 'C:/tmp/b', description: '' })
+    const convo = s.createConversation(p.id)
+    const owner = s.addChatMessage({ projectId: p.id, conversationId: convo.id, role: 'owner', content: 'first idea', model: '', status: 'done' })
+    const reply = s.addChatMessage({ projectId: p.id, conversationId: convo.id, role: 'assistant', content: 'first reply', model: 'm', status: 'done' })
+    s.addChatMessage({ projectId: p.id, conversationId: convo.id, role: 'owner', content: 'second idea', model: '', status: 'done' })
+
+    const branch = s.branchConversation(p.id, reply.id)
+    expect(branch.id).not.toBe(convo.id)
+    expect(branch.branchedFrom).toBe(convo.id)
+    expect(branch.branchedFromMessageId).toBe(reply.id)
+
+    const branchMsgs = s.chatMessages(p.id, 400, branch.id)
+    expect(branchMsgs.map((m) => m.content)).toEqual(['first idea', 'first reply'])
+    // Branching stays in the original session: the active conversation is untouched.
+    expect(s.conversation(p.id).id).toBe(convo.id)
+    expect(s.chatMessages(p.id, 400, convo.id).length).toBe(3)
+
+    // The session index carries the parent link for the sidebar.
+    const row = s.db.get<{ branchedFrom: string | null }>('SELECT branchedFrom FROM conversations WHERE id = ?', branch.id)
+    expect(row?.branchedFrom).toBe(convo.id)
+    s.db.close()
+  })
+
+  it('refuses a message from another project', () => {
+    const s = store()
+    const a = s.createProject({ name: 'A', path: 'C:/tmp/a', description: '' })
+    const b = s.createProject({ name: 'B', path: 'C:/tmp/b2', description: '' })
+    const convo = s.createConversation(a.id)
+    const msg = s.addChatMessage({ projectId: a.id, conversationId: convo.id, role: 'owner', content: 'x', model: '', status: 'done' })
+    expect(() => s.branchConversation(b.id, msg.id)).toThrow(/not found/)
+    s.db.close()
+  })
+})

@@ -21,6 +21,7 @@ import { researchBriefUrls } from './urlResearch'
 import { estimatePlanCost } from './costEstimate'
 import { heuristicPlan, normalizeRole, orderTasks, parsePlanAnswer, pickSpecialists, type Plan } from './planner'
 import { promotable } from './queue'
+import { approvalTransition } from './approval'
 import { routeModel, routeModels, type RouteChoice } from './routing'
 import { newId } from './store'
 import { redact } from './redact'
@@ -1484,15 +1485,22 @@ Answer with a JSON object only: {"verdict":"pass"|"fail","reasoning":"...","bloc
     const task = this.deps.store.task(taskId)
     if (!task) return
     const project = this.deps.store.project(task.projectId)
-    this.deps.store.updateTask(taskId, { status: 'done', review: `${task.review}\nApproved by owner.` })
+    // The gate is a state machine: only a task in `approval` moves, and approve
+    // finishes it so the run's loop no longer counts it as active.
+    const patch = approvalTransition(task, true)
+    if (!patch) return
+    this.deps.store.updateTask(taskId, patch)
     if (project) this.deps.memory.appendProgress(project.id, `Owner approved "${task.title}"`)
+    this.log(task.projectId, task.agentId, taskId, 'approval', `"${task.title}" approved by owner`)
     this.deps.notify()
   }
 
   rejectTask(taskId: string, reason: string) {
     const task = this.deps.store.task(taskId)
     if (!task) return
-    this.deps.store.updateTask(taskId, { status: 'rework', review: `Owner rejected: ${reason}` })
+    const patch = approvalTransition(task, false, reason)
+    if (!patch) return
+    this.deps.store.updateTask(taskId, patch)
     if (task.agentId) {
       this.deps.store.addMessage({
         projectId: task.projectId,
@@ -1500,10 +1508,11 @@ Answer with a JSON object only: {"verdict":"pass"|"fail","reasoning":"...","bloc
         sender: 'owner',
         recipient: task.agentId,
         type: 'request',
-        content: `Rejected "${task.title}": ${reason}`,
+        content: `Rejected "${task.title}": ${reason.trim() || 'no reason given'}`,
         status: 'unread'
       })
     }
+    this.log(task.projectId, task.agentId, taskId, 'approval', `"${task.title}" rejected by owner: ${reason.trim() || 'no reason given'}`)
     this.deps.notify()
   }
 

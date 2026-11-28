@@ -78,8 +78,9 @@ export function Sidebar({ onNewProject }: { onNewProject: () => void }) {
           {isOpen ? <div className="side-sessions">
             {sessions.length ? sessions.map((s, i) => {
               const current = active && s.id === snapshot.conversation?.id
+              const parentIdx = s.branchedFrom ? sessions.findIndex((p) => p.id === s.branchedFrom) : -1
               return <button key={s.id} className={`side-session${current ? ' on' : ''}`} aria-current={current ? 'page' : undefined} onClick={() => void openSession(project.id, s.id)}>
-                <span className="truncate">{s.title || `Session ${i + 1}`}</span>
+                <span className="truncate">{s.title || `Session ${i + 1}`}{parentIdx !== -1 ? ` (from Session ${parentIdx + 1})` : ''}</span>
                 {active && snapshot.running && current ? <span className="side-live" aria-label="Run in progress" /> : null}
               </button>
             }) : <button className="side-session faint" onClick={() => void newSession(project.id)}>Start a session</button>}

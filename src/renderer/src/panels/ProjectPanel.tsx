@@ -5,11 +5,21 @@ import { IconExternal, IconTrash } from '../icons'
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 })
 
+/** Mask values that look like secrets: the name says so, or the value is long. */
+export function maskEnvValue(key: string, value: string): string {
+  if (/key|secret|token|password|passwd|pwd/i.test(key) || value.length > 20) {
+    return value.slice(0, 2) + '•'.repeat(Math.min(8, Math.max(4, value.length - 4))) + value.slice(-2)
+  }
+  return value
+}
+
 export function ProjectPanel({ onClose }: { onClose: () => void }) {
   const snapshot = useStore((s) => s.snapshot)!
   const project = snapshot.projects.find((p) => p.id === snapshot.activeProjectId) ?? null
   const [name, setName] = useState(project?.name ?? '')
   const [description, setDescription] = useState(project?.description ?? '')
+  const [envVars, setEnvVars] = useState(() => Object.entries(project?.envVars ?? {}).map(([k, v]) => `${k}=${v}`).join('\n'))
+  const [showValues, setShowValues] = useState(false)
 
   if (!project) return null
 
@@ -19,7 +29,20 @@ export function ProjectPanel({ onClose }: { onClose: () => void }) {
   const done = snapshot.tasks.filter((t) => t.status === 'done').length
   const working = snapshot.agents.filter((a) => a.status === 'working').length
   const pct = snapshot.tasks.length ? Math.round((done / snapshot.tasks.length) * 100) : 0
+  const parseEnv = (raw: string): Record<string, string> | null => {
+    const out: Record<string, string> = {}
+    for (const line of raw.split('\n')) {
+      const t = line.trim()
+      if (!t) continue
+      const eq = t.indexOf('=')
+      if (eq < 1 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(t.slice(0, eq))) return null
+      out[t.slice(0, eq)] = t.slice(eq + 1)
+    }
+    return out
+  }
+  const parsedEnv = parseEnv(envVars)
   const dirty = name.trim() !== project.name || description !== (project.description ?? '')
+    || envVars !== Object.entries(project.envVars ?? {}).map(([k, v]) => `${k}=${v}`).join('\n')
 
   return (
     <Modal
@@ -48,7 +71,8 @@ export function ProjectPanel({ onClose }: { onClose: () => void }) {
         className="project-form"
         onSubmit={async (e) => {
           e.preventDefault()
-          const saved = await guard(() => window.ventriee.updateProject(project.id, { name: name.trim(), description }), 'Project saved')
+          if (parsedEnv === null) return
+          const saved = await guard(() => window.ventriee.updateProject(project.id, { name: name.trim(), description, envVars: parsedEnv }), 'Project saved')
           if (saved !== null) onClose()
         }}
       >
@@ -65,6 +89,26 @@ export function ProjectPanel({ onClose }: { onClose: () => void }) {
             onChange={(e) => setDescription(e.target.value)}
             placeholder="What this project is, who it is for, and what counts as done. The planner and workers read this."
           />
+        </div>
+        <div className="field">
+          <label className="field-label" htmlFor="project-env">Environment variables</label>
+          <textarea
+            id="project-env"
+            className="textarea mono"
+            value={envVars}
+            onChange={(e) => setEnvVars(e.target.value)}
+            placeholder={'API_KEY=secret-value\nDEBUG=1'}
+            spellCheck={false}
+          />
+          <p className="hint">
+            One <code>NAME=value</code> per line, applied to new terminal sessions for this project.
+            Values that look like secrets are shown masked below; they are stored as typed.
+            {parsedEnv === null ? <span className="err-text"> Use a valid name (letters, numbers, _) followed by =.</span> : null}
+          </p>
+          <button type="button" className="btn tiny" onClick={() => setShowValues((v) => !v)}>{showValues ? 'Hide values' : 'Show values'}</button>
+          {Object.entries(parsedEnv ?? {}).map(([k, v]) => (
+            <div key={k} className="provider-line"><span className="prov-name mono">{k}</span><span className="prov-detail mono">{showValues ? v : maskEnvValue(k, v)}</span></div>
+          ))}
         </div>
         <div className="project-form-actions">
           <button className="btn primary" type="submit" disabled={!name.trim() || !dirty}>Save changes</button>

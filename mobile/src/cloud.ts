@@ -62,3 +62,14 @@ export async function enqueueCommand(row: NewCommandRow): Promise<Command> {
   if (error) throw new Error(error.message)
   return data as Command
 }
+
+// --- Push token registration (W44) ---
+
+/** Persist this device's Expo push token so the notify function can reach the user. */
+export async function registerPushToken(userId: string, token: string, platform: 'ios' | 'android' | 'web'): Promise<void> {
+  const { error } = await supabase.from('push_tokens').upsert(
+    { user_id: userId, token, platform },
+    { onConflict: 'user_id,token' },
+  )
+  if (error) throw new Error(error.message)
+}

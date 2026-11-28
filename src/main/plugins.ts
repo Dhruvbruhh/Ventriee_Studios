@@ -4,7 +4,7 @@ import { basename, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { Store } from './store'
 import type { SkillService } from './skills'
-import type { PluginInfo } from '../shared/types'
+import type { McpServer, PluginInfo } from '../shared/types'
 import { compareVersions, permissionsOf, readManifest, type PluginManifest } from './pluginManifest'
 import { serverName } from './mcpRegistry'
 import { parseManifest } from '../shared/agents'
@@ -16,7 +16,14 @@ const SKIP = /(^|[\\/])(node_modules|\.git)([\\/]|$)/
 /** Declarative plugins: files are read and checked, nothing in a plugin is ever executed by the studio. */
 export class PluginService {
   private staged = new Map<string, { dir: string; source: Source }>()
-  constructor(private store: Store, private skills: SkillService, private userData: string, private appVersion: string) {}
+  /**
+   * Optional secret hooks: `seal` strips env/header values into encrypted
+   * storage before they reach the settings blob (the IPC handler wires the
+   * safeStorage-backed store); `envOf` reads a server's sealed env back so an
+   * update can keep the owner's keys. Absent in tests → plaintext, as before.
+   */
+  constructor(private store: Store, private skills: SkillService, private userData: string, private appVersion: string,
+    private hooks?: { seal(servers: McpServer[]): McpServer[]; envOf(name: string): Record<string, string> | undefined }) {}
 
   private get root() { return join(this.userData, 'plugins') }
   private get skillsRoot() { return join(this.userData, 'skills') }
@@ -87,7 +94,10 @@ export class PluginService {
         servers.push({ ...s, name, enabled: kept?.enabled ?? false, env: { ...s.env, ...kept?.env } })
         added.mcpServers.push(name)
       }
-      this.store.saveSettings({ mcpServers: servers })
+      // With the seal hook, env/header values go to encrypted storage and the
+      // settings blob keeps only the non-secret shape.
+      const sealed = this.hooks ? this.hooks.seal(servers) : servers
+      this.store.saveSettings({ mcpServers: sealed })
       for (const w of manifest.workflows) added.workflows.push(this.store.saveWorkflow({ ...w, projectId: null, enabled: false }).id)
       if (manifest.catalogue) {
         try {
@@ -115,8 +125,10 @@ export class PluginService {
   /** Take back what a plugin added; returns MCP servers' on/off state and env so an update keeps the owner's choices. */
   private removeContributions(p: PluginInfo): Map<string, { enabled: boolean; env?: Record<string, string> }> {
     const settings = this.store.settings()
-    const kept = new Map(settings.mcpServers.filter((s) => p.added.mcpServers.includes(s.name)).map((s) => [s.name, { enabled: s.enabled, env: s.env }]))
-    this.store.saveSettings({ mcpServers: settings.mcpServers.filter((s) => !p.added.mcpServers.includes(s.name)) })
+    const kept = new Map(settings.mcpServers.filter((s) => p.added.mcpServers.includes(s.name)).map((s) => [s.name, { enabled: s.enabled, env: this.hooks?.envOf(s.name) ?? s.env }]))
+    const remaining = settings.mcpServers.filter((s) => !p.added.mcpServers.includes(s.name))
+    // With the seal hook the removed servers' sealed env/header values are pruned too.
+    this.store.saveSettings({ mcpServers: this.hooks ? this.hooks.seal(remaining) : remaining })
     for (const name of p.added.skills) rmSync(join(this.skillsRoot, name), { recursive: true, force: true })
     for (const id of p.added.workflows) this.store.deleteWorkflow(id)
     for (const role of p.added.agents ?? []) this.store.deleteAgentTemplate(role)

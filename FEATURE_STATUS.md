@@ -62,7 +62,7 @@ Last updated: 2026-11-26
 | Reusable templates | ✅ | Templates picker in the chat composer: save the current draft as a named snippet, insert it in any project, delete it (`chat_templates` table, `chatTemplateSave`/`Delete` IPC) |
 | Message editing / regeneration | ✅ | Planning chat: edit any of your messages or regenerate the last reply; later turns are replaced (`Store.rewindChat`). Attached images are not resent |
 | Conversation export | ✅ | "Export transcript" saves the active session as Markdown (`## You` / `## Assistant (model)` turns); `chatExport` IPC + `shared/transcript.ts`. Empty sessions refuse to export |
-| Branching | ❌ | Not implemented |
+| Branching | ✅ | "Branch from here" on any message creates a new session holding the turns up to it; the original is untouched. Sidebar shows "(from Session N)". `chatBranch` IPC + `Store.branchConversation` |
 
 ## Phase 4 — Agent Management
 | Feature | Status | Notes |
@@ -77,7 +77,7 @@ Last updated: 2026-11-26
 | Office floor visualization | ✅ | PixiJS OfficeFloor |
 | Agent inspector | ✅ | Inspector.tsx |
 | Multi-agent orchestration | ✅ | orchestrator.ts pipeline |
-| Human approval gate | 🟡 | requireDeployApproval setting |
+| Human approval gate | ✅ | Deploy-phase tasks pause in `approval` status; approve/reject from Inspector, Rail or SimpleMode (reason optional on reject); stale Inspector taps are a no-op |
 | Checkpoint / undo | ✅ | checkpoints service |
 | Agent cancellation | ✅ | stop IPC |
 
@@ -89,7 +89,7 @@ Last updated: 2026-11-26
 | Enable / disable servers | ✅ | enabled flag on McpServer |
 | Test connection | ✅ | Settings → MCP tools → Test: stdio and streamable-HTTP handshakes (`mcpInspect.ts`); SSE servers can be used but not tested |
 | Browse tools, resources, prompts | ✅ | Listed (all pages) under each server after Test |
-| Environment variables / auth headers | ✅ | Per server `env` and `headers`, written into the worker MCP config |
+| Environment variables / auth headers | ✅ | Per server `env` and `headers`, written into the worker MCP config. Stored encrypted at rest with `safeStorage` (`mcpSecrets.ts`), plaintext values migrated on startup; visible warning when the OS keychain is unavailable |
 | Remote (HTTP / SSE) servers | ✅ | `url` + `transport` on McpServer |
 | MCP Marketplace | ✅ | Sidebar → Marketplace: search the official registry (registry.modelcontextprotocol.io), featured searches, versions, publisher namespace, install npm / PyPI (uvx) / Docker / remote; installs pinned and switched off |
 | Per-agent server access | ✅ | `mcpServers[]` on agent; `writeMcpConfig` filters to that list; picker in Settings → Workers |
@@ -192,7 +192,8 @@ Last updated: 2026-11-26
 | Multiple terminal sessions | ✅ | |
 | Shell selection | ✅ | terminalShell setting |
 | Process management | ✅ | |
-| Environment variables | 🟡 | Via project context |
+| Environment variables | ✅ | Per-project env vars in Project settings (`projects.envVars`); applied to new terminal sessions for that project (`TerminalService.open` extraEnv). Values that look like secrets are masked in the UI with a show/hide toggle |
+| Push notifications (mobile) | ✅ | `push_tokens` table (migration 0008, own-tokens-only RLS); mobile registers its Expo push token on sign-in when an EAS projectId is configured (mobile/src/notifications.ts + cloud.ts); `notify` Edge Function sends via Expo's push API — deploy steps in docs/cloud-setup.md |
 
 ## Phase 15 — Usage Analytics
 | Feature | Status | Notes |
@@ -224,6 +225,7 @@ Last updated: 2026-11-26
 | Frontend visual QA loop | ✅ | `src/main/visualQa.ts`: after a frontend worker delivers, the sandboxed browser renders the preview at desktop + mobile widths, screenshots both, and checks console errors and empty pages; failures rework the task with specific findings; reviewer receives the rendered-check summary; `tests/visualQa.test.ts` |
 | Connectors (Resend/PostHog/Sentry etc.) | ✅ | SettingsPanel → Connectors; passed to CLI agent workers as env vars (`connectorEnv`) |
 | Client badge in Plan view | ✅ | Workspace.tsx |
+| Team invite by email | ✅ | Team page "Invite member" → invite-member Edge Function (owner/admin verified server-side; account created with an invite email or existing account joined); deploy steps in docs/cloud-setup.md |
 
 ## Voice assistant ("Ventriee")
 | Feature | Status | Notes |
