@@ -424,3 +424,106 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   session. W36: the CloudClient interface gained the projectId field the
   implementation already had. Gates after all fixes: both tsc clean, vitest
   526 passed/1 skipped, desktop + web builds green, web tests 2 passed.
+
+
+
+
+
+## 2026-11-28 — W45 router fix (branch w45-router-fix)
+- Context: a high-difficulty task was routed to granite3.2-vision:2b (a 2B
+  vision model) and burned three retries with no files written.
+- Fix in `src/shared/routing.ts`: parameter sizes are now parsed from model
+  names (2b, 500M, 22m) via `paramsFromName`; non-chat models (guard, embed,
+  rerank, whisper, tts, moderation, image, audio) are never routed; small
+  vision-only models (<=4B: vision, moondream, smolvlm, vl) score as
+  non-coders; hard or code-role tasks drop models under 7B
+  (`CODING_FLOOR_B`) whenever a bigger or unknown-size model exists; CLI
+  engines stay routable on their provider default with a strong profile.
+- Fail fast: when only tiny models remain for a hard task, `routeModels`
+  throws `NO_MODEL_ERROR`; `runTask` parks the task as `blocked` with the
+  guidance message instead of burning retries, and the Settings routing
+  preview shows the reason instead of crashing.
+- Tests: `tests/routing.test.ts` gained the hotel reproduction (tiny vision
+  pool loses to any strong model), the prompt-guard exclusion, name-size
+  parsing, CLI default-model routability, floor behavior, and the fail-fast
+  error.
+- Gates: node + web tsc clean, vitest 548 passed / 1 skipped, desktop and web
+  builds green, web tests 5 passed.
+
+## 2026-11-28 — W46 intent-aware planning chat (branch w46-intent-clarify)
+- `src/main/intent.ts`: classifies each owner message as prototype / feature /
+  fix / question. One cheap model call (30s timeout) with a local heuristic
+  fallback (`guessIntent`) when the call fails or returns nothing.
+- `PlanningService.sendChat` appends an intent-specific protocol to the chat
+  system prompt when `clarifyBrief` is on: prototype/feature get 3-5 focused
+  questions (one message, numbered, each with a proposed default) followed by
+  a "Here's what I'll do" card (goal / scope / out of scope / done means);
+  fix gets reproduction-first, no redesign; question gets a direct answer.
+- Tests: `tests/intent.test.ts` covers reply parsing, heuristic guessing,
+  model-first classification, failure fallback, and per-intent protocols.
+- Gates: node + web tsc clean, vitest 547 passed / 1 skipped, desktop and web
+  builds green.
+ w46-intent-clarify
+
+## 2026-11-28 — W47 stack picker (branch w47-stack-picker)
+- `src/shared/stacks.ts`: three presets (Next.js app; React + Express API
+  server; simple static website), each with frontend / backend / database /
+  styling / tests, all fields editable; `normalizeStack` fills gaps and clamps
+  input, `stackToAnswer` serializes the pick.
+- Simple mode shows a "Build it with" card between the plan and "Approve &
+  build": preset buttons plus an editable details panel. The pick rides into
+  the brief as a clarification answer on assign, so nothing builds until the
+  owner presses Approve & build. No IPC or schema changes.
+- Tests: `tests/stacks.test.ts` (preset completeness, normalize/clamp,
+  answer serialization).
+- Gates: node + web tsc clean, vitest 545 passed / 1 skipped, desktop and web
+  builds green.
+ w47-stack-picker
+
+## 2026-11-28 — W48 planner review of failed attempts (branch w48-planner-review)
+- `src/main/plannerReview.ts`: when a task is reworked or a QA/evidence check
+  fails, the planner model reviews the acceptance criteria against the
+  evidence and writes specific fixer notes ("Planner follow-up: ...") that
+  lead the next attempt. REVIEW_SYSTEM forbids approving; notes only exist
+  for rework (`reviewNotes`); any planner error returns null so the loop
+  never blocks on the reviewer.
+- `orchestrator.ts`: difficulty escalates to `high` from the third attempt
+  (routing floor applies), `plannerFollowUp` runs before the task prompt on
+  evidence-failure and visual-QA rework paths, and the worker prompt carries
+  the notes so the retry is specific, not a blind rerun.
+- Tests: `tests/plannerReview.test.ts` covers the review ask, follow-up
+  parsing (fences, minimum length, cap), notes gating, and a fail-then-succeed
+  worker simulation.
+- Gates: node + web tsc clean, vitest 547 passed / 1 skipped, desktop and web
+  builds green.
+ w48-planner-review
+
+## 2026-11-28 — W49 outcome report (branch w49-outcome-report)
+- `src/main/outcome.ts`: `outcomeReport` builds the owner-facing end-of-run
+  message: the run verdict (complete / failed with titles / paused), what was
+  built (done task titles, capped at 6 with a "+N more"), where to see it
+  (preview URL when one is live, otherwise the project folder), and skipped
+  items.
+- `executeJob` now sends that report instead of three hardcoded one-liners;
+  the stopped state is reported distinctly. Paused wording unchanged.
+- Tests: `tests/outcome.test.ts` (clean run, failures first, cap + no-preview
+  omission, paused + skipped).
+- Gates: node + web tsc clean, vitest 546 passed / 1 skipped, desktop and web
+  builds green.
+ w49-outcome-report
+
+## 2026-11-28 — W45-W49 integration review fixes (integration/w45-w49, 0b9c500)
+- Self-review of the integration diff found and fixed: a routing failure in
+  runTask leaked the runner entry (queue then skipped the agent forever) and
+  parked the task as `blocked`, which dependency promotion would re-run
+  futilely; it now cleans up and marks the task `failed` with the reason.
+- A stopped run reported "Run complete"; it now says it stopped early.
+- A routing failure in assignPrompt aborted the whole assignment; it now
+  falls back to the agent's own config.
+- Unknown-size vision-only models (moondream2) escaped the 7B floor; unknown
+  size now counts as strong only for non-vision models.
+- The planner follow-up no longer runs at attempts >= 3.
+- guessIntent: question detection wins over the tightened prototype pattern
+  ("Why is the build slow?" is a question, not a build order).
+- Regression tests added for stopped-run wording, the moondream floor, and
+  the intent reorder. Gates: tsc clean, vitest 567/1, builds green, CI green.

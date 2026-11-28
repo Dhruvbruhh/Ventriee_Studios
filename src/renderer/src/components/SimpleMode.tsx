@@ -6,7 +6,8 @@ import { NewProjectDialog } from '../shell'
 import { useAttachments, useVoice } from './Attachments'
 import { useClarify } from './Clarify'
 import { IconCheck, IconSend, IconSpark } from '../icons'
-import type { ChatMessage, PromptDoc, Task } from '../../../shared/types'
+import { STACK_PRESETS, normalizeStack, stackToAnswer, type StackPick } from '../../../shared/stacks'
+import type { ChatMessage, Clarification, PromptDoc, Task } from '../../../shared/types'
 
 /**
  * Simple mode: a chat-first surface for non-technical owners. It drives the
@@ -44,12 +45,15 @@ export function SimpleMode() {
   }
 
   const clarify = useClarify(project?.id)
+  const [stack, setStack] = useState<StackPick>(STACK_PRESETS[0].pick)
   const build = () => {
     if (!project || !plan || busy || clarify.checking) return
-    void clarify.ask(plan.body, async (clarifications) => {
+    // The stack pick rides with the clarifications so the planner sees it as part of the brief.
+    const clarifications: Clarification[] = [{ question: 'Which technology stack should this use?', answer: stackToAnswer(stack) }]
+    void clarify.ask(plan.body, async (fromClarify) => {
       setBusy(true)
       const result = await guard(
-        () => window.ventriee.assignPrompt({ projectId: project.id, promptId: plan.id, mode: 'orchestrator', clarifications }),
+        () => window.ventriee.assignPrompt({ projectId: project.id, promptId: plan.id, mode: 'orchestrator', clarifications: [...clarifications, ...fromClarify] }),
         'Building started'
       )
       setBusy(false)
@@ -107,6 +111,7 @@ export function SimpleMode() {
             <section className="simple-plan">
               <div className="simple-plan-head"><IconCheck width={14} height={14} /> Here's the plan</div>
               <div className="simple-plan-body"><RichText text={plan.body} /></div>
+              <StackPicker pick={stack} onChange={setStack} />
               {clarify.pending ? null : <div className="simple-plan-actions">
                 <button className="btn primary lg" onClick={build} disabled={busy || clarify.checking}>{busy ? 'Starting…' : clarify.checking ? 'Checking…' : 'Approve & build'}</button>
                 <span className="faint text-sm">Not quite right? Keep chatting below and press “Update the plan”.</span>
@@ -296,4 +301,44 @@ function BuildView({ tasks, running, done, onStartOver }: {
 const STATUS_WORD: Partial<Record<Task['status'], string>> = {
   todo: 'queued', ready: 'queued', running: 'working', review: 'checking',
   rework: 'redoing', blocked: 'waiting', approval: 'needs you', done: 'done', failed: 'failed'
+}
+
+/** Technology-stack picker (W47): presets first, every field stays editable. */
+export function StackPicker({ pick, onChange }: { pick: StackPick; onChange: (next: StackPick) => void }) {
+  const [open, setOpen] = useState(false)
+  const activeId = STACK_PRESETS.find((p) => JSON.stringify(normalizeStack(p.pick)) === JSON.stringify(normalizeStack(pick)))?.id
+  const set = (field: keyof StackPick) => (e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...pick, [field]: e.target.value })
+
+  return (
+    <section className="simple-stack" aria-label="Technology stack">
+      <div className="simple-plan-head"><IconSpark width={14} height={14} /> Build it with</div>
+      <div className="simple-stack-presets">
+        {STACK_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={`btn${activeId === p.id ? ' primary' : ''}`}
+            onClick={() => onChange(p.pick)}
+            title={p.hint}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      <button type="button" className="link faint text-sm" onClick={() => setOpen(!open)}>
+        {open ? 'Hide details' : 'Adjust the details'}
+      </button>
+      {open ? (
+        <div className="simple-stack-fields">
+          {(['frontend', 'backend', 'database', 'styling', 'tests'] as const).map((field) => (
+            <div key={field} className="field">
+              <label className="field-label" htmlFor={`stack-${field}`}>{field}</label>
+              <input id={`stack-${field}`} className="input" value={pick[field]} onChange={set(field)} maxLength={120} />
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <p className="faint text-sm">Nothing is built until you press “Approve &amp; build”.</p>
+    </section>
+  )
 }

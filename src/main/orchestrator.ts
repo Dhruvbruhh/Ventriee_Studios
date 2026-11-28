@@ -8,7 +8,8 @@ import { EventEmitter } from 'node:events'
 import type { Store } from './store'
 import type { MemoryService } from './memory'
 import type { Credentials } from './credentials'
-import { runEngine, isCliEngine, modelFor, detectProviders, connectorEnv } from './engines'
+import { runEngine, isCliEngine, modelFor, defaultEndpoint, detectProviders, connectorEnv } from './engines'
+import { REVIEW_SYSTEM, buildReviewAsk, parseFollowUp, reviewNotes } from './plannerReview'
 import { deliverFiles } from './deliver'
 import { Mailbox, parseMessageBlocks } from './mailbox'
 import type { CheckpointService } from './checkpoint'
@@ -19,6 +20,7 @@ import { scopeToRole, DELIVERABLE_BY_ROLE } from './brief'
 import { clarifyPrompt, foldClarifications, parseClarifyAnswer } from './clarify'
 import { researchBriefUrls } from './urlResearch'
 import { estimatePlanCost } from './costEstimate'
+import { outcomeReport } from './outcome'
 import { heuristicPlan, normalizeRole, orderTasks, parsePlanAnswer, pickSpecialists, type Plan } from './planner'
 import { promotable } from './queue'
 import { approvalTransition } from './approval'
@@ -467,7 +469,8 @@ JSON shape:
         status: 'read'
       })
       const ended = await this.runQueue(job, project)
-      const failed = this.deps.store.tasks(project.id).filter((t) => t.status === 'failed' || t.status === 'rework')
+      const allTasks = this.deps.store.tasks(project.id)
+      const failed = allTasks.filter((t) => t.status === 'failed' || t.status === 'rework')
       this.deps.store.updateJob(job.id, {
         status: this.stopping.has(project.id)
           ? 'stopped'
@@ -479,17 +482,20 @@ JSON shape:
         error: failed.length ? `${failed.length} task(s) need attention` : ended === 'paused' ? 'Remaining tasks belong to paused workers' : null
       })
       if (!failed.length && ended !== 'paused' && this.deps.store.settings().autoExtractLessons) this.extractLessons(project)
+      const preview = this.deps.previewUrl?.(project.id) ?? null
       this.deps.store.addMessage({
         projectId: project.id,
         taskId: null,
         sender: 'orchestrator',
         recipient: 'owner',
         type: 'note',
-        content: failed.length
-          ? `Run finished with ${failed.length} unfinished task(s): ${failed.map((t) => t.title).join('; ')}`
-          : ended === 'paused'
-            ? 'Run paused: every remaining task belongs to a paused worker.'
-            : 'Run complete. Every task passed its evidence check.',
+        content: outcomeReport({
+          ended: this.stopping.has(project.id) ? 'stopped' : ended,
+          failed,
+          done: allTasks.filter((t) => t.status === 'done'),
+          skipped: plan.skipped,
+          where: preview ? `open ${preview}` : 'the result is in the project folder'
+        }),
         status: 'read'
       })
     } catch (error) {
@@ -761,7 +767,21 @@ JSON shape:
     }
     let chain: RouteChoice[] = []
     if (settings.routingMode === 'automatic' || (settings.routingMode === 'hybrid' && !agent.model.trim())) {
-      chain = routeModels({ role: task.role, models: this.deps.models(), costPreference: settings.costPreference, difficulty: task.difficulty, profiles: settings.modelProfiles, outcomes: this.deps.store.modelOutcomeStats() })
+      try {
+        // After two failed attempts, stop hoping a cheap model will do: route for strength.
+        chain = routeModels({ role: task.role, models: this.deps.models(), costPreference: settings.costPreference, difficulty: task.attempts >= 2 ? 'high' : task.difficulty, profiles: settings.modelProfiles, outcomes: this.deps.store.modelOutcomeStats() })
+      } catch (err) {
+        // Fail fast: burning three retries on a model that cannot code helps nobody.
+        // 'failed' (not 'blocked'): promotable would re-promote a dependency-free
+        // blocked task and spin the queue forever.
+        const message = err instanceof Error ? err.message : 'Routing failed'
+        this.runners.delete(agent.id)
+        this.deps.store.updateTask(task.id, { status: 'failed', review: message })
+        this.deps.store.updateAgent(agent.id, { status: 'idle', currentTaskId: null, lastError: message })
+        this.log(project.id, agent.id, task.id, 'error', message)
+        this.deps.notify()
+        return
+      }
       if (chain[0]) {
         Object.assign(run, runFromChoice(chain[0]))
         this.deps.store.updateTask(task.id, { ...run, routedBy: settings.routingMode })
@@ -1051,7 +1071,11 @@ JSON shape:
       const how = isCliEngine(run.engine)
         ? `Produce the actual deliverable in ${cwd}, then report back.`
         : 'Reply with the deliverable as === FILE: … === blocks and nothing else outside them.'
-      this.deps.store.updateTask(task.id, { status: 'rework', review: `Evidence check failed: ${evidence.summary}` })
+      // The planner reads the failed attempt and writes a specific instruction,
+      // so the retry fixes what was wrong instead of repeating the brief.
+      // At the last attempt no retry happens; don't make the owner wait on a review.
+      const followUp = task.attempts < 3 ? await this.plannerFollowUp(project, task, evidence, text) : null
+      this.deps.store.updateTask(task.id, { status: 'rework', review: followUp ? `Planner follow-up: ${followUp}\n\nEvidence: ${evidence.summary}` : `Evidence check failed: ${evidence.summary}` })
       this.deps.store.recordModelOutcome(task.id, agent.id, 'rework')
       this.deps.store.addMessage({
         projectId: project.id,
@@ -1059,7 +1083,9 @@ JSON shape:
         sender: 'orchestrator',
         recipient: agent.id,
         type: 'request',
-        content: `Evidence check failed: ${evidence.summary}. ${how}`,
+        content: followUp
+          ? `Your last attempt did not deliver: ${evidence.summary}.\n\nFollow this instruction on the next attempt:\n${followUp}\n\n${how}`
+          : `Evidence check failed: ${evidence.summary}. ${how}`,
         status: 'unread'
       })
       return
@@ -1096,7 +1122,10 @@ JSON shape:
           this.log(project.id, agent.id, task.id, 'review', `Visual QA: ${visual.summary}`)
           if (!visual.ok) {
             const detail = visual.problems.slice(0, 4).join(' | ')
-            this.deps.store.updateTask(task.id, { status: 'rework', review: `Visual QA failed: ${detail}. ${evidence.summary}` })
+            // The planner turns the visual problems into a concrete fix list for the retry.
+            // At the last attempt no retry happens; don't make the owner wait on a review.
+            const followUp = task.attempts < 3 ? await this.plannerFollowUp(project, task, { summary: `Visual QA failed: ${detail}. ${evidence.summary}`, changed: evidence.changed }, text) : null
+            this.deps.store.updateTask(task.id, { status: 'rework', review: followUp ? `Planner follow-up: ${followUp}\n\nVisual QA failed: ${detail}. ${evidence.summary}` : `Visual QA failed: ${detail}. ${evidence.summary}` })
             this.deps.store.recordModelOutcome(task.id, agent.id, 'rework')
             this.deps.store.addMessage({
               projectId: project.id,
@@ -1104,7 +1133,9 @@ JSON shape:
               sender: 'orchestrator',
               recipient: agent.id,
               type: 'request',
-              content: `The rendered app has problems: ${detail}. Fix them in the workspace and deliver again.`,
+              content: followUp
+                ? `The rendered app has problems: ${detail}.\n\nFollow this instruction on the next attempt:\n${followUp}\n\nFix them in the workspace and deliver again.`
+                : `The rendered app has problems: ${detail}. Fix them in the workspace and deliver again.`,
               status: 'unread'
             })
             return
@@ -1124,6 +1155,41 @@ JSON shape:
       summary: visual?.ran ? `${evidence.summary} Visual QA: ${visual.summary}` : evidence.summary
     })
     this.deps.notify()
+  }
+
+  /** Ask the planner to write a specific follow-up for the retry; null when it cannot. */
+  private async plannerFollowUp(
+    project: Project,
+    task: Task,
+    evidence: { summary: string; changed: string[] },
+    outputTail: string
+  ): Promise<string | null> {
+    try {
+      const settings = this.deps.store.settings()
+      const result = await runEngine(
+        {
+          engine: settings.plannerEngine,
+          model: settings.plannerModel,
+          endpoint: settings.plannerEndpoint || defaultEndpoint(settings.plannerEngine),
+          system: REVIEW_SYSTEM,
+          prompt: buildReviewAsk({
+            title: task.title,
+            acceptance: task.acceptance,
+            evidence: evidence.summary,
+            outputTail,
+            changedFiles: evidence.changed
+          }),
+          cwd: project.path,
+          maxTokens: 600,
+          timeoutMs: 120_000
+        },
+        this.deps.creds
+      )
+      if (!result.ok) return null
+      return parseFollowUp(result.text)
+    } catch {
+      return null
+    }
   }
 
   private taskPrompt(
@@ -1178,7 +1244,7 @@ ${task.description}
 
 ## Acceptance criteria
 ${task.acceptance}
-
+${reviewNotes(task.status, task.review)}
 ## Phase
 ${task.phase}
 
@@ -1843,24 +1909,30 @@ Answer with a JSON object only: {"verdict":"pass"|"fail","reasoning":"...","bloc
     if (mode === 'manual' || (mode === 'hybrid' && agent.model.trim())) {
       return { engine: agent.engine, model: agent.model, endpoint: agent.endpoint, routedBy: mode }
     }
-    const choice = routeModel({
-      role: agent.role,
-      models: this.deps.models(),
-      costPreference: this.deps.store.settings().costPreference,
-      inUse,
-      profiles: this.deps.store.settings().modelProfiles,
-      outcomes: this.deps.store.modelOutcomeStats()
-    })
-    if (!choice) {
-      // No discovered models: keep the worker's own config rather than guessing.
+    try {
+      const choice = routeModel({
+        role: agent.role,
+        models: this.deps.models(),
+        costPreference: this.deps.store.settings().costPreference,
+        inUse,
+        profiles: this.deps.store.settings().modelProfiles,
+        outcomes: this.deps.store.modelOutcomeStats()
+      })
+      if (!choice) {
+        // No discovered models: keep the worker's own config rather than guessing.
+        return { engine: agent.engine, model: agent.model, endpoint: agent.endpoint, routedBy: 'manual' }
+      }
+      const config = this.deps.providerConfigs().find((p) => p.id === choice.option.provider)
+      return {
+        engine: (config?.engine ?? choice.option.provider) as EngineKind,
+        model: choice.option.model,
+        endpoint: config?.baseUrl ?? '',
+        routedBy: mode
+      }
+    } catch {
+      // Tiny-only pool for this role: keep the worker's own config instead of
+      // aborting the whole assignment; the per-task fail-fast still applies at run time.
       return { engine: agent.engine, model: agent.model, endpoint: agent.endpoint, routedBy: 'manual' }
-    }
-    const config = this.deps.providerConfigs().find((p) => p.id === choice.option.provider)
-    return {
-      engine: (config?.engine ?? choice.option.provider) as EngineKind,
-      model: choice.option.model,
-      endpoint: config?.baseUrl ?? '',
-      routedBy: mode
     }
   }
 

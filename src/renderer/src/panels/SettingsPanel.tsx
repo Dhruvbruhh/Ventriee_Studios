@@ -3,7 +3,7 @@ import { guard, useStore } from '../store'
 import { Modal, Switch } from '../shell'
 import { ENGINE_LABELS, type Agent, type AppSettings, type EngineKind, type Difficulty, type ModelProfile } from '../../../shared/types'
 import { ACCENT_PRESETS } from '../../../shared/accent'
-import { effectiveProfile, MIN_OUTCOME_SAMPLES, routeModels } from '../../../shared/routing'
+import { effectiveProfile, MIN_OUTCOME_SAMPLES, routeModels, type RouteChoice } from '../../../shared/routing'
 import type { RemoteStatus } from '../../../shared/ipc'
 // CLI adapters spawn a process per request; mirrors isCliEngine in main.
 const isCliEngine = (engine: EngineKind) => engine.startsWith('cli-')
@@ -773,10 +773,14 @@ function ModelProfiles() {
     void guard(() => window.ventriee.saveSettings({ modelProfiles: profiles }))
   }
 
-  const chain = useMemo(
-    () => routeModels({ role, models, costPreference: settings.costPreference, difficulty, profiles: settings.modelProfiles, outcomes: snapshot.modelOutcomes }),
-    [models, settings.costPreference, settings.modelProfiles, difficulty, role, snapshot.modelOutcomes]
-  )
+  const chain = useMemo<[RouteChoice[], string | null]>(() => {
+    // With only tiny models available the router refuses to pick; show why.
+    try {
+      return [routeModels({ role, models, costPreference: settings.costPreference, difficulty, profiles: settings.modelProfiles, outcomes: snapshot.modelOutcomes }), null]
+    } catch (err) {
+      return [[], err instanceof Error ? err.message : 'Routing unavailable']
+    }
+  }, [models, settings.costPreference, settings.modelProfiles, difficulty, role, snapshot.modelOutcomes])
 
   if (!models.length) return <div className="kv-row-sub">No models discovered yet. Add an engine, then reopen Settings.</div>
   if (!selected || !profile) return null
@@ -836,10 +840,10 @@ function ModelProfiles() {
         </select>
       </div>
       <ol className="route-chain">
-        {chain.slice(0, 6).map((c, i) => (
+        {chain[0].slice(0, 6).map((c, i) => (
           <li key={`${c.option.provider}::${c.option.model}`}><span className="route-rank">{i === 0 ? 'picks' : `#${i}`}</span> {c.option.model} — {c.reason}</li>
         ))}
-        {chain.length === 0 ? <li className="kv-row-sub">Every model is marked unavailable.</li> : null}
+        {chain[0].length === 0 ? <li className="kv-row-sub">{chain[1] ?? 'Every model is marked unavailable.'}</li> : null}
       </ol>
       {measured.length ? (
         <table className="outcome-table" aria-label="Measured outcomes">

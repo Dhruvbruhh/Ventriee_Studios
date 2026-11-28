@@ -44,6 +44,7 @@ Last updated: 2026-11-26
 | Token / cost tracking | ✅ | sessions table, RunSummary |
 | Fallback models | ✅ | Agent runs: routed fallback chain; a failed task escalates to the next model (`routeModels` in `shared/routing.ts`, orchestrator). Planning chat uses the picked model only |
 | Intelligent model routing | ✅ | Capability profiles per model + task shape + costPreference (`shared/routing.ts`); profiles are derived from model names, owner overrides in Settings |
+| Model-size floor for hard tasks | ✅ | Hard or code tasks drop models under 7B (name-parsed size, e.g. `2b`, `500M`) when a bigger or unknown-size option exists; non-chat models (guard/embed/audio/image) are never routed; small vision-only models (<=4B) are marked non-coders; CLI engines keep a strong default profile; with only tiny models left, routing fails fast and parks the task as `blocked` instead of burning retries (`CODING_FLOOR_B` in `shared/routing.ts`) |
 
 ## Phase 3 — AI Chat & Prompt Studio
 | Feature | Status | Notes |
@@ -63,6 +64,8 @@ Last updated: 2026-11-26
 | Message editing / regeneration | ✅ | Planning chat: edit any of your messages or regenerate the last reply; later turns are replaced (`Store.rewindChat`). Attached images are not resent |
 | Conversation export | ✅ | "Export transcript" saves the active session as Markdown (`## You` / `## Assistant (model)` turns); `chatExport` IPC + `shared/transcript.ts`. Empty sessions refuse to export |
 | Branching | ✅ | "Branch from here" on any message creates a new session holding the turns up to it; the original is untouched. Sidebar shows "(from Session N)". `chatBranch` IPC + `Store.branchConversation` |
+| Intent-aware replies | ✅ | Planning chat classifies each owner message (prototype / feature / fix / question, `src/main/intent.ts`) with one cheap model call and a local heuristic fallback, then steers the reply: 3–5 focused questions with defaults in one message when the idea is open, a "Here's what I'll do" card (goal / scope / out of scope / done means) before any build talk, reproduction-first for fixes, plain answers for questions. Gated on the `clarifyBrief` setting |
+| Technology-stack pick | ✅ | Simple mode: a "Build it with" card between the plan and "Approve & build" offers three presets (Next.js app; React + Express API; static website) with every field editable (`src/shared/stacks.ts`). The pick rides into the brief as a clarification answer on assign; nothing builds until the owner approves |
 
 ## Phase 4 — Agent Management
 | Feature | Status | Notes |
@@ -77,7 +80,9 @@ Last updated: 2026-11-26
 | Office floor visualization | ✅ | PixiJS OfficeFloor |
 | Agent inspector | ✅ | Inspector.tsx |
 | Multi-agent orchestration | ✅ | orchestrator.ts pipeline |
+| Outcome report | ✅ | When a run finishes, the owner gets one dense message: the verdict (complete / failed with the unfinished task titles / paused), what was built (done task titles, capped), where to see it (the live preview URL when one is running, otherwise the project folder), and what was skipped (`src/main/outcome.ts`) |
 | Human approval gate | ✅ | Deploy-phase tasks pause in `approval` status; approve/reject from Inspector, Rail or SimpleMode (reason optional on reject); stale Inspector taps are a no-op |
+| Planner reviews failed attempts | ✅ | When a task is reworked or a QA/evidence check fails, the planner model (Settings → Planning) reviews the evidence and writes specific fixer notes ("Planner follow-up: …") that lead the next attempt; null on any planner error, so the loop never blocks on the reviewer (`src/main/plannerReview.ts`) |
 | Checkpoint / undo | ✅ | checkpoints service |
 | Agent cancellation | ✅ | stop IPC |
 
