@@ -425,6 +425,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   implementation already had. Gates after all fixes: both tsc clean, vitest
   526 passed/1 skipped, desktop + web builds green, web tests 2 passed.
 
+
 ## 2026-11-28 — W45 router fix (branch w45-router-fix)
 - Context: a high-difficulty task was routed to granite3.2-vision:2b (a 2B
   vision model) and burned three retries with no files written.
@@ -445,3 +446,18 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   error.
 - Gates: node + web tsc clean, vitest 548 passed / 1 skipped, desktop and web
   builds green, web tests 5 passed.
+
+## 2026-11-28 — W46 intent-aware planning chat (branch w46-intent-clarify)
+- `src/main/intent.ts`: classifies each owner message as prototype / feature /
+  fix / question. One cheap model call (30s timeout) with a local heuristic
+  fallback (`guessIntent`) when the call fails or returns nothing.
+- `PlanningService.sendChat` appends an intent-specific protocol to the chat
+  system prompt when `clarifyBrief` is on: prototype/feature get 3-5 focused
+  questions (one message, numbered, each with a proposed default) followed by
+  a "Here's what I'll do" card (goal / scope / out of scope / done means);
+  fix gets reproduction-first, no redesign; question gets a direct answer.
+- Tests: `tests/intent.test.ts` covers reply parsing, heuristic guessing,
+  model-first classification, failure fallback, and per-intent protocols.
+- Gates: node + web tsc clean, vitest 547 passed / 1 skipped, desktop and web
+  builds green.
+ w46-intent-clarify

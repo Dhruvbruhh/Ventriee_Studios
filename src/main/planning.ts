@@ -14,6 +14,7 @@ import type {
 } from '../shared/types'
 import { redact } from './redact'
 import { ensureSections } from './brief'
+import { classifyIntent, protocolFor } from './intent'
 
 /**
  * Planner chat is deliberately separate from worker execution: nothing here
@@ -138,13 +139,32 @@ export class PlanningService {
     })
     const context = pulled.length ? `The owner referenced other planning sessions of this project. Use them to answer.\n\n${pulled.join('\n\n')}\n\n--- Current session ---\n` : ''
 
+    // Steer the reply by what the owner is actually asking for (off when clarify is off).
+    let protocol = ''
+    if (this.store.settings().clarifyBrief) {
+      const intent = await classifyIntent(async (input) => {
+        const r = await runEngine({
+          engine: choice.engine,
+          model: choice.model,
+          endpoint: choice.endpoint || defaultEndpoint(choice.engine),
+          system: input.system,
+          prompt: input.prompt,
+          maxTokens: input.maxTokens,
+          cwd: project.path,
+          timeoutMs: 30_000
+        }, this.creds)
+        return r.ok ? r.text : null
+      }, text)
+      protocol = protocolFor(intent)
+    }
+
     let text2 = ''
     const result = await runEngine(
       {
         engine: choice.engine,
         model: choice.model,
         endpoint: choice.endpoint || defaultEndpoint(choice.engine),
-        system: this.systemPrompt(project),
+        system: this.systemPrompt(project, protocol ? `${CHAT_SYSTEM}\n\n${protocol}` : undefined),
         prompt: `${context}${transcript}\n\nReply to the Owner's last message.`,
         images,
         cwd: project.path,
