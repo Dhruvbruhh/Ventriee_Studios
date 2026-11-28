@@ -47,3 +47,7 @@ create policy commands_insert on public.commands for insert
     )
     and org_id is not distinct from (select d.org_id from public.devices d where d.id = device_id)
   );
+
+-- The one-argument version from 0002 is now unused; drop it so a one-argument
+-- call can never be ambiguous with the two-argument one above.
+drop function if exists public.can_control_device(uuid);

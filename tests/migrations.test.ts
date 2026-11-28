@@ -96,8 +96,8 @@ describe('cloud migrations', () => {
       '0005_desktop_sync.sql',
       '0006_command_defaults.sql',
       '0007_actor_defaults.sql',
-      '0007_per_project_grants.sql',
       '0008_push_tokens.sql',
+      '0009_per_project_grants.sql',
     ])
   })
 
