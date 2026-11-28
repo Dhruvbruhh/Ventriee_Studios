@@ -428,6 +428,7 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 
 
 
+
 ## 2026-11-28 — W45 router fix (branch w45-router-fix)
 - Context: a high-difficulty task was routed to granite3.2-vision:2b (a 2B
   vision model) and burned three retries with no files written.
@@ -496,3 +497,17 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
 - Gates: node + web tsc clean, vitest 547 passed / 1 skipped, desktop and web
   builds green.
  w48-planner-review
+
+## 2026-11-28 — W49 outcome report (branch w49-outcome-report)
+- `src/main/outcome.ts`: `outcomeReport` builds the owner-facing end-of-run
+  message: the run verdict (complete / failed with titles / paused), what was
+  built (done task titles, capped at 6 with a "+N more"), where to see it
+  (preview URL when one is live, otherwise the project folder), and skipped
+  items.
+- `executeJob` now sends that report instead of three hardcoded one-liners;
+  the stopped state is reported distinctly. Paused wording unchanged.
+- Tests: `tests/outcome.test.ts` (clean run, failures first, cap + no-preview
+  omission, paused + skipped).
+- Gates: node + web tsc clean, vitest 546 passed / 1 skipped, desktop and web
+  builds green.
+ w49-outcome-report
