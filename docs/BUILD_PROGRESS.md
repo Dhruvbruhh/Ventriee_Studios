@@ -424,3 +424,24 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   session. W36: the CloudClient interface gained the projectId field the
   implementation already had. Gates after all fixes: both tsc clean, vitest
   526 passed/1 skipped, desktop + web builds green, web tests 2 passed.
+
+## 2026-11-28 — W45 router fix (branch w45-router-fix)
+- Context: a high-difficulty task was routed to granite3.2-vision:2b (a 2B
+  vision model) and burned three retries with no files written.
+- Fix in `src/shared/routing.ts`: parameter sizes are now parsed from model
+  names (2b, 500M, 22m) via `paramsFromName`; non-chat models (guard, embed,
+  rerank, whisper, tts, moderation, image, audio) are never routed; small
+  vision-only models (<=4B: vision, moondream, smolvlm, vl) score as
+  non-coders; hard or code-role tasks drop models under 7B
+  (`CODING_FLOOR_B`) whenever a bigger or unknown-size model exists; CLI
+  engines stay routable on their provider default with a strong profile.
+- Fail fast: when only tiny models remain for a hard task, `routeModels`
+  throws `NO_MODEL_ERROR`; `runTask` parks the task as `blocked` with the
+  guidance message instead of burning retries, and the Settings routing
+  preview shows the reason instead of crashing.
+- Tests: `tests/routing.test.ts` gained the hotel reproduction (tiny vision
+  pool loses to any strong model), the prompt-guard exclusion, name-size
+  parsing, CLI default-model routability, floor behavior, and the fail-fast
+  error.
+- Gates: node + web tsc clean, vitest 548 passed / 1 skipped, desktop and web
+  builds green, web tests 5 passed.
