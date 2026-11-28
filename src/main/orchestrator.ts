@@ -8,7 +8,8 @@ import { EventEmitter } from 'node:events'
 import type { Store } from './store'
 import type { MemoryService } from './memory'
 import type { Credentials } from './credentials'
-import { runEngine, isCliEngine, modelFor, detectProviders, connectorEnv } from './engines'
+import { runEngine, isCliEngine, modelFor, defaultEndpoint, detectProviders, connectorEnv } from './engines'
+import { REVIEW_SYSTEM, buildReviewAsk, parseFollowUp, reviewNotes } from './plannerReview'
 import { deliverFiles } from './deliver'
 import { Mailbox, parseMessageBlocks } from './mailbox'
 import type { CheckpointService } from './checkpoint'
@@ -761,7 +762,8 @@ JSON shape:
     }
     let chain: RouteChoice[] = []
     if (settings.routingMode === 'automatic' || (settings.routingMode === 'hybrid' && !agent.model.trim())) {
-      chain = routeModels({ role: task.role, models: this.deps.models(), costPreference: settings.costPreference, difficulty: task.difficulty, profiles: settings.modelProfiles, outcomes: this.deps.store.modelOutcomeStats() })
+      // After two failed attempts, stop hoping a cheap model will do: route for strength.
+      chain = routeModels({ role: task.role, models: this.deps.models(), costPreference: settings.costPreference, difficulty: task.attempts >= 2 ? 'high' : task.difficulty, profiles: settings.modelProfiles, outcomes: this.deps.store.modelOutcomeStats() })
       if (chain[0]) {
         Object.assign(run, runFromChoice(chain[0]))
         this.deps.store.updateTask(task.id, { ...run, routedBy: settings.routingMode })
@@ -1051,7 +1053,10 @@ JSON shape:
       const how = isCliEngine(run.engine)
         ? `Produce the actual deliverable in ${cwd}, then report back.`
         : 'Reply with the deliverable as === FILE: … === blocks and nothing else outside them.'
-      this.deps.store.updateTask(task.id, { status: 'rework', review: `Evidence check failed: ${evidence.summary}` })
+      // The planner reads the failed attempt and writes a specific instruction,
+      // so the retry fixes what was wrong instead of repeating the brief.
+      const followUp = await this.plannerFollowUp(project, task, evidence, text)
+      this.deps.store.updateTask(task.id, { status: 'rework', review: followUp ? `Planner follow-up: ${followUp}\n\nEvidence: ${evidence.summary}` : `Evidence check failed: ${evidence.summary}` })
       this.deps.store.recordModelOutcome(task.id, agent.id, 'rework')
       this.deps.store.addMessage({
         projectId: project.id,
@@ -1059,7 +1064,9 @@ JSON shape:
         sender: 'orchestrator',
         recipient: agent.id,
         type: 'request',
-        content: `Evidence check failed: ${evidence.summary}. ${how}`,
+        content: followUp
+          ? `Your last attempt did not deliver: ${evidence.summary}.\n\nFollow this instruction on the next attempt:\n${followUp}\n\n${how}`
+          : `Evidence check failed: ${evidence.summary}. ${how}`,
         status: 'unread'
       })
       return
@@ -1096,7 +1103,9 @@ JSON shape:
           this.log(project.id, agent.id, task.id, 'review', `Visual QA: ${visual.summary}`)
           if (!visual.ok) {
             const detail = visual.problems.slice(0, 4).join(' | ')
-            this.deps.store.updateTask(task.id, { status: 'rework', review: `Visual QA failed: ${detail}. ${evidence.summary}` })
+            // The planner turns the visual problems into a concrete fix list for the retry.
+            const followUp = await this.plannerFollowUp(project, task, { summary: `Visual QA failed: ${detail}. ${evidence.summary}`, changed: evidence.changed }, text)
+            this.deps.store.updateTask(task.id, { status: 'rework', review: followUp ? `Planner follow-up: ${followUp}\n\nVisual QA failed: ${detail}. ${evidence.summary}` : `Visual QA failed: ${detail}. ${evidence.summary}` })
             this.deps.store.recordModelOutcome(task.id, agent.id, 'rework')
             this.deps.store.addMessage({
               projectId: project.id,
@@ -1104,7 +1113,9 @@ JSON shape:
               sender: 'orchestrator',
               recipient: agent.id,
               type: 'request',
-              content: `The rendered app has problems: ${detail}. Fix them in the workspace and deliver again.`,
+              content: followUp
+                ? `The rendered app has problems: ${detail}.\n\nFollow this instruction on the next attempt:\n${followUp}\n\nFix them in the workspace and deliver again.`
+                : `The rendered app has problems: ${detail}. Fix them in the workspace and deliver again.`,
               status: 'unread'
             })
             return
@@ -1124,6 +1135,41 @@ JSON shape:
       summary: visual?.ran ? `${evidence.summary} Visual QA: ${visual.summary}` : evidence.summary
     })
     this.deps.notify()
+  }
+
+  /** Ask the planner to write a specific follow-up for the retry; null when it cannot. */
+  private async plannerFollowUp(
+    project: Project,
+    task: Task,
+    evidence: { summary: string; changed: string[] },
+    outputTail: string
+  ): Promise<string | null> {
+    try {
+      const settings = this.deps.store.settings()
+      const result = await runEngine(
+        {
+          engine: settings.plannerEngine,
+          model: settings.plannerModel,
+          endpoint: settings.plannerEndpoint || defaultEndpoint(settings.plannerEngine),
+          system: REVIEW_SYSTEM,
+          prompt: buildReviewAsk({
+            title: task.title,
+            acceptance: task.acceptance,
+            evidence: evidence.summary,
+            outputTail,
+            changedFiles: evidence.changed
+          }),
+          cwd: project.path,
+          maxTokens: 600,
+          timeoutMs: 120_000
+        },
+        this.deps.creds
+      )
+      if (!result.ok) return null
+      return parseFollowUp(result.text)
+    } catch {
+      return null
+    }
   }
 
   private taskPrompt(
@@ -1178,7 +1224,7 @@ ${task.description}
 
 ## Acceptance criteria
 ${task.acceptance}
-
+${reviewNotes(task.status, task.review)}
 ## Phase
 ${task.phase}
 
