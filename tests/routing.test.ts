@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { routeModel, routeModels, deriveProfile } from '../src/main/routing'
+import { routeModel, routeModels, deriveProfile, paramsFromName, CODING_FLOOR_B, NO_MODEL_ERROR } from '../src/main/routing'
 import { parsePlanAnswer } from '../src/main/planner'
 import type { ModelOption } from '../src/shared/types'
 
@@ -105,5 +105,53 @@ describe('ollamaShow', () => {
     expect(url).not.toContain('/v1/')
     expect(out).toEqual({ paramsB: 7.6, contextLength: 8192 })
     fetchMock.mockRestore()
+  })
+})
+
+describe('model-size floor (W45)', () => {
+  it('parses parameter sizes from model names', () => {
+    expect(paramsFromName('granite3.2-vision:2b')).toBe(2)
+    expect(paramsFromName('SmolVLM-500M')).toBe(0.5)
+    expect(paramsFromName('qwen2.5-coder:14b')).toBe(14)
+    expect(paramsFromName('120b-coder')).toBe(120)
+    expect(paramsFromName('prompt-guard-2-22m')).toBe(0.022) // parsed, then excluded by the non-chat filter and the floor
+    expect(paramsFromName('claude-opus-4')).toBe(null)
+  })
+
+  it('never routes non-chat models, however they score', () => {
+    const guard = routeModel({ role: 'backend', models: [option('prompt-guard-2-22m'), option('claude-opus-4')], costPreference: 'balanced', difficulty: 'high' })
+    expect(guard!.option.model).toBe('claude-opus-4')
+  })
+
+  it('reproduces the hotel failure: tiny vision models lose to any strong model on hard tasks', () => {
+    const local = (model: string): ModelOption => ({ provider: 'cli-ollama', providerLabel: 'Ollama', model, free: true, configured: true })
+    const pool = [local('granite3.2-vision:2b'), local('moondream2'), local('qwen3-vl:2b-instruct'), option('SmolVLM-500M'), option('claude-opus-4')]
+    const pick = routeModel({ role: 'frontend', models: pool, costPreference: 'balanced', difficulty: 'high' })
+    expect(pick!.option.model).toBe('claude-opus-4')
+    // A 7B coder beats a 2B vision model even among local-only pools.
+    const localsOnly = routeModel({ role: 'frontend', models: [local('granite3.2-vision:2b'), local('qwen2.5-coder:7b')], costPreference: 'balanced', difficulty: 'high' })
+    expect(localsOnly!.option.model).toBe('qwen2.5-coder:7b')
+  })
+
+  it('drops sub-7B models on code work only when a stronger or unknown-size option exists', () => {
+    const small = option('qwen3-2b')
+    const chain = routeModels({ role: 'backend', models: [small, option('claude-opus-4')], costPreference: 'balanced', difficulty: 'high' })
+    expect(chain.map((c) => c.option.model)).not.toContain('qwen3-2b')
+    // Unknown-size names (claude-opus-4) still count as strong enough.
+    // Alone, the tiny model is still tried rather than refusing outright on easy work.
+    expect(routeModel({ role: 'research', models: [small], costPreference: 'balanced', difficulty: 'low' })!.option.model).toBe('qwen3-2b')
+  })
+
+  it('fails fast with guidance when only tiny models remain for hard work', () => {
+    const tiny = [{ provider: 'cli-ollama', providerLabel: 'Ollama', model: 'granite3.2-vision:2b', free: true, configured: true } as ModelOption]
+    expect(() => routeModels({ role: 'frontend', models: tiny, costPreference: 'balanced', difficulty: 'high' })).toThrow(NO_MODEL_ERROR)
+  })
+
+  it('keeps CLI engines routable on their default model', () => {
+    const cli: ModelOption = { provider: 'cli-opencode', providerLabel: 'OpenCode', model: '', free: true, configured: true }
+    const pick = routeModel({ role: 'backend', models: [cli], costPreference: 'balanced', difficulty: 'high' })
+    expect(pick).not.toBeNull()
+    // The default profile is a strong coder, so it survives the floor.
+    expect(deriveProfile(cli).codingScore).toBeGreaterThanOrEqual(70)
   })
 })

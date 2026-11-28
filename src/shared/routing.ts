@@ -25,23 +25,45 @@ const FAST = /(flash|mini|haiku|small|nano|lite|fast|1\.5b|3b|7b|8b)/i
 const THINKS = /(reasoner|thinking|-r1\b|\bo[134]\b|opus)/i
 const CODER = /(cod(e|er)|deepseek|qwen.*coder|devstral|codestral)/i
 const MULTIMODAL = /(vision|-vl\b|llava|pixtral|gpt-4o|gpt-5|gemini|claude|sonnet|opus|haiku)/i
+/** Model kinds that can never act as a chat worker, whatever else their name says. */
+const NON_CHAT = /(guard|embed|rerank|whisper|tts|transcrib|moderation|search-api|image|dall-e|realtime|audio)/i
+/** Vision-first families; only a big one of these can carry code work. */
+const VISION_ONLY = /(vision|moondream|smolvlm|-vl\b|vl-)/i
+/** Smallest parameter count trusted with hard or code work. */
+export const CODING_FLOOR_B = 7
+/** Shown (and failed with) when only tiny models remain for a hard task. */
+export const NO_MODEL_ERROR = 'No model strong enough: add an API key or pull a larger model (e.g. ollama pull qwen2.5-coder:14b)'
+
+/** Parameter count parsed from the model name (2b, 14b, 500m, 22m); null when the name does not say. */
+export function paramsFromName(name: string): number | null {
+  const m = name.match(/(\d+(?:\.\d+)?)\s*([bm])\b/i)
+  if (!m) return null
+  const n = Number(m[1])
+  return Number.isFinite(n) && n > 0 ? (m[2].toLowerCase() === 'm' ? n / 1000 : n) : null
+}
 
 /** Capability profile inferred from the model id when nothing better is known. */
 export function deriveProfile(option: ModelOption): ModelProfile {
   const name = option.model
+  // A CLI engine on its provider default is a full coding agent; never score it mid.
+  if (!name.trim()) {
+    return { contextWindow: 128_000, toolCalling: true, vision: false, codingScore: 80, reasoningScore: 78, costTier: 'medium', latencyTier: 'medium', availability: 'available' }
+  }
   const strong = STRONG.test(name)
   const fast = FAST.test(name)
-  // A reported parameter size outranks the name: Ollama models all look local, but 70b is not 7b.
-  const params = option.paramsB
+  // A reported parameter size outranks the name; the name's own size token (2b, 500m) comes next.
+  const params = option.paramsB ?? paramsFromName(name) ?? undefined
   const real = params != null && Number.isFinite(params) && params > 0
+  // Small vision-first models (granite-vision:2b, SmolVLM-500M) describe images; they do not write code.
+  const smallVision = real && VISION_ONLY.test(name) && params! <= 4
   const strongTier = real ? params >= 70 : strong
   const fastTier = real ? params <= 8 : fast
   return {
     contextWindow: option.contextLength ?? contextWindow(name),
     toolCalling: !/embed|base\b/i.test(name),
     vision: MULTIMODAL.test(name),
-    codingScore: CODER.test(name) ? 85 : strongTier ? 80 : fastTier ? 50 : 65,
-    reasoningScore: THINKS.test(name) ? 90 : strongTier ? 80 : fastTier ? 45 : 60,
+    codingScore: smallVision ? 10 : CODER.test(name) ? 85 : strongTier ? 80 : fastTier ? 50 : 65,
+    reasoningScore: smallVision ? 20 : THINKS.test(name) ? 90 : strongTier ? 80 : fastTier ? 45 : 60,
     costTier: option.free === true ? 'free' : fastTier ? 'low' : strongTier && option.free === false ? 'high' : strongTier ? 'high' : 'medium',
     latencyTier: fastTier ? 'fast' : strongTier ? 'slow' : 'medium',
     availability: 'available'
@@ -123,20 +145,36 @@ function scoreModel(option: ModelOption, p: ModelProfile, input: RouteInput, wan
   return value
 }
 
-/** The ranked candidate chain, best first; unavailable models are excluded. */
+/**
+ * The ranked candidate chain, best first; unavailable models are excluded.
+ * `hard` marks a task where a too-small model would waste retries; when every
+ * candidate is below the coding floor (or non-chat), the chain is empty and the
+ * caller should fail fast instead of burning attempts.
+ */
 export function routeModels(input: RouteInput): RouteChoice[] {
-  const candidates = input.models.filter((m) => m.configured && m.model.trim())
+  const hard = input.difficulty === 'high' || CODE_ROLES.has(input.role)
+  const candidates = input.models
+    .filter((m) => m.configured && (m.model.trim() || m.provider.startsWith('cli-')))
+    .filter((m) => !NON_CHAT.test(m.model))
+    .map((m) => ({ option: m, profile: effectiveProfile(m, input.profiles) }))
+    .filter((c) => c.profile.availability !== 'unavailable')
   const wantsStrength = input.difficulty === 'high' || (!input.difficulty && DEEP_ROLES.has(input.role))
   const wantsSpeed = input.difficulty === 'low' || (!input.difficulty && FAST_ROLES.has(input.role))
-  const scored = candidates
-    .map((option) => ({ option, profile: effectiveProfile(option, input.profiles) }))
-    .filter((c) => c.profile.availability !== 'unavailable')
+  // Hard floor: on demanding work, tiny models lose to any bigger or unknown-size option.
+  const strongEnough = candidates.filter((c) => {
+    const params = c.option.paramsB ?? paramsFromName(c.option.model) ?? undefined
+    return params == null || params >= CODING_FLOOR_B
+  })
+  const pool = hard && strongEnough.length ? strongEnough : candidates
+  const scored = pool
     .map((c) => {
       const measured = measuredTerm(c.option.model, input.role, input.difficulty, input.outcomes)
       return { ...c, measured, score: scoreModel(c.option, c.profile, input, wantsStrength, wantsSpeed) + (measured?.value ?? 0) }
     })
     // Deterministic order: score, then model name as a stable tie-break.
     .sort((a, b) => b.score - a.score || a.option.model.localeCompare(b.option.model))
+  // Only tiny models remain: burning retries on a 2B vision model helps nobody.
+  if (hard && candidates.length && !strongEnough.length) throw new Error(NO_MODEL_ERROR)
 
   const shape = input.difficulty ? `${input.difficulty}-difficulty task` : wantsStrength ? 'reasoning-heavy' : wantsSpeed ? 'high-volume' : 'balanced'
   const cost = input.costPreference === 'cheap' ? 'cost-first' : input.costPreference === 'quality' ? 'quality-first' : 'balanced cost'
