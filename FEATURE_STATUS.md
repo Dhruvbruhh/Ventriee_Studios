@@ -63,6 +63,7 @@ Last updated: 2026-11-26
 | Message editing / regeneration | ✅ | Planning chat: edit any of your messages or regenerate the last reply; later turns are replaced (`Store.rewindChat`). Attached images are not resent |
 | Conversation export | ✅ | "Export transcript" saves the active session as Markdown (`## You` / `## Assistant (model)` turns); `chatExport` IPC + `shared/transcript.ts`. Empty sessions refuse to export |
 | Branching | ✅ | "Branch from here" on any message creates a new session holding the turns up to it; the original is untouched. Sidebar shows "(from Session N)". `chatBranch` IPC + `Store.branchConversation` |
+| Technology-stack pick | ✅ | Simple mode: a "Build it with" card between the plan and "Approve & build" offers three presets (Next.js app; React + Express API; static website) with every field editable (`src/shared/stacks.ts`). The pick rides into the brief as a clarification answer on assign; nothing builds until the owner approves |
 
 ## Phase 4 — Agent Management
 | Feature | Status | Notes |
