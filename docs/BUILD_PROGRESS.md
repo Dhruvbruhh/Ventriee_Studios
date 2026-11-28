@@ -424,3 +424,17 @@ Not started · In progress · In review (PR open) · Done (merged) · Blocked
   session. W36: the CloudClient interface gained the projectId field the
   implementation already had. Gates after all fixes: both tsc clean, vitest
   526 passed/1 skipped, desktop + web builds green, web tests 2 passed.
+
+## 2026-11-28 — W47 stack picker (branch w47-stack-picker)
+- `src/shared/stacks.ts`: three presets (Next.js app; React + Express API
+  server; simple static website), each with frontend / backend / database /
+  styling / tests, all fields editable; `normalizeStack` fills gaps and clamps
+  input, `stackToAnswer` serializes the pick.
+- Simple mode shows a "Build it with" card between the plan and "Approve &
+  build": preset buttons plus an editable details panel. The pick rides into
+  the brief as a clarification answer on assign, so nothing builds until the
+  owner presses Approve & build. No IPC or schema changes.
+- Tests: `tests/stacks.test.ts` (preset completeness, normalize/clamp,
+  answer serialization).
+- Gates: node + web tsc clean, vitest 545 passed / 1 skipped, desktop and web
+  builds green.
